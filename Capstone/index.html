@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Document Management</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon"><i class="fa-solid fa-location-dot"></i></div>
+      <button class="collapse-btn"><i class="fa-solid fa-chevron-left"></i></button>
+    </div>
+
+    <nav class="sidebar-icons">
+      <a href="#" class="icon-link"><i class="fa-regular fa-clock"></i></a>
+      <a href="#" class="icon-link"><i class="fa-regular fa-calendar"></i></a>
+      <a href="#" class="icon-link"><i class="fa-regular fa-user"></i></a>
+      <a href="#" class="icon-link active"><i class="fa-regular fa-file"></i></a>
+      <a href="#" class="icon-link"><i class="fa-regular fa-file-lines"></i></a>
+      <a href="#" class="icon-link"><i class="fa-solid fa-briefcase"></i></a>
+      <a href="#" class="icon-link"><i class="fa-solid fa-dollar-sign"></i></a>
+      <a href="#" class="icon-link"><i class="fa-regular fa-circle"></i></a>
+      <a href="#" class="icon-link"><i class="fa-regular fa-star"></i></a>
+    </nav>
+  </aside>
+
+  <!-- Panel -->
+  <div class="panel">
+    <div class="panel-section">
+      <p class="panel-heading">Documents</p>
+      <ul class="panel-list">
+        <li class="panel-item active"><i class="fa-regular fa-file"></i> All Documents</li>
+        <li class="panel-item"><i class="fa-regular fa-trash-can"></i> Trash</li>
+      </ul>
+    </div>
+
+    <div class="panel-section">
+      <p class="panel-heading">Filters</p>
+      <ul class="panel-list">
+        <li class="panel-item"><span class="dot gray"></span> Draft</li>
+        <li class="panel-item"><span class="dot yellow"></span> Sent</li>
+        <li class="panel-item"><span class="dot green"></span> Signed</li>
+      </ul>
+    </div>
+
+    <div class="panel-section">
+      <p class="panel-heading">Folders <button class="add-btn"><i class="fa-solid fa-plus"></i></button></p>
+      <ul class="panel-list">
+        <li class="panel-item"><i class="fa-regular fa-folder"></i> Folder</li>
+      </ul>
+    </div>
+
+    <div class="panel-section">
+      <p class="panel-heading">Tags</p>
+      <div class="tags-row">
+        <span class="tag orange">Jobs</span>
+        <span class="tag purple">Quotes</span>
+        <span class="tag teal">Requests</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <main class="main">
+    <!-- Top Bar -->
+    <header class="topbar">
+      <div class="topbar-actions">
+        <button class="topbar-icon"><i class="fa-solid fa-plus"></i></button>
+        <button class="topbar-icon"><i class="fa-regular fa-circle-question"></i></button>
+        <button class="topbar-icon"><i class="fa-regular fa-comment"></i></button>
+        <button class="topbar-icon notif">
+          <i class="fa-regular fa-bell"></i>
+          <span class="badge">12</span>
+        </button>
+      </div>
+      <div class="user-info">
+        <div class="user-text">
+          <span class="user-name">Marianna</span>
+          <span class="user-role">Admin</span>
+        </div>
+        <div class="avatar"><i class="fa-solid fa-user"></i></div>
+        <span class="online-dot"></span>
+      </div>
+    </header>
+
+    <!-- Content Area -->
+    <div class="content">
+      <div class="content-header">
+        <h1 class="page-title">Document management</h1>
+        <div class="content-actions">
+          <label class="select-all-wrap">
+            <input type="checkbox" id="selectAll" /> Select All
+          </label>
+          <button class="btn-add"><i class="fa-solid fa-file-circle-plus"></i> Add New Document</button>
+          <div class="search-wrap">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" placeholder="Search" class="search-input" />
+          </div>
+          <button class="btn-filter"><i class="fa-solid fa-sliders"></i> Filter</button>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="table-wrap">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th class="th-check"></th>
+              <th class="th-link"></th>
+              <th>Document Name <i class="fa-solid fa-arrow-up sort-icon"></i></th>
+              <th>Recipient</th>
+              <th>Date Created <i class="fa-solid fa-arrow-up sort-icon"></i></th>
+              <th>Status</th>
+              <th>Modified <i class="fa-solid fa-arrow-up sort-icon"></i></th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <!-- Rows injected by JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="script.js"></script>
+
+  <!-- Blur Overlay -->
+  <div class="filter-overlay" id="filterOverlay"></div>
+
+  <!-- Filter Panel -->
+  <aside class="filter-panel" id="filterPanel">
+    <!-- Top -->
+    <div class="fp-top">
+      <div class="fp-more-actions">
+        More Actions <i class="fa-solid fa-chevron-right"></i>
+      </div>
+      <button class="fp-close" id="filterClose"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <!-- Filters header -->
+    <div class="fp-filters-row">
+      <span class="fp-filters-label">Filters</span>
+      <button class="fp-reset" id="fpReset">Reset all</button>
+    </div>
+
+    <!-- Date Created -->
+    <div class="fp-section">
+      <label class="fp-field-label">Date Created</label>
+      <div class="fp-select-wrap">
+        <select class="fp-select" id="fpDateSelect">
+          <option value="today">Today</option>
+          <option value="yesterday">Yesterday</option>
+          <option value="this_week">This Week</option>
+          <option value="last_week">Last Week</option>
+          <option value="this_month">This Month</option>
+          <option value="custom">Custom date…</option>
+        </select>
+      </div>
+
+      <!-- Custom date input + calendar (shown when "custom" selected) -->
+      <div id="fpCalendarWrap" style="display:none;">
+        <div class="fp-date-input-wrap">
+          <input type="text" class="fp-date-input" id="fpDateInput" placeholder="DD/MM/YYYY" readonly />
+          <i class="fa-regular fa-calendar fp-cal-icon" id="fpCalToggle"></i>
+        </div>
+        <div class="fp-calendar" id="fpCalendar">
+          <div class="cal-header">
+            <button class="cal-nav" id="calPrev"><i class="fa-solid fa-chevron-left"></i></button>
+            <span id="calMonthLabel"></span>
+            <button class="cal-nav" id="calNext"><i class="fa-solid fa-chevron-right"></i></button>
+          </div>
+          <div class="cal-grid" id="calGrid"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recipient -->
+    <div class="fp-section">
+      <label class="fp-field-label">Recipient</label>
+      <div class="fp-search-wrap">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="text" class="fp-search-input" id="fpRecipientSearch" placeholder="Search" />
+      </div>
+      <ul class="fp-radio-list" id="fpRecipientList">
+        <li class="fp-radio-item">
+          <input type="radio" name="recipient" id="rAll" value="" checked />
+          <label for="rAll">Select All</label>
+        </li>
+        <li class="fp-radio-item">
+          <input type="radio" name="recipient" id="rDonna" value="Donna Prince" />
+          <label for="rDonna">Donna Prince</label>
+        </li>
+        <li class="fp-radio-item">
+          <input type="radio" name="recipient" id="rArthie" value="Arthie Rogers" />
+          <label for="rArthie">Arthie Rogers</label>
+        </li>
+        <li class="fp-radio-item">
+          <input type="radio" name="recipient" id="rStiv" value="Stiv Rogers" />
+          <label for="rStiv">Stiv Rogers</label>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Apply -->
+    <button class="fp-apply" id="fpApply">Apply</button>
+  </aside>
