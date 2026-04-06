@@ -1,0 +1,12 @@
+<h2>Contracts</h2>
+
+<a href="/upload/">Upload New Contract</a>
+
+<ul>
+    {% for contract in contracts %}
+        <li>
+            {{ contract.title }} - 
+            <a href="{{ contract.file.url }}">View</a>
+        </li>
+    {% endfor %}
+</ul>
