@@ -16,7 +16,22 @@
     {% for contract in contracts %}
         <li>
             {{ contract.title }} - 
-            <a href="{{ contract.file.url }}">View</a>
+            <a href="{{ contract.file.url }}">View</a><br>
+
+            Fingerprint: {{ contract.fingerprint }}<br>
+
+            {% if not contract.fingerprint|slice:":5" == "gAAAA" %}
+                <form action="/encrypt/{{ contract.id }}/" method="post" style="display:inline;">
+                    {% csrf_token %}
+                    <button type="submit">Encrypt Contract</button>
+                </form>
+            {% else %}
+                <span>🔒 Encrypted</span>
+            {% endif %}
+            {% if contract.seal_image %}
+    <br>
+    <img src="{{ contract.seal_image.url }}" width="100">
+{% endif %}
         </li>
     {% endfor %}
 </ul>
