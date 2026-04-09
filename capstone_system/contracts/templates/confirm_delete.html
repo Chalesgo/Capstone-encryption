@@ -1,0 +1,9 @@
+<h2>Delete Contract</h2>
+
+<p>Are you sure you want to delete <strong>{{ contract.title }}</strong>? This cannot be undone.</p>
+
+<form method="POST">
+    {% csrf_token %}
+    <button type="submit" style="color: red;">Yes, Delete</button>
+    <a href="/">Cancel</a>
+</form>

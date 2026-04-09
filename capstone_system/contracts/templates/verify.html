@@ -1,0 +1,23 @@
+<h2>Contract Verification</h2>
+<p>Upload a barangay contract PDF to check if it is authentic and has not been tampered with.</p>
+
+<form method="POST" enctype="multipart/form-data">
+    {% csrf_token %}
+    <input type="file" name="pdf_file" accept=".pdf" required>
+    <button type="submit">Verify Document</button>
+</form>
+
+{% if result == "authentic" %}
+    <p style="color: green;">✅ Authentic — this document has not been tampered with.</p>
+
+{% elif result == "tampered" %}
+    <p style="color: red;">❌ Not authentic — this document does not match any official record or has been modified.</p>
+
+{% elif result == "error" %}
+    <p style="color: orange;">⚠️ Something went wrong while checking this document. Please try again.</p>
+
+{% endif %}
+
+<br>
+<hr>
+<small>Are you a staff member? <a href="/accounts/login/">Click here to login</a></small>
