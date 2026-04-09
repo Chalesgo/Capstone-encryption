@@ -1,41 +1,42 @@
 <h2>Contracts</h2>
 
-{% if user.is_authenticated %}
-    <p>Logged in as: {{ user.username }}</p>
-    <a href="/accounts/logout/">Logout</a>
-{% else %}
-    <p>Logged in as: Guest</p>
-    <a href="/accounts/login/">Login</a>
-{% endif %}
+<p>Logged in as: {{ user.username }}</p>
 
-<a href="/register/">Register</a>
-<a href="/accounts/login/">Login</a>
 <a href="/upload/">Upload New Contract</a>
 
 <ul>
     {% for contract in contracts %}
         <li>
-            {{ contract.title }} - 
-            <a href="{{ contract.file.url }}">View</a><br>
+            <strong>{{ contract.title }}</strong><br>
+            Uploaded: {{ contract.uploaded_at }}<br>
 
-            Fingerprint: {{ contract.fingerprint }}<br>
+            <a href="{{ contract.file.url }}">View PDF</a><br>
 
-            {% if not contract.fingerprint|slice:":5" == "gAAAA" %}
+            {% if contract.encrypted_cf %}
+                <span>🔒 Encrypted</span><br>
+                Fingerprint: {{ contract.fingerprint }}<br>
+            {% else %}
                 <form action="/encrypt/{{ contract.id }}/" method="post" style="display:inline;">
                     {% csrf_token %}
                     <button type="submit">Encrypt Contract</button>
                 </form>
-            {% else %}
-                <span>🔒 Encrypted</span>
             {% endif %}
+
             {% if contract.seal_image %}
-    <br>
-    <img src="{{ contract.seal_image.url }}" width="100">
-{% endif %}
+                <br>
+                <img src="{{ contract.seal_image.url }}" width="100" style="opacity: 0.6;">
+            {% endif %}
+
+            {% if user.is_superuser %}
+                <br>
+                <a href="/delete/{{ contract.id }}/" style="color: red;">🗑 Delete</a>
+            {% endif %}
         </li>
+        <hr>
     {% endfor %}
 </ul>
-<form action="/accounts/logout/" method="post" style="display:inline;">
+
+<form action="/accounts/logout/" method="post">
     {% csrf_token %}
     <button type="submit">Logout</button>
 </form>
