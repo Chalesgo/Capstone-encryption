@@ -1,4 +1,4 @@
-# Capstone-encryption
+# Capstone-encryption/SEALGUARD
 PABASA PARA SA SETUP
 
 ## Setup
