@@ -10,3 +10,6 @@ PABASA PARA SA SETUP
 ## Features
 - Upload contracts
 - View contracts
+
+
+CTRL BREAK IS CTRL + C
