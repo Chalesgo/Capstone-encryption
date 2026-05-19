@@ -15,7 +15,7 @@ from .utils import (
 )
 import os
 import fitz
-
+from .utils import generate_qr_code
 
 @login_required
 def upload_contract(request):
@@ -27,47 +27,44 @@ def upload_contract(request):
 
             pdf_path = contract.file.path
 
-            # ── Prepare seal ──
             original_seal = os.path.join(settings.MEDIA_ROOT, 'seals', 'default_seal.png')
             transparent_seal = os.path.join(settings.MEDIA_ROOT, 'seals', 'transparent_seal.png')
             stamped_seal = os.path.join(settings.MEDIA_ROOT, 'seals', f'seal_{contract.id}.png')
 
             make_seal_transparent(original_seal, transparent_seal)
 
-            # ── Stamp seal onto PDF first ──
-            original_filename = os.path.basename(pdf_path)
-            sealed_filename = original_filename.replace('.pdf', '_sealed.pdf')
-            sealed_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', sealed_filename)
-            stamp_seal_on_pdf(pdf_path, sealed_pdf_path, transparent_seal)
-
-            # ── Generate CF from sealed PDF ──
-            cf = generate_canonical_fingerprint(sealed_pdf_path)
+            # ── Step 1: Generate CF from the ORIGINAL pdf first ──
+            cf = generate_canonical_fingerprint(pdf_path)
             contract.fingerprint = cf
 
-            # ── Encrypt CF with HMAC + AES + RSA ──
+            # ── Step 2: Encrypt CF ──
             encrypted, hmac_value, wrapped_key, aes_iv = encrypt_cf(
                 cf, settings.RSA_PUBLIC_KEY_PATH
             )
             contract.encrypted_cf = encrypted
             contract.hmac_value = hmac_value
             contract.wrapped_key = wrapped_key
-            contract.aes_key = aes_iv      # storing IV in aes_key field
-            contract.aes_iv = aes_iv       # also stored here for clarity
+            contract.aes_key = aes_iv
+            contract.aes_iv = aes_iv
 
-            # ── Embed encrypted CF into seal via LSB ──
+            # ── Step 3: Embed encrypted CF into seal via LSB ──
             embed_data_in_image(transparent_seal, stamped_seal, encrypted)
 
-            # ── Re-stamp with the LSB seal ──
-            final_pdf_path = sealed_pdf_path.replace('_sealed.pdf', '_final.pdf')
-            stamp_seal_on_pdf(sealed_pdf_path, final_pdf_path, stamped_seal)
+            # ── Step 4: Generate QR code ──
+            qr_path = os.path.join(settings.MEDIA_ROOT, 'seals', f'qr_{contract.id}.png')
+            generate_qr_code(encrypted, qr_path)
 
-            # ── Clean up intermediates ──
+            # ── Step 5: Stamp ONCE with both seal and QR ──
+            original_filename = os.path.basename(pdf_path)
+            sealed_filename = original_filename.replace('.pdf', '_sealed.pdf')
+            sealed_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', sealed_filename)
+            stamp_seal_on_pdf(pdf_path, sealed_pdf_path, stamped_seal, qr_path=qr_path)
+
+            # ── Step 6: Delete original ──
             if os.path.isfile(pdf_path):
                 os.remove(pdf_path)
-            if os.path.isfile(sealed_pdf_path):
-                os.remove(sealed_pdf_path)
 
-            contract.file = f'contracts/{os.path.basename(final_pdf_path)}'
+            contract.file = f'contracts/{sealed_filename}'
             contract.seal_image = f'seals/seal_{contract.id}.png'
             contract.save()
             return redirect('contract_list')
@@ -88,14 +85,11 @@ def encrypt_contract(request, contract_id):
 
     make_seal_transparent(original_seal, transparent_seal)
 
-    original_filename = os.path.basename(pdf_path)
-    sealed_filename = original_filename.replace('.pdf', '_sealed.pdf')
-    sealed_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', sealed_filename)
-    stamp_seal_on_pdf(pdf_path, sealed_pdf_path, transparent_seal)
-
-    cf = generate_canonical_fingerprint(sealed_pdf_path)
+    # ── Generate CF from original ──
+    cf = generate_canonical_fingerprint(pdf_path)
     contract.fingerprint = cf
 
+    # ── Encrypt CF ──
     encrypted, hmac_value, wrapped_key, aes_iv = encrypt_cf(
         cf, settings.RSA_PUBLIC_KEY_PATH
     )
@@ -105,22 +99,32 @@ def encrypt_contract(request, contract_id):
     contract.aes_key = aes_iv
     contract.aes_iv = aes_iv
 
+    # ── Embed into seal ──
     embed_data_in_image(transparent_seal, stamped_seal, encrypted)
 
-    final_pdf_path = sealed_pdf_path.replace('_sealed.pdf', '_final.pdf')
-    stamp_seal_on_pdf(sealed_pdf_path, final_pdf_path, stamped_seal)
+    # ── Generate QR ──
+    qr_path = os.path.join(settings.MEDIA_ROOT, 'seals', f'qr_{contract.id}.png')
+    generate_qr_code(encrypted, qr_path)
+
+    # ── Stamp ONCE ──
+    original_filename = os.path.basename(pdf_path)
+    sealed_filename = original_filename.replace('.pdf', '_sealed.pdf')
+    sealed_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', sealed_filename)
+    stamp_seal_on_pdf(pdf_path, sealed_pdf_path, stamped_seal, qr_path=qr_path)
 
     if os.path.isfile(pdf_path):
         os.remove(pdf_path)
-    if os.path.isfile(sealed_pdf_path):
-        os.remove(sealed_pdf_path)
 
-    contract.file = f'contracts/{os.path.basename(final_pdf_path)}'
+    contract.file = f'contracts/{sealed_filename}'
     contract.seal_image = f'seals/seal_{contract.id}.png'
     contract.save()
 
     return redirect('contract_list')
 
+@login_required
+def contract_list(request):
+    contracts = Contract.objects.all()
+    return render(request, 'list.html', {'contracts': contracts})
 
 @login_required
 def delete_contract(request, contract_id):
@@ -234,3 +238,35 @@ def register(request):
     else:
         form = RegisterForm()
     return render(request, 'registration/register.html', {'form': form})
+
+def verify_physical(request):
+    result = None
+    
+    if request.method == 'POST':
+        qr_data = request.POST.get('qr_data', '').strip()
+        
+        if qr_data:
+            try:
+                matched_contract = None
+                
+                for contract in Contract.objects.exclude(encrypted_cf=''):
+                    try:
+                        # QR contains the encrypted CF directly
+                        # so we just compare it against stored encrypted_cf
+                        if qr_data == contract.encrypted_cf:
+                            matched_contract = contract
+                            break
+                    except Exception:
+                        continue
+                
+                if matched_contract:
+                    result = 'authentic'
+                else:
+                    result = 'tampered'
+                    
+            except Exception:
+                result = 'error'
+        else:
+            result = 'error'
+
+    return render(request, 'verify_physical.html', {'result': result})
