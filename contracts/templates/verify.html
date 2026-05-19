@@ -9,14 +9,15 @@
 
 {% if result == "authentic" %}
     <p style="color: green;">✅ Authentic — this document has not been tampered with.</p>
-
 {% elif result == "tampered" %}
     <p style="color: red;">❌ Not authentic — this document has been modified from its original form.</p>
-
 {% elif result == "error" %}
     <p style="color: orange;">⚠️ This document could not be verified — it may not have been issued or processed by this system.</p>
-
 {% endif %}
+
+<br>
+<hr>
+<p>Have a physical copy? <a href="/verify/physical/">Scan the QR code instead</a></p>
 
 <br>
 <hr>

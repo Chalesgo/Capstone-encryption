@@ -8,4 +8,5 @@ urlpatterns = [
     path('encrypt/<int:contract_id>/', views.encrypt_contract, name='encrypt_contract'),
     path('delete/<int:contract_id>/', views.delete_contract, name='delete_contract'),
     path('register/', views.register, name='register'),
+    path('verify/physical/', views.verify_physical, name='verify_physical'),
 ]

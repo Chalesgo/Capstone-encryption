@@ -1,0 +1,87 @@
+<h2>Verify Physical Copy</h2>
+<p>Point your camera at the QR code on the bottom of the contract to verify it.</p>
+
+<div style="text-align: center;">
+    <video id="preview" style="width: 100%; max-width: 480px; border: 1px solid #ccc;" autoplay></video>
+    <br>
+    <p id="status" style="color: gray;">Waiting for camera...</p>
+</div>
+
+{% if result == "authentic" %}
+    <p style="color: green;">✅ Authentic — the seal on this physical contract is valid.</p>
+{% elif result == "tampered" %}
+    <p style="color: red;">❌ Not authentic — this seal does not match any official record.</p>
+{% elif result == "error" %}
+    <p style="color: orange;">⚠️ Could not read the QR code. Please try again.</p>
+{% endif %}
+
+<form method="POST" id="qr-form">
+    {% csrf_token %}
+    <input type="hidden" name="qr_data" id="qr-data">
+</form>
+
+<br>
+<a href="/verify/">Back to document upload</a>
+<br>
+<hr>
+<small>Are you a staff member? <a href="/accounts/login/">Click here to login</a></small>
+
+<!-- QR Scanner library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+
+<script>
+    const video = document.getElementById('preview');
+    const status = document.getElementById('status');
+    const form = document.getElementById('qr-form');
+    const qrInput = document.getElementById('qr-data');
+
+    let scanning = true;
+
+    // Request camera access
+    navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' }  // use back camera on phones
+    })
+    .then(stream => {
+        video.srcObject = stream;
+        video.play();
+        status.textContent = 'Camera ready — point at the QR code on the contract.';
+        requestAnimationFrame(scanFrame);
+    })
+    .catch(err => {
+        status.textContent = 'Camera access denied or not available. ' + err.message;
+        status.style.color = 'red';
+    });
+
+    function scanFrame() {
+        if (!scanning) return;
+
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            // Draw video frame to canvas for QR scanning
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                inversionAttempts: 'dontInvert',
+            });
+
+            if (code) {
+                scanning = false;
+                status.textContent = 'QR code detected! Verifying...';
+                status.style.color = 'blue';
+
+                // Stop camera
+                video.srcObject.getTracks().forEach(track => track.stop());
+
+                // Submit QR data to Django
+                qrInput.value = code.data;
+                form.submit();
+            }
+        }
+
+        requestAnimationFrame(scanFrame);
+    }
+</script>

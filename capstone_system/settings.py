@@ -26,8 +26,8 @@ SECRET_KEY = 'django-insecure-=#8nq_nj4-og(n@l2vbmq&cxsapdi9c#0pvqz80yu(kjg3c%w#
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '192.168.0.103', 'playpen-antiquity-tactile.ngrok-free.dev']
+CSRF_TRUSTED_ORIGINS = ['https://playpen-antiquity-tactile.ngrok-free.dev']
 
 # Application definition
 
