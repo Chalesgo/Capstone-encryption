@@ -15,10 +15,31 @@
     <p style="color: orange;">⚠️ This document could not be verified — it may not have been issued or processed by this system.</p>
 {% endif %}
 
+{% if debug_log %}
+<details style="margin-top: 20px;">
+    <summary style="cursor: pointer; font-weight: bold; color: #555;">
+        🔍 Verification Log ({{ debug_log|length }} steps)
+    </summary>
+    <div style="
+        background: #1e1e1e;
+        color: #d4d4d4;
+        font-family: monospace;
+        font-size: 12px;
+        padding: 16px;
+        border-radius: 6px;
+        margin-top: 8px;
+        line-height: 1.8;
+        white-space: pre-wrap;
+        word-break: break-all;
+    ">
+        {% for line in debug_log %}{{ line }}
+{% endfor %}
+    </div>
+</details>
+{% endif %}
+
 <br>
 <hr>
 <p>Have a physical copy? <a href="/verify/physical/">Scan the QR code instead</a></p>
-
-<br>
 <hr>
 <small>Are you a staff member? <a href="/accounts/login/">Click here to login</a></small>
