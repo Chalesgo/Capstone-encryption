@@ -11,6 +11,8 @@ class Contract(models.Model):
     hmac_value = models.TextField(blank=True)     # HMAC of the CF
     seal_image = models.ImageField(upload_to='seals/', blank=True, null=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
+    # In models.py add this field
+    original_fingerprint = models.CharField(max_length=64, blank=True)
 
     def __str__(self):
         return self.title

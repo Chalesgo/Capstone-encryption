@@ -185,31 +185,11 @@ def extract_data_from_image(image_path: str):
     result = ''.join(chars)
     return result.replace("||END||", "")
 
-# ─── Seal Transparency ─────────────────────────────────────
-def make_seal_transparent(input_path, output_path, threshold=240):
-    """
-    Removes white background from seal image.
-    """
-    img = Image.open(input_path).convert("RGBA")
-    pixels = img.load()
-    w, h = img.size
-
-    for y in range(h):
-        for x in range(w):
-            r, g, b, a = pixels[x, y]
-            if r > threshold and g > threshold and b > threshold:
-                pixels[x, y] = (r, g, b, 0)
-
-    img.save(output_path, "PNG")
-    return output_path
-
-def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None):
+def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None, encrypted_cf=None):
     """
     Creates a new PDF with extended page size to fit the signature strip below content.
-    Print-compatible — maintains proper paper dimensions.
+    Stores encrypted CF in PDF metadata for reliable verification.
     """
-    import fitz
-
     src = fitz.open(input_pdf)
     dst = fitz.open()
 
@@ -224,10 +204,8 @@ def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None):
         page_height = src_rect.height
         new_height = page_height + strip_height
 
-        # ── Create a new page with extended height ──
         new_page = dst.new_page(width=page_width, height=new_height)
 
-        # ── Copy original page content onto the new page exactly ──
         new_page.show_pdf_page(
             fitz.Rect(0, 0, page_width, page_height),
             src,
@@ -236,14 +214,12 @@ def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None):
 
         strip_y = page_height
 
-        # ── Draw footer strip background ──
         new_page.draw_rect(
             fitz.Rect(0, strip_y, page_width, new_height),
             color=(0.95, 0.95, 0.95),
             fill=(0.95, 0.95, 0.95)
         )
 
-        # ── Top border line ──
         new_page.draw_line(
             fitz.Point(0, strip_y),
             fitz.Point(page_width, strip_y),
@@ -251,7 +227,6 @@ def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None):
             width=1
         )
 
-        # ── Seal on the left ──
         seal_x = padding
         seal_y = strip_y + (strip_height - seal_size) // 2
         new_page.insert_image(
@@ -260,7 +235,6 @@ def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None):
             overlay=True,
         )
 
-        # ── Seal label ──
         new_page.insert_text(
             fitz.Point(seal_x + (seal_size // 2) - 20, seal_y + seal_size + 10),
             "Official Seal",
@@ -269,7 +243,6 @@ def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None):
         )
 
         if qr_path:
-            # ── QR on the right ──
             qr_x = page_width - qr_size - padding
             qr_y = strip_y + (strip_height - qr_size) // 2
             new_page.insert_image(
@@ -278,7 +251,6 @@ def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None):
                 overlay=True,
             )
 
-            # ── QR label ──
             new_page.insert_text(
                 fitz.Point(qr_x + (qr_size // 2) - 25, qr_y + qr_size + 10),
                 "Scan to Verify",
@@ -286,9 +258,7 @@ def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None):
                 color=(0.4, 0.4, 0.4)
             )
 
-            # ── Center text ──
             center_x = (seal_x + seal_size + qr_x) / 2
-            center_y = strip_y + (strip_height / 2) - 15
 
             page_num_text = f"Page {src_page.number + 1} of {src.page_count}"
             new_page.insert_text(
@@ -316,9 +286,17 @@ def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None):
                 color=(0.4, 0.4, 0.4)
             )
 
+    # ── Store encrypted CF in PDF metadata ──
+    # This is hidden from normal viewers but readable by our system
+    if encrypted_cf:
+        metadata = dst.metadata
+        metadata['keywords'] = f'SEALGUARD:{encrypted_cf}'
+        dst.set_metadata(metadata)
+
     dst.save(output_pdf)
     dst.close()
     src.close()
+
 def generate_qr_code(data: str, output_path: str):
     """
     Generates a QR code containing the encrypted CF.
@@ -336,3 +314,19 @@ def generate_qr_code(data: str, output_path: str):
     img = qr.make_image(fill_color="black", back_color="white")
     img.save(output_path)
     return output_path
+
+def extract_cf_from_metadata(pdf_path: str):
+    """
+    Extracts the encrypted CF from the PDF metadata keywords field.
+    Returns the encrypted CF string or None if not found.
+    """
+    try:
+        doc = fitz.open(pdf_path)
+        keywords = doc.metadata.get('keywords', '')
+        doc.close()
+
+        if keywords.startswith('SEALGUARD:'):
+            return keywords[len('SEALGUARD:'):]
+        return None
+    except Exception:
+        return None
