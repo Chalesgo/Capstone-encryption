@@ -176,31 +176,31 @@ function initSort() {
 }
 
 // ===================== ADD DOCUMENT BUTTON =====================
-function initAddDocument() {
-  document.querySelector(".btn-add").addEventListener("click", () => {
-    const name = prompt("Enter document name:");
-    if (!name || !name.trim()) return;
+function initAddDocument() {}
 
-    const tagOptions = ["Jobs", "Quotes", "Requests"];
-    const tagMap    = { Jobs: "orange", Quotes: "purple", Requests: "teal" };
-    const tag = tagOptions[Math.floor(Math.random() * tagOptions.length)];
 
-    const newDoc = {
-      name: name.trim(),
-      tag,
-      tagClass: tagMap[tag],
-      recipient: "New Recipient",
-      date: new Date().toLocaleDateString("en-GB").replace(/\//g, "/"),
-      status: "Pending",
-      statusClass: "pending",
-      modified: "just now",
-    };
 
-    documents.unshift(newDoc);
-    renderTable(documents);
-    initSelectAll();
-  });
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // ===================== FILTER PANEL =====================
 function initFilterPanel() {
@@ -373,4 +373,130 @@ document.addEventListener("DOMContentLoaded", () => {
   initSort();
   initAddDocument();
   initFilterPanel();
+  initDocDetailPanel();
+  initAddDocModal();
 });
+
+// ===================== DOCUMENT DETAIL PANEL =====================
+function initDocDetailPanel() {
+  const panel    = document.getElementById("docDetailPanel");
+  const closeBtn = document.getElementById("docDetailClose");
+
+  // Click pencil (edit) icon on any row to open detail
+  document.getElementById("tableBody").addEventListener("click", (e) => {
+    const btn = e.target.closest(".row-btn");
+    if (!btn) return;
+
+    // Only open on the pencil (edit) button — second .row-btn
+    const allBtns = [...btn.closest("tr").querySelectorAll(".row-btn")];
+    const idx = allBtns.indexOf(btn);
+    if (idx !== 1) return; // 0=download, 1=edit, 2=more
+
+    const row = btn.closest("tr");
+    const cells = row.querySelectorAll("td");
+
+    // Populate panel
+    const docName  = cells[2].querySelector(".doc-name")?.textContent || "";
+    const tagText  = cells[2].querySelector(".doc-tag")?.textContent || "";
+    const tagClass = cells[2].querySelector(".doc-tag")?.className.split(" ")[1] || "";
+    const recipient = cells[3]?.textContent.trim() || "";
+    const date      = cells[4]?.textContent.trim() || "";
+    const status    = cells[5]?.querySelector("div")?.textContent.trim() || "";
+
+    document.getElementById("ddpDocName").textContent   = docName;
+    document.getElementById("ddpOwner").textContent     = "kate23@gmail.com";
+    document.getElementById("ddpCreated").textContent   = date;
+    document.getElementById("ddpRecipient").textContent = recipient + "@gmail.com";
+
+    const tagEl = document.getElementById("ddpTag");
+    tagEl.textContent = status;
+    tagEl.className = "ddp-tag " + status.toLowerCase();
+
+    panel.classList.add("open");
+  });
+
+  closeBtn.addEventListener("click", () => panel.classList.remove("open"));
+}
+
+// ===================== ADD DOCUMENT MODAL =====================
+function initAddDocModal() {
+  const overlay    = document.getElementById("addDocOverlay");
+  const modal      = document.getElementById("addDocModal");
+  const openBtn    = document.querySelector(".btn-add");
+  const closeBtn   = document.getElementById("addDocClose");
+  const dropZone   = document.getElementById("addDropZone");
+  const fileInput  = document.getElementById("addFileInput");
+  const selectBtn  = document.getElementById("addSelectBtn");
+  const fileNameEl = document.getElementById("addFileName");
+
+  function openModal() {
+    overlay.classList.add("open");
+    modal.classList.add("open");
+  }
+  function closeModal() {
+    overlay.classList.remove("open");
+    modal.classList.remove("open");
+    fileNameEl.textContent = "";
+    fileInput.value = "";
+    dropZone.classList.remove("drag-over");
+  }
+
+  // Override the old btn-add prompt behaviour
+  openBtn.addEventListener("click", openModal, true);
+
+  closeBtn.addEventListener("click", closeModal);
+  overlay.addEventListener("click", closeModal);
+
+  selectBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    fileInput.click();
+  });
+
+  dropZone.addEventListener("click", () => fileInput.click());
+
+  fileInput.addEventListener("change", () => {
+    const file = fileInput.files[0];
+    if (file) {
+      fileNameEl.textContent = file.name;
+      fileNameEl.style.color = "#4caf82";
+
+      // After a short delay, add a placeholder row to the table and close
+      setTimeout(() => {
+        const tagOptions = ["Jobs", "Quotes", "Requests"];
+        const tagMap     = { Jobs: "orange", Quotes: "purple", Requests: "teal" };
+        const tag        = tagOptions[Math.floor(Math.random() * tagOptions.length)];
+        const today      = new Date();
+        const dateStr    = `${String(today.getDate()).padStart(2,"0")}/${String(today.getMonth()+1).padStart(2,"0")}/${today.getFullYear()}`;
+
+        documents.unshift({
+          name: file.name.replace(/\.[^/.]+$/, ""),
+          tag,
+          tagClass: tagMap[tag],
+          recipient: "Stiv Rogers",
+          date: dateStr,
+          status: "Pending",
+          statusClass: "pending",
+          modified: "just now",
+        });
+
+        renderTable(documents);
+        initSelectAll();
+        closeModal();
+      }, 900);
+    }
+  });
+
+  // Drag & drop
+  dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.classList.add("drag-over"); });
+  dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
+  dropZone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropZone.classList.remove("drag-over");
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      fileInput._customFile = file;
+      fileNameEl.textContent = file.name;
+      fileNameEl.style.color = "#4caf82";
+    }
+  });
+}

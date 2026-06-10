@@ -1,0 +1,245 @@
+/* ===================== RESET & BASE ===================== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: #1a1a1a;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ===================== PAGE BACKGROUND ===================== */
+.page-bg {
+  width: 100%;
+  min-height: 100vh;
+  background: #e8e8e8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+/* ===================== MODAL ===================== */
+.modal {
+  background: #fff;
+  border-radius: 18px;
+  width: 100%;
+  max-width: 560px;
+  padding: 36px 40px 32px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  box-shadow: 0 4px 32px rgba(0,0,0,0.08);
+}
+
+/* ---- Close button ---- */
+.modal-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid #f4a34d;
+  background: none;
+  color: #f4a34d;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.modal-close:hover {
+  background: #f4a34d;
+  color: #fff;
+}
+
+/* ---- Header ---- */
+.modal-header { display: flex; flex-direction: column; gap: 2px; }
+
+.modal-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: #222;
+}
+
+.modal-subtitle {
+  font-size: 13px;
+  color: #aaa;
+  font-weight: 400;
+}
+
+/* ===================== LOGIN FIELDS ===================== */
+.login-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+  overflow: hidden;
+  max-height: 200px;
+  opacity: 1;
+}
+
+.login-fields.hidden {
+  max-height: 0;
+  opacity: 0;
+  pointer-events: none;
+  gap: 0;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.field-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #666;
+}
+
+.field-input {
+  border: 1px solid #e8e6e2;
+  border-radius: 8px;
+  padding: 11px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #333;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.field-input::placeholder { color: #ccc; }
+.field-input:focus {
+  border-color: #f4a34d;
+  box-shadow: 0 0 0 3px rgba(244,163,77,0.12);
+}
+
+/* ===================== VERIFY PANEL ===================== */
+.verify-panel {
+  background: #f5f4f2;
+  border-radius: 12px;
+  padding: 20px 20px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.verify-title {
+  font-size: 13px;
+  color: #999;
+  font-weight: 400;
+  text-align: center;
+}
+
+/* ---- Doc card ---- */
+.doc-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px 22px 22px;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+}
+
+.doc-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #222;
+  margin-bottom: 2px;
+}
+
+.doc-card-sub {
+  font-size: 12px;
+  color: #aaa;
+  margin-bottom: 14px;
+}
+
+/* ---- Drop zone ---- */
+.drop-zone {
+  border: 1.5px dashed #d0cec9;
+  border-radius: 8px;
+  padding: 22px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transition: border-color 0.2s, background 0.2s;
+  cursor: pointer;
+}
+
+.drop-zone.drag-over {
+  border-color: #f4a34d;
+  background: #fef5ec;
+}
+
+.drop-hint {
+  font-size: 12px;
+  color: #bbb;
+  text-align: center;
+}
+
+.select-file-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: #f4a34d;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s;
+}
+.select-file-btn:hover { color: #e09038; }
+.select-file-btn i { font-size: 14px; }
+
+.file-name {
+  font-size: 11px;
+  color: #4caf82;
+  font-weight: 500;
+  text-align: center;
+  min-height: 16px;
+  word-break: break-all;
+}
+
+/* ===================== FOOTER ===================== */
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-continue {
+  background: #f4a34d;
+  color: #fff;
+  border: none;
+  border-radius: 22px;
+  padding: 10px 28px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+.btn-continue:hover { background: #e09038; }
+.btn-continue:active { transform: scale(0.97); }
+
+/* ===================== ERROR STATE ===================== */
+.field-input.error {
+  border-color: #e05a5a;
+  box-shadow: 0 0 0 3px rgba(224,90,90,0.1);
+}
+
+.field-error {
+  font-size: 11px;
+  color: #e05a5a;
+  margin-top: -10px;
+}

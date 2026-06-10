@@ -211,3 +211,62 @@
     <!-- Apply -->
     <button class="fp-apply" id="fpApply">Apply</button>
   </aside>
+
+  <!-- ===================== DOCUMENT DETAIL PANEL ===================== -->
+  <aside class="doc-detail-panel" id="docDetailPanel">
+    <button class="doc-detail-close" id="docDetailClose">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+
+    <div class="ddp-preview">
+      <div class="ddp-thumb">
+        <i class="fa-regular fa-file-lines ddp-thumb-icon"></i>
+      </div>
+      <div class="ddp-preview-info">
+        <p class="ddp-doc-name" id="ddpDocName">Working contract</p>
+        <span class="ddp-tag" id="ddpTag">Sent</span>
+      </div>
+    </div>
+
+    <button class="ddp-open-btn">Open</button>
+
+    <div class="ddp-divider"></div>
+
+    <p class="ddp-section-title">Details</p>
+
+    <div class="ddp-fields">
+      <div class="ddp-field">
+        <span class="ddp-field-label">Owner</span>
+        <span class="ddp-field-value" id="ddpOwner">kate23@gmail.com</span>
+      </div>
+      <div class="ddp-field">
+        <span class="ddp-field-label">Created</span>
+        <span class="ddp-field-value" id="ddpCreated">March 3/03/2023</span>
+      </div>
+      <div class="ddp-field">
+        <span class="ddp-field-label">Recipient</span>
+        <span class="ddp-field-value" id="ddpRecipient">StivRogers123@gmail.com</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ===================== ADD DOCUMENT MODAL ===================== -->
+  <div class="add-doc-overlay" id="addDocOverlay"></div>
+
+  <div class="add-doc-modal" id="addDocModal">
+    <button class="add-doc-close" id="addDocClose">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+
+    <p class="add-doc-title">Select document</p>
+    <p class="add-doc-sub">Import your documents</p>
+
+    <div class="add-drop-zone" id="addDropZone">
+      <input type="file" id="addFileInput" hidden />
+      <p class="add-drop-hint">Drag and drop your file</p>
+      <button class="add-select-btn" id="addSelectBtn">
+        <i class="fa-solid fa-download"></i> Select File
+      </button>
+      <p class="add-file-name" id="addFileName"></p>
+    </div>
+  </div>

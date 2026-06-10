@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Login Screen</title>
+  <link rel="stylesheet" href="login-style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+</head>
+<body>
+
+  <div class="page-bg">
+    <div class="modal" id="loginModal">
+
+      <!-- Close button -->
+      <button class="modal-close" id="modalClose">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+      <!-- Title -->
+      <div class="modal-header">
+        <h1 class="modal-title">Login Screen</h1>
+        <p class="modal-subtitle" id="modalSubtitle">Staff Only</p>
+      </div>
+
+      <!-- Staff-only fields (hidden for Public Use) -->
+      <div class="login-fields" id="loginFields">
+        <div class="field-group">
+          <label class="field-label">Username</label>
+          <input type="text" class="field-input" placeholder="Enter Name" id="inputUsername" />
+        </div>
+        <div class="field-group">
+          <label class="field-label">Password</label>
+          <input type="password" class="field-input" placeholder="Enter Recipient Name" id="inputPassword" />
+        </div>
+      </div>
+
+      <!-- Document verify panel -->
+      <div class="verify-panel">
+        <p class="verify-title">Verify your Documents</p>
+
+        <div class="doc-card">
+          <p class="doc-card-title">Select document</p>
+          <p class="doc-card-sub">Verify your Documents</p>
+
+          <!-- Drop zone -->
+          <div class="drop-zone" id="dropZone">
+            <input type="file" id="fileInput" hidden />
+            <p class="drop-hint">Drag and drop your file</p>
+            <button class="select-file-btn" id="selectFileBtn">
+              <i class="fa-solid fa-download"></i> Select File
+            </button>
+            <p class="file-name" id="fileName"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="modal-footer">
+        <button class="btn-continue" id="btnContinue">Continue</button>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="login-script.js"></script>
+</body>
+</html>
