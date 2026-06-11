@@ -16,7 +16,6 @@
       <div class="logo-icon"><i class="fa-solid fa-location-dot"></i></div>
       <button class="collapse-btn"><i class="fa-solid fa-chevron-left"></i></button>
     </div>
-
     <nav class="sidebar-icons">
       <a href="#" class="icon-link"><i class="fa-regular fa-clock"></i></a>
       <a href="#" class="icon-link"><i class="fa-regular fa-calendar"></i></a>
@@ -30,12 +29,12 @@
     </nav>
   </aside>
 
-  <!-- Panel -->
+  <!-- Left Panel -->
   <div class="panel">
     <div class="panel-section">
       <p class="panel-heading">Documents</p>
       <ul class="panel-list">
-        <li class="panel-item active"><i class="fa-regular fa-file"></i> All Documents</li>
+        <li class="panel-item active" data-all="true"><i class="fa-regular fa-file"></i> All Documents</li>
         <li class="panel-item"><i class="fa-regular fa-trash-can"></i> Trash</li>
       </ul>
     </div>
@@ -43,9 +42,9 @@
     <div class="panel-section">
       <p class="panel-heading">Filters</p>
       <ul class="panel-list">
-        <li class="panel-item"><span class="dot gray"></span> Draft</li>
-        <li class="panel-item"><span class="dot yellow"></span> Sent</li>
-        <li class="panel-item"><span class="dot green"></span> Signed</li>
+        <li class="panel-item" data-status="Pending"><span class="dot gray"></span> Draft</li>
+        <li class="panel-item" data-status="Sent"><span class="dot yellow"></span> Sent</li>
+        <li class="panel-item" data-status="Approved"><span class="dot green"></span> Signed</li>
       </ul>
     </div>
 
@@ -68,7 +67,6 @@
 
   <!-- Main Content -->
   <main class="main">
-    <!-- Top Bar -->
     <header class="topbar">
       <div class="topbar-actions">
         <button class="topbar-icon"><i class="fa-solid fa-plus"></i></button>
@@ -89,7 +87,6 @@
       </div>
     </header>
 
-    <!-- Content Area -->
     <div class="content">
       <div class="content-header">
         <h1 class="page-title">Document management</h1>
@@ -106,7 +103,6 @@
         </div>
       </div>
 
-      <!-- Table -->
       <div class="table-wrap">
         <table class="doc-table">
           <thead>
@@ -121,36 +117,23 @@
               <th></th>
             </tr>
           </thead>
-          <tbody id="tableBody">
-            <!-- Rows injected by JS -->
-          </tbody>
+          <tbody id="tableBody"></tbody>
         </table>
       </div>
     </div>
   </main>
 
-  <script src="script.js"></script>
-
-  <!-- Blur Overlay -->
+  <!-- ===== FILTER PANEL (right slide-in) ===== -->
   <div class="filter-overlay" id="filterOverlay"></div>
-
-  <!-- Filter Panel -->
   <aside class="filter-panel" id="filterPanel">
-    <!-- Top -->
     <div class="fp-top">
-      <div class="fp-more-actions">
-        More Actions <i class="fa-solid fa-chevron-right"></i>
-      </div>
+      <div class="fp-more-actions">More Actions <i class="fa-solid fa-chevron-right"></i></div>
       <button class="fp-close" id="filterClose"><i class="fa-solid fa-xmark"></i></button>
     </div>
-
-    <!-- Filters header -->
     <div class="fp-filters-row">
       <span class="fp-filters-label">Filters</span>
       <button class="fp-reset" id="fpReset">Reset all</button>
     </div>
-
-    <!-- Date Created -->
     <div class="fp-section">
       <label class="fp-field-label">Date Created</label>
       <div class="fp-select-wrap">
@@ -163,8 +146,6 @@
           <option value="custom">Custom date…</option>
         </select>
       </div>
-
-      <!-- Custom date input + calendar (shown when "custom" selected) -->
       <div id="fpCalendarWrap" style="display:none;">
         <div class="fp-date-input-wrap">
           <input type="text" class="fp-date-input" id="fpDateInput" placeholder="DD/MM/YYYY" readonly />
@@ -180,8 +161,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Recipient -->
     <div class="fp-section">
       <label class="fp-field-label">Recipient</label>
       <div class="fp-search-wrap">
@@ -189,84 +168,124 @@
         <input type="text" class="fp-search-input" id="fpRecipientSearch" placeholder="Search" />
       </div>
       <ul class="fp-radio-list" id="fpRecipientList">
-        <li class="fp-radio-item">
-          <input type="radio" name="recipient" id="rAll" value="" checked />
-          <label for="rAll">Select All</label>
-        </li>
-        <li class="fp-radio-item">
-          <input type="radio" name="recipient" id="rDonna" value="Donna Prince" />
-          <label for="rDonna">Donna Prince</label>
-        </li>
-        <li class="fp-radio-item">
-          <input type="radio" name="recipient" id="rArthie" value="Arthie Rogers" />
-          <label for="rArthie">Arthie Rogers</label>
-        </li>
-        <li class="fp-radio-item">
-          <input type="radio" name="recipient" id="rStiv" value="Stiv Rogers" />
-          <label for="rStiv">Stiv Rogers</label>
-        </li>
+        <li class="fp-radio-item"><input type="radio" name="recipient" id="rAll" value="" checked /><label for="rAll">Select All</label></li>
+        <li class="fp-radio-item"><input type="radio" name="recipient" id="rDonna" value="Donna Prince" /><label for="rDonna">Donna Prince</label></li>
+        <li class="fp-radio-item"><input type="radio" name="recipient" id="rArthie" value="Arthie Rogers" /><label for="rArthie">Arthie Rogers</label></li>
+        <li class="fp-radio-item"><input type="radio" name="recipient" id="rStiv" value="Stiv Rogers" /><label for="rStiv">Stiv Rogers</label></li>
       </ul>
     </div>
-
-    <!-- Apply -->
     <button class="fp-apply" id="fpApply">Apply</button>
   </aside>
 
-  <!-- ===================== DOCUMENT DETAIL PANEL ===================== -->
+  <!-- ===== DOCUMENT DETAIL PANEL (right) ===== -->
   <aside class="doc-detail-panel" id="docDetailPanel">
-    <button class="doc-detail-close" id="docDetailClose">
-      <i class="fa-solid fa-xmark"></i>
-    </button>
-
+    <button class="doc-detail-close" id="docDetailClose"><i class="fa-solid fa-xmark"></i></button>
     <div class="ddp-preview">
-      <div class="ddp-thumb">
-        <i class="fa-regular fa-file-lines ddp-thumb-icon"></i>
-      </div>
+      <div class="ddp-thumb"><i class="fa-regular fa-file-lines ddp-thumb-icon"></i></div>
       <div class="ddp-preview-info">
         <p class="ddp-doc-name" id="ddpDocName">Working contract</p>
-        <span class="ddp-tag" id="ddpTag">Sent</span>
+        <span class="ddp-tag sent" id="ddpTag">Sent</span>
       </div>
     </div>
-
     <button class="ddp-open-btn">Open</button>
-
     <div class="ddp-divider"></div>
-
     <p class="ddp-section-title">Details</p>
-
     <div class="ddp-fields">
-      <div class="ddp-field">
-        <span class="ddp-field-label">Owner</span>
-        <span class="ddp-field-value" id="ddpOwner">kate23@gmail.com</span>
-      </div>
-      <div class="ddp-field">
-        <span class="ddp-field-label">Created</span>
-        <span class="ddp-field-value" id="ddpCreated">March 3/03/2023</span>
-      </div>
-      <div class="ddp-field">
-        <span class="ddp-field-label">Recipient</span>
-        <span class="ddp-field-value" id="ddpRecipient">StivRogers123@gmail.com</span>
-      </div>
+      <div class="ddp-field"><span class="ddp-field-label">Owner</span><span class="ddp-field-value" id="ddpOwner">kate23@gmail.com</span></div>
+      <div class="ddp-field"><span class="ddp-field-label">Created</span><span class="ddp-field-value" id="ddpCreated">3/03/2023</span></div>
+      <div class="ddp-field"><span class="ddp-field-label">Recipient</span><span class="ddp-field-value" id="ddpRecipient">stivrogers@gmail.com</span></div>
     </div>
   </aside>
 
-  <!-- ===================== ADD DOCUMENT MODAL ===================== -->
+  <!-- ===== ADD DOCUMENT MODAL ===== -->
   <div class="add-doc-overlay" id="addDocOverlay"></div>
-
   <div class="add-doc-modal" id="addDocModal">
-    <button class="add-doc-close" id="addDocClose">
-      <i class="fa-solid fa-xmark"></i>
-    </button>
-
+    <button class="add-doc-close" id="addDocClose"><i class="fa-solid fa-xmark"></i></button>
     <p class="add-doc-title">Select document</p>
     <p class="add-doc-sub">Import your documents</p>
-
     <div class="add-drop-zone" id="addDropZone">
       <input type="file" id="addFileInput" hidden />
       <p class="add-drop-hint">Drag and drop your file</p>
-      <button class="add-select-btn" id="addSelectBtn">
-        <i class="fa-solid fa-download"></i> Select File
-      </button>
+      <button class="add-select-btn" id="addSelectBtn"><i class="fa-solid fa-download"></i> Select File</button>
       <p class="add-file-name" id="addFileName"></p>
     </div>
   </div>
+
+  <!-- ===== DOCUMENT DETAILS MODAL ===== -->
+  <div class="add-doc-overlay" id="docDetailsOverlay"></div>
+  <div class="doc-details-modal" id="docDetailsModal">
+    <button class="add-doc-close" id="ddmClose"><i class="fa-solid fa-xmark"></i></button>
+    <p class="ddm-title">Document Details</p>
+    <p class="ddm-sub">Create your document details</p>
+
+    <div class="ddm-field-group">
+      <label class="ddm-label">Document Name <span class="ddm-required">*</span></label>
+      <input type="text" class="ddm-input full" id="ddmDocName" placeholder="Enter Name" />
+    </div>
+    <div class="ddm-field-group">
+      <label class="ddm-label">Recipient</label>
+      <input type="text" class="ddm-input full" id="ddmRecipient" placeholder="Enter Recipient Name" />
+    </div>
+
+    <div class="ddm-inner-box">
+      <div class="ddm-field-group">
+        <label class="ddm-label">Company Name</label>
+        <input type="text" class="ddm-input" id="ddmCompany" />
+      </div>
+      <div class="ddm-row">
+        <div class="ddm-field-group">
+          <label class="ddm-label">First Name</label>
+          <input type="text" class="ddm-input" id="ddmFirstName" />
+        </div>
+        <div class="ddm-field-group" style="position:relative;">
+          <label class="ddm-label">Last Name</label>
+          <input type="text" class="ddm-input" id="ddmLastName" />
+          <i class="fa-regular fa-calendar ddm-cal-icon"></i>
+        </div>
+      </div>
+      <div class="ddm-row">
+        <div class="ddm-field-group">
+          <label class="ddm-label">Phone Number</label>
+          <input type="text" class="ddm-input" id="ddmPhone" placeholder="___-___-__-__" />
+        </div>
+        <div class="ddm-field-group">
+          <label class="ddm-label">E-mail</label>
+          <div class="ddm-select-wrap">
+            <input type="email" class="ddm-input ddm-select-input" id="ddmEmail" placeholder="Search by Name or E-mail" />
+            <i class="fa-solid fa-chevron-down ddm-select-icon"></i>
+          </div>
+        </div>
+      </div>
+      <div class="ddm-field-group">
+        <label class="ddm-label">Address</label>
+        <input type="text" class="ddm-input" id="ddmAddress" placeholder="City, Name Street Number, Unit" />
+      </div>
+      <div class="ddm-row ddm-row-3">
+        <div class="ddm-field-group">
+          <label class="ddm-label">Postal Code</label>
+          <input type="text" class="ddm-input" id="ddmPostal" />
+        </div>
+        <div class="ddm-field-group">
+          <label class="ddm-label">Country</label>
+          <input type="text" class="ddm-input" id="ddmCountry" />
+        </div>
+        <div class="ddm-field-group">
+          <label class="ddm-label">Province / State</label>
+          <input type="text" class="ddm-input" id="ddmProvince" />
+        </div>
+      </div>
+      <div class="ddm-save-row">
+        <button class="ddm-save-btn" id="ddmSave">Save</button>
+      </div>
+    </div>
+
+    <div class="ddm-footer">
+      <button class="btn-continue-ddm" id="ddmContinue">Continue</button>
+    </div>
+  </div>
+
+  <!-- ===== MORE MENU (rendered dynamically) ===== -->
+
+  <script src="script.js"></script>
+</body>
+</html>

@@ -944,3 +944,197 @@ body {
   min-height: 16px;
   word-break: break-all;
 }
+
+/* ===================== FIX: Detail panel slides from RIGHT ===================== */
+.doc-detail-panel {
+  left: auto !important;
+  right: -280px;
+  transition: right 0.28s cubic-bezier(.4,0,.2,1) !important;
+  background: #1c1c1c;
+  z-index: 150;
+}
+.doc-detail-panel.open { right: 0 !important; left: auto !important; }
+
+/* ===================== MORE MENU ===================== */
+.more-menu {
+  position: absolute;
+  background: #fff;
+  border: 1px solid #e8e6e2;
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.12);
+  z-index: 500;
+  min-width: 120px;
+  padding: 4px;
+  animation: fadeIn 0.12s ease;
+}
+@keyframes fadeIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
+
+.more-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 9px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 7px;
+  transition: background 0.12s;
+  color: #444;
+}
+.more-menu-item:hover { background: #faf9f7; }
+.more-menu-delete { color: #e05a5a; }
+.more-menu-delete:hover { background: #fff0f0; }
+
+/* ===================== DOCUMENT DETAILS MODAL ===================== */
+.doc-details-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.96);
+  width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 18px;
+  padding: 32px 36px 28px;
+  z-index: 112;
+  box-shadow: 0 8px 48px rgba(0,0,0,0.13);
+  display: none;
+  flex-direction: column;
+  gap: 14px;
+  opacity: 0;
+}
+.doc-details-modal.open {
+  display: flex;
+  transform: translate(-50%, -50%) scale(1);
+  opacity: 1;
+}
+
+.ddm-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #222;
+  margin-bottom: 0;
+}
+.ddm-sub {
+  font-size: 13px;
+  color: #aaa;
+  margin-bottom: 4px;
+}
+.ddm-required { color: #f4a34d; }
+
+.ddm-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+}
+
+.ddm-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #555;
+}
+
+.ddm-input {
+  border: 1px solid #e8e6e2;
+  border-radius: 8px;
+  padding: 10px 13px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #333;
+  background: #fff;
+  outline: none;
+  width: 100%;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.ddm-input::placeholder { color: #ccc; }
+.ddm-input:focus { border-color: #f4a34d; box-shadow: 0 0 0 3px rgba(244,163,77,0.1); }
+.ddm-input.full { width: 100%; }
+
+/* Inner shaded box */
+.ddm-inner-box {
+  background: #f7f6f4;
+  border-radius: 12px;
+  padding: 18px 18px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.ddm-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+.ddm-row-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+/* Last name calendar icon */
+.ddm-cal-icon {
+  position: absolute;
+  right: 12px;
+  bottom: 11px;
+  color: #bbb;
+  font-size: 13px;
+  pointer-events: none;
+}
+
+/* Email dropdown-style input */
+.ddm-select-wrap { position: relative; }
+.ddm-select-input { padding-right: 32px; }
+.ddm-select-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #bbb;
+  font-size: 11px;
+  pointer-events: none;
+}
+
+/* Save button inside box */
+.ddm-save-row { display: flex; justify-content: flex-end; margin-top: 2px; }
+.ddm-save-btn {
+  background: #f4a34d;
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 7px 22px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.ddm-save-btn:hover { background: #e09038; }
+
+/* Footer Continue */
+.ddm-footer { display: flex; justify-content: flex-end; margin-top: 4px; }
+.btn-continue-ddm {
+  background: #f4a34d;
+  color: #fff;
+  border: none;
+  border-radius: 22px;
+  padding: 11px 32px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btn-continue-ddm:hover { background: #e09038; }
+
+/* ===================== CLICKABLE DOC NAME ===================== */
+.doc-name-link {
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.doc-name-link:hover {
+  color: #f4a34d;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

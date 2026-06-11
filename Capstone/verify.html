@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Document Verifier</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+  <link rel="stylesheet" href="verify-style.css"/>
+</head>
+<body>
+
+  <!-- ===== UPLOAD SCREEN ===== -->
+  <div class="screen" id="screenUpload">
+    <div class="page-bg">
+      <div class="modal">
+        <button class="modal-close"><i class="fa-solid fa-xmark"></i></button>
+        <div class="modal-header">
+          <h1 class="modal-title">Login Screen</h1>
+          <p class="modal-subtitle">Public Use</p>
+        </div>
+        <div class="verify-panel">
+          <p class="verify-title">Verify your Documents</p>
+          <div class="doc-card">
+            <p class="doc-card-title">Select document</p>
+            <p class="doc-card-sub">Verify your Documents</p>
+            <div class="drop-zone" id="dropZone">
+              <input type="file" id="fileInput"
+                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,.json" hidden/>
+              <p class="drop-hint">Drag and drop your file</p>
+              <button class="select-file-btn" id="selectFileBtn">
+                <i class="fa-solid fa-download"></i> Select File
+              </button>
+              <p class="file-name" id="fileName"></p>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-continue" id="btnContinue" disabled>Continue</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== VIEWER + VERIFIER SCREEN ===== -->
+  <div class="screen hidden" id="screenViewer">
+
+    <!-- Top bar -->
+    <div class="viewer-topbar">
+      <button class="topbar-back" id="btnBack"><i class="fa-solid fa-arrow-left"></i></button>
+      <span class="topbar-title" id="viewerTitle">—</span>
+      <div class="topbar-right">
+        <button class="topbar-btn outline"><i class="fa-solid fa-link"></i> Share Link</button>
+        <button class="topbar-btn solid"><i class="fa-solid fa-paper-plane"></i> Send</button>
+      </div>
+    </div>
+
+    <!-- Sub bar -->
+    <div class="viewer-subbar">
+      <span class="subbar-pages">
+        <i class="fa-regular fa-file"></i>
+        <span id="subbarPages">—</span>
+      </span>
+      <div class="subbar-actions">
+        <button class="subbar-btn" title="Zoom out" id="btnZoomOut"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
+        <button class="subbar-btn" title="Zoom in"  id="btnZoomIn"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
+      </div>
+    </div>
+
+    <!-- Main layout -->
+    <div class="viewer-body">
+
+      <!-- Dynamic file preview -->
+      <div class="doc-preview-area" id="docPreviewArea">
+        <!-- Populated by JS based on file type -->
+      </div>
+
+      <!-- Verification sidebar -->
+      <div class="verify-sidebar">
+        <button class="verify-btn" id="btnVerify">
+          <i class="fa-solid fa-lock"></i> Verify
+        </button>
+
+        <div class="verify-status-box" id="verifyStatusBox">
+          <p class="verify-status-label">Verification Status</p>
+
+          <!-- Loading -->
+          <div class="verify-loading hidden" id="verifyLoading">
+            <div class="loading-spinner large"></div>
+            <div class="verify-steps">
+              <div class="vstep" id="vstep1"><div class="loading-spinner sm"></div><span>Checking document authenticity...</span></div>
+              <div class="vstep" id="vstep2"><div class="loading-spinner sm"></div><span>Comparing this document with the official barangay record</span></div>
+              <div class="vstep" id="vstep3"><div class="loading-spinner sm"></div><span>Reviewing document contents for unauthorized changes...</span></div>
+              <div class="vstep" id="vstep4"><div class="loading-spinner sm"></div><span>Validating document integrity and approval status...</span></div>
+              <div class="vstep" id="vstep5"><div class="loading-spinner sm"></div><span>Finalizing verification results...</span></div>
+            </div>
+          </div>
+
+          <!-- Result -->
+          <div class="verify-result hidden" id="verifyResult">
+            <div class="status-badge" id="statusBadge"></div>
+            <p class="result-desc" id="resultDesc"></p>
+            <ul class="change-list" id="changeList"></ul>
+            <div class="source-card" id="sourceCard">
+              <p><strong>Source:</strong> Official Barangay Database</p>
+              <p><strong>Verification Result:</strong> <span id="srcResult"></span></p>
+              <p><strong>Integrity Check:</strong> <span id="srcIntegrity"></span></p>
+              <p id="srcMatchRow"><strong>Official Match:</strong> <span id="srcMatch"></span></p>
+              <p><strong>Verified On:</strong> <span id="srcDate"></span></p>
+              <p class="src-note" id="srcNote"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="verify-script.js"></script>
+</body>
+</html>
