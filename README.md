@@ -15,3 +15,6 @@ PABASA PARA SA SETUP
 CTRL BREAK IS CTRL + C
 
 ISSUE WITH LSB PIXELS KEEP GETTING CHANGED DUE TO PDF RENDERING
+
+admin will be here to check users
+http://127.0.0.1:8000/admin/login/?next=/admin/
