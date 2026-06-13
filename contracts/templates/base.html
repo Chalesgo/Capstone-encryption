@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SealGuard{% endblock %} — Barangay Sto. Niño</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: #f0f2f5;
+            color: #1a1a2e;
+            min-height: 100vh;
+        }
+
+        /* ── Navigation ── */
+        .navbar {
+            background: #1a1a2e;
+            padding: 0 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 60px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: white;
+            text-decoration: none;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .navbar-brand img {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+        }
+
+        .navbar-brand .brand-sub {
+            font-size: 11px;
+            color: #8899aa;
+            font-weight: 400;
+            display: block;
+            line-height: 1;
+        }
+
+        .navbar-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .navbar-right .user-info {
+            color: #8899aa;
+            font-size: 13px;
+        }
+
+        .btn-nav {
+            background: transparent;
+            border: 1px solid #3a4a6b;
+            color: #aabbcc;
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+
+        .btn-nav:hover {
+            background: #3a4a6b;
+            color: white;
+        }
+
+        /* ── Page container ── */
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+        }
+
+        .page-header {
+            margin-bottom: 1.5rem;
+        }
+
+        .page-header h1 {
+            font-size: 22px;
+            font-weight: 600;
+            color: #1a1a2e;
+        }
+
+        .page-header p {
+            color: #667788;
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        /* ── Cards ── */
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+            margin-bottom: 1rem;
+        }
+
+        /* ── Buttons ── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 18px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #1a1a2e;
+            color: white;
+        }
+
+        .btn-primary:hover { background: #2a2a4e; }
+
+        .btn-success {
+            background: #0f7b4e;
+            color: white;
+        }
+
+        .btn-success:hover { background: #0d6b42; }
+
+        .btn-danger {
+            background: #dc2626;
+            color: white;
+        }
+
+        .btn-danger:hover { background: #b91c1c; }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid #dde1e8;
+            color: #445566;
+        }
+
+        .btn-outline:hover {
+            background: #f5f7fa;
+            border-color: #aabbcc;
+        }
+
+        .btn-warning {
+            background: #d97706;
+            color: white;
+        }
+
+        .btn-warning:hover { background: #b45309; }
+
+        /* ── Form elements ── */
+        .form-group {
+            margin-bottom: 1.2rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: #445566;
+            margin-bottom: 6px;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid #dde1e8;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #1a1a2e;
+            background: #fafbfc;
+            transition: border-color 0.2s;
+            outline: none;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            border-color: #1a1a2e;
+            background: white;
+        }
+
+        /* ── Badges ── */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .badge-success { background: #dcfce7; color: #166534; }
+        .badge-warning { background: #fef9c3; color: #854d0e; }
+        .badge-danger  { background: #fee2e2; color: #991b1b; }
+        .badge-info    { background: #dbeafe; color: #1e40af; }
+
+        /* ── Alerts ── */
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin-bottom: 1rem;
+        }
+
+        .alert-success { background: #f0fdf4; border-left: 4px solid #22c55e; color: #166534; }
+        .alert-danger  { background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; }
+        .alert-warning { background: #fffbeb; border-left: 4px solid #f59e0b; color: #92400e; }
+
+        /* ── Divider ── */
+        .divider {
+            border: none;
+            border-top: 1px solid #eef0f4;
+            margin: 1.2rem 0;
+        }
+
+        /* ── Footer ── */
+        .page-footer {
+            text-align: center;
+            padding: 2rem;
+            color: #99aabb;
+            font-size: 12px;
+        }
+
+        /* ── Modal overlay ── */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active { display: flex; }
+
+        .modal {
+            background: white;
+            border-radius: 14px;
+            padding: 2rem;
+            width: 90%;
+            max-width: 420px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .modal h3 {
+            font-size: 18px;
+            margin-bottom: 8px;
+            color: #1a1a2e;
+        }
+
+        .modal p {
+            color: #667788;
+            font-size: 14px;
+            margin-bottom: 1.5rem;
+            line-height: 1.6;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        /* ── Progress bar ── */
+        .progress-wrap {
+            background: #eef0f4;
+            border-radius: 999px;
+            height: 8px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #1a1a2e, #3a5a9e);
+            border-radius: 999px;
+            width: 0%;
+            transition: width 0.4s ease;
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 600px) {
+            .navbar { padding: 0 1rem; }
+            .container { padding: 1rem; }
+        }
+    </style>
+</head>
+<body>
+
+<nav class="navbar">
+    <a href="/" class="navbar-brand">
+        {% if seal_url %}
+            <img src="{{ seal_url }}" alt="Seal">
+        {% endif %}
+        <div>
+            SealGuard
+            <span class="brand-sub">Barangay Sto. Niño, Biñan City</span>
+        </div>
+    </a>
+    <div class="navbar-right">
+        {% if user.is_authenticated %}
+            <span class="user-info">{{ user.username }}</span>
+            <form action="/accounts/logout/" method="post" style="margin:0;">
+                {% csrf_token %}
+                <button type="submit" class="btn-nav">Logout</button>
+            </form>
+        {% else %}
+            <a href="/accounts/login/" class="btn-nav">Staff Login</a>
+        {% endif %}
+    </div>
+</nav>
+
+<div class="container">
+    {% block content %}{% endblock %}
+</div>
+
+<footer class="page-footer">
+    <div style="max-width: 900px; margin: 0 auto;">
+
+        <!-- Logo + name -->
+        <div style="display:inline-flex; align-items:center; gap:8px; margin-bottom:10px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                 stroke="#3b5bdb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            <span style="font-size:13px; font-weight:600; color:#445566;">SealGuard</span>
+        </div>
+
+        <p style="font-size:12px; color:#99aabb; margin-bottom:14px; line-height:1.7;">
+            Official Procurement Contract Authentication System<br>
+            Barangay Sto. Niño, Biñan City, Laguna
+        </p>
+
+        <!-- Links -->
+        <div style="display:flex; justify-content:center; flex-wrap:wrap;
+                    gap:6px 18px; margin-bottom:16px;">
+            <a href="/verify/" style="font-size:12px; color:#778899; text-decoration:none;">Verify Document</a>
+            <span style="color:#dde1e8;">|</span>
+            <a href="/contracts/" style="font-size:12px; color:#778899; text-decoration:none;">Contracts</a>
+            <span style="color:#dde1e8;">|</span>
+            <a href="/accounts/login/" style="font-size:12px; color:#778899; text-decoration:none;">Staff Login</a>
+        </div>
+
+        <hr style="border:none; border-top:1px solid #eef0f4; margin-bottom:14px;">
+
+        <p style="font-size:11px; color:#aabbcc; line-height:1.8;">
+            &copy; 2026 Barangay Sto. Niño, Biñan City. All rights reserved.<br>
+            This portal is for official use only. Unauthorized access, reproduction, or tampering<br>
+            with official documents is prohibited and punishable under applicable laws.
+        </p>
+
+        <p style="font-size:10px; color:#c0ccd8; margin-top:10px;">
+            Powered by steganography-based document authentication &bull; SealGuard v1.0
+        </p>
+
+    </div>
+</footer>
+</body>
+</html>

@@ -51,7 +51,7 @@ def upload_contract(request):
             original_filename = os.path.basename(pdf_path)
             final_filename = original_filename.replace('.pdf', '_sealed.pdf')
             final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
-            stamp_seal_on_pdf(pdf_path, final_pdf_path, stamped_seal, qr_path=qr_path)
+            stamp_seal_on_pdf(pdf_path, final_pdf_path, stamped_seal, qr_path=qr_path, encrypted_cf=encrypted)
 
             # ── Step 6: Generate CF from SEALED pdf ──
             sealed_cf = generate_canonical_fingerprint(final_pdf_path)
@@ -74,7 +74,8 @@ def upload_contract(request):
     else:
         form = ContractForm()
 
-    return render(request, 'upload.html', {'form': form})
+    seal_url = settings.MEDIA_URL + 'seals/default_seal.png'
+    return render(request, 'upload.html', {'form': form, 'seal_url': seal_url})
 
 
 @login_required
@@ -99,7 +100,7 @@ def encrypt_contract(request, contract_id):
     original_filename = os.path.basename(pdf_path)
     final_filename = original_filename.replace('.pdf', '_sealed.pdf')
     final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
-    stamp_seal_on_pdf(pdf_path, final_pdf_path, stamped_seal, qr_path=qr_path)
+    stamp_seal_on_pdf(pdf_path, final_pdf_path, stamped_seal, qr_path=qr_path, encrypted_cf=encrypted)
 
     sealed_cf = generate_canonical_fingerprint(final_pdf_path)
     contract.fingerprint = sealed_cf
@@ -123,7 +124,8 @@ def encrypt_contract(request, contract_id):
 @login_required
 def contract_list(request):
     contracts = Contract.objects.all()
-    return render(request, 'list.html', {'contracts': contracts})
+    seal_url = settings.MEDIA_URL + 'seals/default_seal.png'
+    return render(request, 'list.html', {'contracts': contracts, 'seal_url': seal_url})
 
 @login_required
 def delete_contract(request, contract_id):
@@ -196,7 +198,11 @@ def verify_physical(request):
         else:
             result = 'error'
 
-    return render(request, 'verify_physical.html', {'result': result})
+    seal_url = settings.MEDIA_URL + 'seals/default_seal.png'
+    return render(request, 'verify_physical.html', {
+        'result': result,
+        'seal_url': seal_url
+    })
 
 import re
 
@@ -253,7 +259,6 @@ def has_barangay_footer(pdf_path: str):
         return False
     except Exception:
         return False
-
 
 def public_verify(request):
     result = None
@@ -335,30 +340,3 @@ def public_verify(request):
                 debug_log.append("🗑️ Temp file deleted")
 
     return render(request, 'verify.html', {'result': result, 'debug_log': debug_log})
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

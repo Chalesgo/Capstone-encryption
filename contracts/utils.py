@@ -330,3 +330,132 @@ def extract_cf_from_metadata(pdf_path: str):
         return None
     except Exception:
         return None
+    
+
+def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None, encrypted_cf=None):
+    """
+    Creates a new PDF with extended page size to fit the signature strip below content.
+    Stores encrypted CF in PDF metadata for reliable verification.
+    """
+    src = fitz.open(input_pdf)
+    dst = fitz.open()
+
+    strip_height = 130
+    seal_size = 110
+    qr_size = 100
+    padding = 15
+
+    for src_page in src:
+        src_rect = src_page.rect
+        page_width = src_rect.width
+        page_height = src_rect.height
+        new_height = page_height + strip_height
+
+        new_page = dst.new_page(width=page_width, height=new_height)
+
+        new_page.show_pdf_page(
+            fitz.Rect(0, 0, page_width, page_height),
+            src,
+            src_page.number
+        )
+
+        strip_y = page_height
+
+        new_page.draw_rect(
+            fitz.Rect(0, strip_y, page_width, new_height),
+            color=(0.95, 0.95, 0.95),
+            fill=(0.95, 0.95, 0.95)
+        )
+
+        new_page.draw_line(
+            fitz.Point(0, strip_y),
+            fitz.Point(page_width, strip_y),
+            color=(0.5, 0.5, 0.5),
+            width=1
+        )
+
+        seal_x = padding
+        seal_y = strip_y + (strip_height - seal_size) // 2
+        new_page.insert_image(
+            fitz.Rect(seal_x, seal_y, seal_x + seal_size, seal_y + seal_size),
+            filename=seal_path,
+            overlay=True,
+        )
+
+        new_page.insert_text(
+            fitz.Point(seal_x + (seal_size // 2) - 20, seal_y + seal_size + 10),
+            "Official Seal",
+            fontsize=6,
+            color=(0.4, 0.4, 0.4)
+        )
+
+        if qr_path:
+            qr_x = page_width - qr_size - padding
+            qr_y = strip_y + (strip_height - qr_size) // 2
+            new_page.insert_image(
+                fitz.Rect(qr_x, qr_y, qr_x + qr_size, qr_y + qr_size),
+                filename=qr_path,
+                overlay=True,
+            )
+
+            new_page.insert_text(
+                fitz.Point(qr_x + (qr_size // 2) - 25, qr_y + qr_size + 10),
+                "Scan to Verify",
+                fontsize=6,
+                color=(0.4, 0.4, 0.4)
+            )
+
+            center_x = (seal_x + seal_size + qr_x) / 2
+
+            page_num_text = f"Page {src_page.number + 1} of {src.page_count}"
+            new_page.insert_text(
+                fitz.Point(center_x - 30, strip_y + 20),
+                page_num_text,
+                fontsize=6,
+                color=(0.5, 0.5, 0.5)
+            )
+            new_page.insert_text(
+                fitz.Point(center_x - 60, strip_y + 38),
+                "Barangay Sto. Nino, Binan City",
+                fontsize=7,
+                color=(0.3, 0.3, 0.3)
+            )
+            new_page.insert_text(
+                fitz.Point(center_x - 55, strip_y + 52),
+                "Digitally Authenticated Document",
+                fontsize=7,
+                color=(0.3, 0.3, 0.3)
+            )
+            new_page.insert_text(
+                fitz.Point(center_x - 50, strip_y + 66),
+                "Verify at: [your website URL]",
+                fontsize=6,
+                color=(0.4, 0.4, 0.4)
+            )
+
+    # ── Store encrypted CF in PDF metadata ──
+    # This is hidden from normal viewers but readable by our system
+    if encrypted_cf:
+        metadata = dst.metadata
+        metadata['keywords'] = f'SEALGUARD:{encrypted_cf}'
+        dst.set_metadata(metadata)
+
+    dst.save(output_pdf)
+    dst.close()
+    src.close()
+
+def extract_cf_from_metadata(pdf_path: str):
+    """
+    Extracts the encrypted CF from the PDF metadata keywords field.
+    Returns the encrypted CF string or None if not found.
+    """
+    try:
+        doc = fitz.open(pdf_path)
+        keywords = doc.metadata.get('keywords', '')
+        doc.close()
+
+        if keywords.startswith('SEALGUARD:'):
+            return keywords[len('SEALGUARD:'):]
+        return None
+    except Exception:
+        return None

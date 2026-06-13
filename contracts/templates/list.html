@@ -1,42 +1,107 @@
-<h2>Contracts</h2>
+{% extends 'base.html' %}
+{% block title %}Contracts{% endblock %}
 
-<p>Logged in as: {{ user.username }}</p>
+{% block content %}
+<div class="page-header" style="display: flex; align-items: center; justify-content: space-between;">
+    <div>
+        <h1>Contracts</h1>
+        <p>Manage and view all uploaded procurement contracts</p>
+    </div>
+    <a href="/upload/" class="btn btn-primary">+ Upload Contract</a>
+</div>
 
-<a href="/upload/">Upload New Contract</a>
-
-<ul>
+{% if contracts %}
     {% for contract in contracts %}
-        <li>
-            <strong>{{ contract.title }}</strong><br>
-            Uploaded: {{ contract.uploaded_at }}<br>
+    <div class="card" style="display: flex; align-items: flex-start; gap: 1.2rem;">
 
-            <a href="{{ contract.file.url }}">View PDF</a><br>
+        {% if contract.seal_image %}
+            <img src="{{ contract.seal_image.url }}"
+                 style="width: 60px; height: 60px; border-radius: 8px; object-fit: cover; flex-shrink: 0;">
+        {% else %}
+            <div style="width: 60px; height: 60px; border-radius: 8px; background: #eef0f4;
+                        display: flex; align-items: center; justify-content: center;
+                        font-size: 24px; flex-shrink: 0;">📄</div>
+        {% endif %}
 
-            {% if contract.encrypted_cf %}
-                <span>🔒 Encrypted</span><br>
-                Fingerprint: {{ contract.fingerprint }}<br>
-            {% else %}
-                <form action="/encrypt/{{ contract.id }}/" method="post" style="display:inline;">
-                    {% csrf_token %}
-                    <button type="submit">Encrypt Contract</button>
-                </form>
+        <div style="flex: 1; min-width: 0;">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <strong style="font-size: 16px;">{{ contract.title }}</strong>
+                {% if contract.encrypted_cf %}
+                    <span class="badge badge-success">🔒 Encrypted</span>
+                {% else %}
+                    <span class="badge badge-warning">⚠ Not Encrypted</span>
+                {% endif %}
+            </div>
+
+            <div style="color: #667788; font-size: 12px; margin-top: 4px;">
+                Uploaded {{ contract.uploaded_at|date:"F j, Y, g:i a" }}
+            </div>
+
+            {% if contract.fingerprint %}
+            <div style="margin-top: 8px; font-family: monospace; font-size: 11px;
+                        color: #889aab; background: #f5f7fa; padding: 6px 10px;
+                        border-radius: 6px; word-break: break-all;">
+                CF: {{ contract.fingerprint|slice:":48" }}...
+            </div>
             {% endif %}
 
-            {% if contract.seal_image %}
-                <br>
-                <img src="{{ contract.seal_image.url }}" width="100" style="opacity: 0.6;">
-            {% endif %}
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;">
+                <a href="{{ contract.file.url }}" class="btn btn-outline" target="_blank">
+                    View PDF
+                </a>
 
-            {% if user.is_superuser %}
-                <br>
-                <a href="/delete/{{ contract.id }}/" style="color: red;">🗑 Delete</a>
-            {% endif %}
-        </li>
-        <hr>
+                {% if not contract.encrypted_cf %}
+                    <form action="/encrypt/{{ contract.id }}/" method="post" style="margin:0;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-warning">
+                            Encrypt
+                        </button>
+                    </form>
+                {% endif %}
+
+                {% if user.is_superuser %}
+                    <button class="btn btn-danger"
+                            onclick="openDeleteModal('{{ contract.id }}', '{{ contract.title|escapejs }}')">
+                        🗑 Delete
+                    </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
     {% endfor %}
-</ul>
 
-<form action="/accounts/logout/" method="post">
-    {% csrf_token %}
-    <button type="submit">Logout</button>
-</form>
+{% else %}
+    <div class="card" style="text-align: center; padding: 3rem;">
+        <div style="font-size: 48px; margin-bottom: 1rem;">📂</div>
+        <p style="color: #667788;">No contracts uploaded yet.</p>
+        <a href="/upload/" class="btn btn-primary" style="margin-top: 1rem;">Upload your first contract</a>
+    </div>
+{% endif %}
+
+<!-- Delete Modal -->
+<div class="modal-overlay" id="delete-modal">
+    <div class="modal">
+        <h3>🗑 Delete Contract</h3>
+        <p>Are you sure you want to delete <strong id="delete-contract-name"></strong>?
+           This action cannot be undone and will permanently remove the file.</p>
+        <div class="modal-actions">
+            <button class="btn btn-outline" onclick="closeDeleteModal()">Cancel</button>
+            <form id="delete-form" method="POST" style="margin:0;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">Yes, Delete</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function openDeleteModal(contractId, contractName) {
+    document.getElementById('delete-contract-name').textContent = contractName;
+    document.getElementById('delete-form').action = '/delete/' + contractId + '/';
+    document.getElementById('delete-modal').classList.add('active');
+}
+function closeDeleteModal() {
+    document.getElementById('delete-modal').classList.remove('active');
+}
+</script>
+{% endblock %}

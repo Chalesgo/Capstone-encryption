@@ -1,9 +1,35 @@
-<h2>Register</h2>
+{% extends 'base.html' %}
+{% block title %}Register{% endblock %}
 
-<form method="post">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit">Register</button>
-</form>
+{% block content %}
+<div style="max-width: 420px; margin: 3rem auto;">
+    <div style="text-align: center; margin-bottom: 2rem;">
+        <h1 style="font-size: 24px; font-weight: 700; color: #1a1a2e;">Create Account</h1>
+        <p style="color: #667788; font-size: 14px; margin-top: 6px;">
+            Register as barangay staff
+        </p>
+    </div>
 
-<a href="/accounts/login/">Login</a>
+    <div class="card">
+        <form method="post">
+            {% csrf_token %}
+            {% for field in form %}
+                <div class="form-group">
+                    <label>{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.errors %}
+                        <span style="color: #dc2626; font-size: 12px;">{{ field.errors|join:", " }}</span>
+                    {% endif %}
+                </div>
+            {% endfor %}
+            <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 11px;">
+                Register
+            </button>
+        </form>
+    </div>
+
+    <p style="text-align: center; margin-top: 1rem; font-size: 13px; color: #667788;">
+        Already have an account? <a href="/accounts/login/" style="color: #1a1a2e; font-weight: 500;">Login here</a>
+    </p>
+</div>
+{% endblock %}
