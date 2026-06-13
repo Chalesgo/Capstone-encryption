@@ -1,33 +1,134 @@
-# Capstone-encryption/SEALGUARD
-PABASA PARA SA SETUP
+# SEALGUARD
+Capstone Project – Contract Security and Management System
 
-## Setup
-1. git clone ...
-2. SA CMD pip install django
-3. TERMINAL SA VSCODE TYPE THIS python manage.py migrate
-4. TO RUN python manage.py runserver
+## Overview
+
+SEALGUARD is a Django-based web application designed for secure contract management. The system allows users to upload and view contracts while providing administrative tools for user management.
+
+---
+
+## Prerequisites
+
+Before running the project, make sure you have:
+
+- Python installed
+- Git installed
+- Visual Studio Code (recommended)
+
+---
+
+## Installation
+
+### 1. Clone the Repository
+
+```bash
+git clone <repository-url>
+cd SEALGUARD
+```
+
+### 2. Install Dependencies
+
+```bash
+pip install django
+```
+
+### 3. Apply Database Migrations
+
+```bash
+python manage.py migrate
+```
+
+### 4. Run the Development Server
+
+```bash
+python manage.py runserver
+```
+
+The application will be available at:
+
+```
+http://127.0.0.1:8000
+```
+
+---
 
 ## Features
+
 - Upload contracts
 - View contracts
+- User management through Django Admin
 
+---
 
-CTRL BREAK IS CTRL + C
+## Admin Access
 
-ISSUE WITH LSB PIXELS KEEP GETTING CHANGED DUE TO PDF RENDERING
+Navigate to:
 
-admin will be here to check users
+```
+http://127.0.0.1:8000/admin/
+```
 
-griff
-griffin0710*
+> Admin credentials should be provided separately and should not be committed to GitHub.
 
-http://127.0.0.1:8000/admin/login/?next=/admin/
+---
 
-How to deploy the system so you can see it on your phone (FOR TESTING PURPOSES)
-1. download ngrok
-2. run django server
-   -python manage.py runserver
-4. create new terminal and then run ngrok, you should see a url
-   -ngrok http 8000
-6. add the ngrok url into the allowed host in settings.py
-   ALLOWED_HOSTS = ['localhost', '127.0.0.1', '192.168.0.103', 'abc123.ngrok.io']
+## Testing on Mobile Devices
+
+To access the system from a phone on a different network, you can use Ngrok.
+
+### Step 1: Download Ngrok
+
+Install Ngrok from:
+
+https://ngrok.com/
+
+### Step 2: Start the Django Server
+
+```bash
+python manage.py runserver
+```
+
+### Step 3: Open a New Terminal and Run Ngrok
+
+```bash
+ngrok http 8000
+```
+
+Ngrok will generate a public URL similar to:
+
+```
+https://abc123.ngrok.io
+```
+
+### Step 4: Update Allowed Hosts
+
+In `settings.py`, add the generated Ngrok URL to `ALLOWED_HOSTS`:
+
+```python
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '192.168.0.103',
+    'abc123.ngrok.io'
+]
+```
+
+Restart the Django server after making changes.
+
+---
+
+## Notes
+
+### Stopping the Server
+
+Press:
+
+```text
+Ctrl + C
+```
+
+to stop the Django development server.
+
+### Known Issue
+
+- LSB pixel values may change after PDF rendering, which can affect steganography-based verification methods.
