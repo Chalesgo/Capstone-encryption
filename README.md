@@ -68,7 +68,7 @@ Navigate to:
 http://127.0.0.1:8000/admin/
 ```
 
-> Admin credentials should be provided separately and should not be committed to GitHub.
+> username: Griff Password: Griffin0710*
 
 ---
 
