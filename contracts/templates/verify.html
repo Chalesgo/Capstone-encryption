@@ -1,0 +1,618 @@
+{% extends 'base.html' %}
+{% block title %}Verify Document{% endblock %}
+
+{% block content %}
+<style>
+    .upload-area {
+        border: 2px dashed #dde1e8;
+        border-radius: 12px;
+        padding: 2rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        background: #fafbfc;
+    }
+    .upload-area:hover {
+        border-color: #1a1a2e;
+        background: #f0f2f8;
+    }
+    .upload-area input[type="file"] {
+        display: none;
+    }
+    .upload-icon {
+        color: #aabbcc;
+        margin-bottom: 10px;
+    }
+    .upload-label {
+        font-size: 15px;
+        font-weight: 500;
+        color: #1a1a2e;
+    }
+    .upload-sub {
+        font-size: 13px;
+        color: #889aab;
+        margin-top: 4px;
+    }
+    .file-selected {
+        display: none;
+        align-items: center;
+        gap: 10px;
+        background: #f0f4ff;
+        border-radius: 8px;
+        padding: 10px 14px;
+        margin-top: 12px;
+        font-size: 13px;
+        color: #334;
+    }
+    .file-selected.show { display: flex; }
+
+    /* ── Skeleton wave loader ── */
+    .skeleton-wrap {
+        display: none;
+        padding: 1.5rem;
+    }
+    .skeleton-wrap.show { display: block; }
+
+    .skeleton-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+
+    .skeleton-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: linear-gradient(90deg, #e8eaed 25%, #f5f7fa 50%, #e8eaed 75%);
+        background-size: 200% 100%;
+        animation: wave 1.4s infinite;
+        flex-shrink: 0;
+    }
+
+    .skeleton-lines { flex: 1; }
+
+    .skeleton-line {
+        height: 12px;
+        border-radius: 6px;
+        background: linear-gradient(90deg, #e8eaed 25%, #f5f7fa 50%, #e8eaed 75%);
+        background-size: 200% 100%;
+        animation: wave 1.4s infinite;
+        margin-bottom: 8px;
+    }
+
+    .skeleton-line.short { width: 45%; }
+    .skeleton-line.medium { width: 70%; }
+    .skeleton-line.long { width: 90%; }
+    .skeleton-line.full { width: 100%; }
+
+    .skeleton-line:nth-child(2) { animation-delay: 0.1s; }
+    .skeleton-line:nth-child(3) { animation-delay: 0.2s; }
+
+    .skeleton-icon:nth-child(2) { animation-delay: 0.15s; }
+
+    @keyframes wave {
+        0%   { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+    }
+
+    .scan-status {
+        text-align: center;
+        padding: 1rem 0 0.5rem;
+    }
+
+    .scan-status-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+        background: #eef2ff;
+        margin-bottom: 10px;
+        animation: spin 1.5s linear infinite;
+    }
+
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to   { transform: rotate(360deg); }
+    }
+
+    .scan-status p {
+        font-size: 13px;
+        color: #667788;
+        font-family: monospace;
+        min-height: 18px;
+    }
+
+    .scan-status strong {
+        display: block;
+        font-size: 15px;
+        color: #1a1a2e;
+        margin-bottom: 4px;
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    /* ── Result cards ── */
+    .result-card {
+        border-radius: 14px;
+        padding: 1.5rem;
+        display: flex;
+        gap: 1rem;
+        align-items: flex-start;
+        margin-bottom: 1rem;
+    }
+    .result-card.authentic {
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+    }
+    .result-card.tampered {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+    }
+    .result-card.error {
+        background: #fffbeb;
+        border: 1px solid #fde68a;
+    }
+    .result-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    .result-icon.authentic { background: #22c55e; }
+    .result-icon.tampered  { background: #ef4444; }
+    .result-icon.error     { background: #f59e0b; }
+    .result-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #1a1a2e;
+        margin-bottom: 4px;
+    }
+    .result-desc {
+        font-size: 13px;
+        color: #667788;
+        line-height: 1.5;
+    }
+
+    .log-box {
+        background: #0f172a;
+        color: #94a3b8;
+        font-family: monospace;
+        font-size: 12px;
+        padding: 16px;
+        border-radius: 10px;
+        margin-top: 8px;
+        line-height: 1.9;
+        white-space: pre-wrap;
+        word-break: break-all;
+        max-height: 360px;
+        overflow-y: auto;
+    }
+
+    details > summary {
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        color: #667788;
+        padding: 8px 0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        list-style: none;
+        user-select: none;
+    }
+    details > summary::-webkit-details-marker { display: none; }
+    details > summary::before {
+        content: '';
+        display: inline-block;
+        width: 0;
+        height: 0;
+        border-top: 5px solid transparent;
+        border-bottom: 5px solid transparent;
+        border-left: 7px solid #667788;
+        transition: transform 0.2s;
+    }
+    details[open] > summary::before { transform: rotate(90deg); }
+
+    .scan-option-btn {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 16px;
+        border-radius: 10px;
+        border: 1px solid #eef0f4;
+        background: white;
+        text-decoration: none;
+        color: #1a1a2e;
+        transition: all 0.2s;
+        margin-top: 10px;
+    }
+    .scan-option-btn:hover {
+        border-color: #1a1a2e;
+        background: #f8fafc;
+    }
+    .scan-option-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        background: #eef2ff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+</style>
+
+<div style="max-width: 600px; margin: 0 auto;">
+
+    <!-- Header -->
+    <div style="text-align: center; margin-bottom: 2rem;">
+        <div style="display:inline-flex; align-items:center; justify-content:center;
+                    width:64px; height:64px; border-radius:16px;
+                    background:#eef2ff; margin-bottom:12px;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none"
+                 stroke="#3b5bdb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+        </div>
+        <h1 style="font-size:26px; font-weight:700; color:#1a1a2e;">SealGuard</h1>
+        <p style="color:#667788; font-size:15px; margin-top:6px;">
+            Verify the authenticity of a Barangay Sto. Niño procurement contract
+        </p>
+    </div>
+
+    <!-- Upload Card -->
+    <div class="card" id="upload-card">
+        <form method="POST" enctype="multipart/form-data" id="verify-form">
+            {% csrf_token %}
+
+            <div class="upload-area" id="upload-area" onclick="document.getElementById('pdf_file').click()">
+                <div class="upload-icon">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14,2 14,8 20,8"/>
+                        <line x1="12" y1="18" x2="12" y2="12"/>
+                        <polyline points="9,15 12,12 15,15"/>
+                    </svg>
+                </div>
+                <div class="upload-label">Click to upload PDF</div>
+                <div class="upload-sub">or drag and drop your contract here</div>
+                <input type="file" name="pdf_file" id="pdf_file" accept=".pdf" required>
+            </div>
+
+            <div class="file-selected" id="file-selected">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                     stroke="#3b5bdb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14,2 14,8 20,8"/>
+                </svg>
+                <span id="file-name">No file selected</span>
+            </div>
+
+            <button type="submit" id="verify-btn" class="btn btn-primary"
+                    style="width:100%; justify-content:center; padding:12px; margin-top:14px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                Verify Document
+            </button>
+        </form>
+    </div>
+
+    <!-- Loading Screen -->
+    <div id="loading-screen" style="display:none;">
+        <div class="card" style="padding: 0; overflow: hidden;">
+
+            <div class="scan-status" style="padding: 1.5rem 1.5rem 0;">
+                <div class="scan-status-icon">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none"
+                         stroke="#3b5bdb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                </div>
+                <strong>Analyzing Document</strong>
+                <p id="loading-status">Initializing scan...</p>
+            </div>
+
+            <div style="padding: 0 1.5rem 6px;">
+                <div class="progress-wrap">
+                    <div class="progress-bar" id="progress-bar"></div>
+                </div>
+            </div>
+
+            <!-- Skeleton wave rows -->
+            <div class="skeleton-wrap show">
+                <div class="skeleton-row">
+                    <div class="skeleton-icon"></div>
+                    <div class="skeleton-lines">
+                        <div class="skeleton-line medium"></div>
+                        <div class="skeleton-line short"></div>
+                    </div>
+                </div>
+                <div class="skeleton-row">
+                    <div class="skeleton-icon" style="animation-delay:0.2s"></div>
+                    <div class="skeleton-lines">
+                        <div class="skeleton-line long"></div>
+                        <div class="skeleton-line medium"></div>
+                    </div>
+                </div>
+                <div class="skeleton-row">
+                    <div class="skeleton-icon" style="animation-delay:0.4s"></div>
+                    <div class="skeleton-lines">
+                        <div class="skeleton-line full"></div>
+                        <div class="skeleton-line short"></div>
+                    </div>
+                </div>
+                <div class="skeleton-row">
+                    <div class="skeleton-icon" style="animation-delay:0.6s"></div>
+                    <div class="skeleton-lines">
+                        <div class="skeleton-line medium"></div>
+                        <div class="skeleton-line long"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results -->
+    <div id="results-section" style="display:none;">
+
+        {% if result == "authentic" %}
+        <div class="result-card authentic">
+            <div class="result-icon authentic">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+                     stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20,6 9,17 4,12"/>
+                </svg>
+            </div>
+            <div>
+                <div class="result-title">Authentic Document</div>
+                <div class="result-desc">
+                    This document has not been tampered with and matches the official record in the system.
+                    {% if filename_hint == 'tampered' %}
+                    <br><span style="color:#d97706; font-size:12px; margin-top:4px; display:block;">
+                        Note: filename suggests tampering but cryptographic verification passed.
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {% elif result == "tampered" %}
+        <div class="result-card tampered">
+            <div class="result-icon tampered">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+                     stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </div>
+            <div>
+                <div class="result-title">
+                    {% if filename_hint == 'tampered' %}Document Tampered
+                    {% elif filename_hint == 'unknown' %}Unknown Document
+                    {% else %}Document Not Authentic{% endif %}
+                </div>
+                <div class="result-desc">
+                    {% if filename_hint == 'tampered' %}
+                        This document has been modified from its original authenticated form.
+                    {% elif filename_hint == 'unknown' %}
+                        This document could not be matched to any official record in the system.
+                    {% else %}
+                        This document does not match any official record or has been modified after authentication.
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {% elif result == "error" %}
+        <div class="result-card error">
+            <div class="result-icon error">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+                     stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/>
+                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+            </div>
+            <div>
+                <div class="result-title">
+                    {% if filename_hint == 'unknown' %}Unknown Document
+                    {% else %}Could Not Verify{% endif %}
+                </div>
+                <div class="result-desc">
+                    {% if filename_hint == 'unknown' %}
+                        This document has not been issued or processed by this system.
+                    {% else %}
+                        This document could not be verified — it may not have been issued or processed by this system.
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if debug_log %}
+        <details>
+            <summary>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"/>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                Verification Log ({{ debug_log|length }} steps)
+            </summary>
+            <div class="log-box">{% for line in debug_log %}{{ line }}
+{% endfor %}</div>
+        </details>
+        {% endif %}
+
+        <button onclick="location.reload()" class="btn btn-outline"
+                style="width:100%; justify-content:center; margin-top:12px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="1,4 1,10 7,10"/>
+                <path d="M3.51 15a9 9 0 1 0 .49-4.54"/>
+            </svg>
+            Verify Another Document
+        </button>
+    </div>
+
+    <!-- Physical scan option -->
+    <a href="/verify/physical/" class="scan-option-btn">
+        <div class="scan-option-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                 stroke="#3b5bdb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="3" width="20" height="14" rx="2"/>
+                <line x1="8" y1="21" x2="16" y2="21"/>
+                <line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+        </div>
+        <div>
+            <div style="font-size:14px; font-weight:600; color:#1a1a2e;">Have a physical copy?</div>
+            <div style="font-size:12px; color:#889aab; margin-top:2px;">
+                Scan the QR code on the contract instead
+            </div>
+        </div>
+        <svg style="margin-left:auto; color:#aabbcc;" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9,18 15,12 9,6"/>
+        </svg>
+    </a>
+
+</div>
+
+<script>
+// @ts-nocheck
+const fileInput = document.getElementById('pdf_file');
+const fileSelected = document.getElementById('file-selected');
+const fileName = document.getElementById('file-name');
+const uploadArea = document.getElementById('upload-area');
+
+fileInput.addEventListener('change', function() {
+    if (this.files[0]) {
+        fileName.textContent = this.files[0].name;
+        fileSelected.classList.add('show');
+        uploadArea.style.borderColor = '#3b5bdb';
+        uploadArea.style.background = '#f0f4ff';
+    }
+});
+
+uploadArea.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    this.style.borderColor = '#3b5bdb';
+    this.style.background = '#f0f4ff';
+});
+
+uploadArea.addEventListener('dragleave', function() {
+    this.style.borderColor = '#dde1e8';
+    this.style.background = '#fafbfc';
+});
+
+uploadArea.addEventListener('drop', function(e) {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file && file.type === 'application/pdf') {
+        fileInput.files = e.dataTransfer.files;
+        fileName.textContent = file.name;
+        fileSelected.classList.add('show');
+        this.style.borderColor = '#3b5bdb';
+        this.style.background = '#f0f4ff';
+    }
+});
+
+// Pull Django template values into plain JS variables
+const hasResult = "{{ result|default:'' }}" !== '';
+
+document.getElementById('verify-form').addEventListener('submit', function(e) {
+    if (!hasResult) {
+        e.preventDefault();
+        const form = this;
+        const file = fileInput.files[0];
+        if (!file) return;
+
+        const fileSizeMB = file.size / (1024 * 1024);
+        const estimatedPages = Math.max(2, Math.min(Math.ceil(fileSizeMB * 3), 8));
+
+        document.getElementById('upload-card').style.display = 'none';
+        document.getElementById('loading-screen').style.display = 'block';
+
+        const pageMessages = [
+            "Scanning page {n} for structural inconsistencies...",
+            "Scanning page {n} — analyzing text blocks and font metadata...",
+            "Scanning page {n} — checking vector elements and embedded objects...",
+            "Scanning page {n} — detecting differences in document content...",
+            "Scanning page {n} — verifying image integrity and pixel patterns...",
+        ];
+
+        const generalMessages = [
+            "Enhancing seal image to check LSB steganography...",
+            "Extracting hidden bits from least significant pixel channels...",
+            "Decrypting canonical fingerprint using AES-256-CBC...",
+            "Unwrapping AES key using RSA private key...",
+            "Verifying HMAC integrity of canonical fingerprint...",
+            "Recomputing SHA-256 hash of document contents...",
+            "Comparing extracted fingerprint against database records...",
+            "Cross-referencing document metadata with stored signatures...",
+            "Finalizing authenticity determination...",
+        ];
+
+        let timeline = [];
+        let elapsed = 0;
+        const page1Duration = 12 - ((estimatedPages - 1) * 2);
+        const page1Interval = (page1Duration / 4);
+
+        for (let i = 0; i < 4; i++) {
+            timeline.push({
+                time: elapsed + (i * page1Interval * 1000),
+                msg: pageMessages[i].replace('{n}', 1)
+            });
+        }
+        elapsed += page1Duration * 1000;
+
+        for (let p = 2; p <= estimatedPages; p++) {
+            timeline.push({
+                time: elapsed,
+                msg: pageMessages[Math.floor(Math.random() * pageMessages.length)].replace('{n}', p)
+            });
+            elapsed += 2000;
+        }
+
+        const totalTime = 12000 + ((estimatedPages - 1) * 2000);
+        const remainingTime = totalTime - elapsed;
+        const generalInterval = remainingTime / generalMessages.length;
+
+        for (let i = 0; i < generalMessages.length; i++) {
+            timeline.push({ time: elapsed + (i * generalInterval), msg: generalMessages[i] });
+        }
+
+        timeline.sort((a, b) => a.time - b.time);
+
+        timeline.forEach(function(step) {
+            setTimeout(function() {
+                document.getElementById('loading-status').textContent = step.msg;
+                const pct = Math.min(((step.time / totalTime) * 100), 95);
+                document.getElementById('progress-bar').style.width = pct + '%';
+            }, step.time);
+        });
+
+        setTimeout(function() {
+            document.getElementById('loading-status').textContent = 'Submitting for final verification...';
+            document.getElementById('progress-bar').style.width = '98%';
+            setTimeout(function() { form.submit(); }, 500);
+        }, totalTime);
+    }
+});
+
+if (hasResult) {
+    document.getElementById('upload-card').style.display = 'none';
+    document.getElementById('results-section').style.display = 'block';
+}
+</script>
+{% endblock %}
