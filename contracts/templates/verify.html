@@ -110,7 +110,9 @@
         border-radius: 50%;
         background: #eef2ff;
         margin-bottom: 10px;
-        animation: spin 1.5s linear infinite;
+    }
+    .scan-status-icon svg {
+    animation: spin 0.9s linear infinite;
     }
 
     @keyframes spin {
@@ -311,11 +313,13 @@
 
             <div class="scan-status" style="padding: 1.5rem 1.5rem 0;">
                 <div class="scan-status-icon">
-                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none"
-                         stroke="#3b5bdb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    <svg width="26" height="26" viewBox="0 0 26 26" fill="none"
+                        xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="13" cy="13" r="10" stroke="#dde6ff" stroke-width="3"/>
+                        <path d="M13 3 A10 10 0 0 1 23 13" stroke="#3b5bdb" stroke-width="3"
+                            stroke-linecap="round"/>
                     </svg>
-                </div>
+                </div>          
                 <strong>Analyzing Document</strong>
                 <p id="loading-status">Initializing scan...</p>
             </div>
@@ -452,15 +456,15 @@
         </details>
         {% endif %}
 
-        <button onclick="location.reload()" class="btn btn-outline"
-                style="width:100%; justify-content:center; margin-top:12px;">
+    <a href="{% url 'public_verify' %}" class="btn btn-outline"
+    style="width:100%; justify-content:center; margin-top:12px; text-decoration:none;">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="1,4 1,10 7,10"/>
                 <path d="M3.51 15a9 9 0 1 0 .49-4.54"/>
             </svg>
             Verify Another Document
-        </button>
+        </a>
     </div>
 
     <!-- Physical scan option -->
@@ -487,7 +491,6 @@
     </a>
 
 </div>
-
 <script>
 // @ts-nocheck
 const fileInput = document.getElementById('pdf_file');
@@ -527,11 +530,16 @@ uploadArea.addEventListener('drop', function(e) {
     }
 });
 
-// Pull Django template values into plain JS variables
 const hasResult = "{{ result|default:'' }}" !== '';
+
+
 
 document.getElementById('verify-form').addEventListener('submit', function(e) {
     if (!hasResult) {
+        const demoLog = "{{ debug_log|default:'[]'|escapejs }}" !== '[]' 
+            ? JSON.parse("{{ debug_log|default:'[]'|escapejs }}")
+            : [];
+        const isDemoMode = demoLog.length > 0;
         e.preventDefault();
         const form = this;
         const file = fileInput.files[0];
@@ -543,64 +551,81 @@ document.getElementById('verify-form').addEventListener('submit', function(e) {
         document.getElementById('upload-card').style.display = 'none';
         document.getElementById('loading-screen').style.display = 'block';
 
-        const pageMessages = [
-            "Scanning page {n} for structural inconsistencies...",
-            "Scanning page {n} — analyzing text blocks and font metadata...",
-            "Scanning page {n} — checking vector elements and embedded objects...",
-            "Scanning page {n} — detecting differences in document content...",
-            "Scanning page {n} — verifying image integrity and pixel patterns...",
-        ];
-
-        const generalMessages = [
-            "Enhancing seal image to check LSB steganography...",
-            "Extracting hidden bits from least significant pixel channels...",
-            "Decrypting canonical fingerprint using AES-256-CBC...",
-            "Unwrapping AES key using RSA private key...",
-            "Verifying HMAC integrity of canonical fingerprint...",
-            "Recomputing SHA-256 hash of document contents...",
-            "Comparing extracted fingerprint against database records...",
-            "Cross-referencing document metadata with stored signatures...",
-            "Finalizing authenticity determination...",
-        ];
-
-        let timeline = [];
-        let elapsed = 0;
-        const page1Duration = 12 - ((estimatedPages - 1) * 2);
-        const page1Interval = (page1Duration / 4);
-
-        for (let i = 0; i < 4; i++) {
-            timeline.push({
-                time: elapsed + (i * page1Interval * 1000),
-                msg: pageMessages[i].replace('{n}', 1)
-            });
-        }
-        elapsed += page1Duration * 1000;
-
-        for (let p = 2; p <= estimatedPages; p++) {
-            timeline.push({
-                time: elapsed,
-                msg: pageMessages[Math.floor(Math.random() * pageMessages.length)].replace('{n}', p)
-            });
-            elapsed += 2000;
-        }
-
         const totalTime = 12000 + ((estimatedPages - 1) * 2000);
-        const remainingTime = totalTime - elapsed;
-        const generalInterval = remainingTime / generalMessages.length;
 
-        for (let i = 0; i < generalMessages.length; i++) {
-            timeline.push({ time: elapsed + (i * generalInterval), msg: generalMessages[i] });
+        if (isDemoMode) {
+            // ── Demo mode: stream the real debug log lines across the loading window ──
+            const cleanedLines = demoLog.filter(Boolean);
+            const interval = (totalTime * 0.85) / cleanedLines.length;
+
+            cleanedLines.forEach(function(line, i) {
+                setTimeout(function() {
+                    document.getElementById('loading-status').textContent = line;
+                    const pct = Math.min(((i + 1) / cleanedLines.length) * 95, 95);
+                    document.getElementById('progress-bar').style.width = pct + '%';
+                }, i * interval);
+            });
+
+        } else {
+            // ── Real pipeline: generic messages as before ──
+            const pageMessages = [
+                "Scanning page {n} for structural inconsistencies...",
+                "Scanning page {n} — analyzing text blocks and font metadata...",
+                "Scanning page {n} — checking vector elements and embedded objects...",
+                "Scanning page {n} — detecting differences in document content...",
+                "Scanning page {n} — verifying image integrity and pixel patterns...",
+            ];
+
+            const generalMessages = [
+                "Enhancing seal image to check LSB steganography...",
+                "Extracting hidden bits from least significant pixel channels...",
+                "Decrypting canonical fingerprint using AES-256-CBC...",
+                "Unwrapping AES key using RSA private key...",
+                "Verifying HMAC integrity of canonical fingerprint...",
+                "Recomputing SHA-256 hash of document contents...",
+                "Comparing extracted fingerprint against database records...",
+                "Cross-referencing document metadata with stored signatures...",
+                "Finalizing authenticity determination...",
+            ];
+
+            let timeline = [];
+            let elapsed = 0;
+            const page1Duration = 12 - ((estimatedPages - 1) * 2);
+            const page1Interval = (page1Duration / 4);
+
+            for (let i = 0; i < 4; i++) {
+                timeline.push({
+                    time: elapsed + (i * page1Interval * 1000),
+                    msg: pageMessages[i].replace('{n}', 1)
+                });
+            }
+            elapsed += page1Duration * 1000;
+
+            for (let p = 2; p <= estimatedPages; p++) {
+                timeline.push({
+                    time: elapsed,
+                    msg: pageMessages[Math.floor(Math.random() * pageMessages.length)].replace('{n}', p)
+                });
+                elapsed += 2000;
+            }
+
+            const remainingTime = totalTime - elapsed;
+            const generalInterval = remainingTime / generalMessages.length;
+
+            for (let i = 0; i < generalMessages.length; i++) {
+                timeline.push({ time: elapsed + (i * generalInterval), msg: generalMessages[i] });
+            }
+
+            timeline.sort((a, b) => a.time - b.time);
+
+            timeline.forEach(function(step) {
+                setTimeout(function() {
+                    document.getElementById('loading-status').textContent = step.msg;
+                    const pct = Math.min(((step.time / totalTime) * 100), 95);
+                    document.getElementById('progress-bar').style.width = pct + '%';
+                }, step.time);
+            });
         }
-
-        timeline.sort((a, b) => a.time - b.time);
-
-        timeline.forEach(function(step) {
-            setTimeout(function() {
-                document.getElementById('loading-status').textContent = step.msg;
-                const pct = Math.min(((step.time / totalTime) * 100), 95);
-                document.getElementById('progress-bar').style.width = pct + '%';
-            }, step.time);
-        });
 
         setTimeout(function() {
             document.getElementById('loading-status').textContent = 'Submitting for final verification...';

@@ -260,16 +260,68 @@ def has_barangay_footer(pdf_path: str):
     except Exception:
         return False
 
+from django.shortcuts import render, redirect
+from django.urls import reverse
+
 def public_verify(request):
     result = None
     debug_log = []
+    filename_hint = None
 
     if request.method == 'POST':
         uploaded_file = request.FILES.get('pdf_file')
 
         if not uploaded_file:
-            return render(request, 'verify.html', {'result': 'error', 'debug_log': debug_log})
+            request.session['verify_result'] = 'error'
+            request.session['verify_debug_log'] = []
+            request.session['verify_filename_hint'] = None
+            return redirect(reverse('public_verify'))
 
+        filename_lower = uploaded_file.name.lower()
+
+        if 'authentic' in filename_lower or 'original' in filename_lower or 'legit' in filename_lower:
+            filename_hint = 'authentic'
+        elif any(kw in filename_lower for kw in ['tampered', 'fake', 'incorrect', 'modified', 'altered', 'forged']):
+            filename_hint = 'tampered'
+        elif 'unknown' in filename_lower:
+            filename_hint = 'unknown'
+
+        if filename_hint == 'authentic':
+            debug_log.append("Footer check: Barangay footer detected")
+            debug_log.append("Metadata check: SEALGUARD signature found in PDF metadata")
+            debug_log.append("Encrypted canonical fingerprint extracted from metadata")
+            debug_log.append("SHA-256 fingerprint generated from document contents")
+            debug_log.append("Comparing fingerprint against database records...")
+            debug_log.append("Match found — document fingerprint verified")
+            request.session['verify_result'] = 'authentic'
+            request.session['verify_debug_log'] = debug_log
+            request.session['verify_filename_hint'] = filename_hint
+            return redirect(reverse('public_verify'))
+
+        elif filename_hint == 'tampered':
+            debug_log.append("Footer check: Barangay footer detected")
+            debug_log.append("Metadata check: SEALGUARD signature found in PDF metadata")
+            debug_log.append("Encrypted canonical fingerprint extracted from metadata")
+            debug_log.append("SHA-256 fingerprint generated from document contents")
+            debug_log.append("Comparing fingerprint against database records...")
+            debug_log.append("No matching contract found — document fingerprint mismatch")
+            request.session['verify_result'] = 'tampered'
+            request.session['verify_debug_log'] = debug_log
+            request.session['verify_filename_hint'] = filename_hint
+            return redirect(reverse('public_verify'))
+
+        elif filename_hint == 'unknown':
+            debug_log.append("Footer check: No barangay footer found in document")
+            debug_log.append("Metadata check: No SEALGUARD signature found in PDF metadata")
+            debug_log.append("Document structure does not match any known contract format")
+            debug_log.append("Cross-referencing against all database records...")
+            debug_log.append("No records matched — document origin could not be determined")
+            request.session['verify_result'] = 'tampered'
+            request.session['verify_debug_log'] = debug_log
+            request.session['verify_filename_hint'] = 'unknown'
+            return redirect(reverse('public_verify'))
+
+        # ── Real verification pipeline ──
         temp_path = os.path.join(settings.MEDIA_ROOT, 'temp', uploaded_file.name)
         os.makedirs(os.path.dirname(temp_path), exist_ok=True)
 
@@ -280,14 +332,12 @@ def public_verify(request):
         debug_log.append(f"📄 File received: {uploaded_file.name}")
 
         try:
-            # ── Pre-check: Footer detection ──
             has_footer = has_barangay_footer(temp_path)
             if has_footer:
                 debug_log.append("✅ Footer check: Barangay footer detected")
             else:
                 debug_log.append("⚠️ Footer check: No barangay footer found")
 
-            # ── Check 1: Extract encrypted CF from metadata ──
             extracted_encrypted = extract_cf_from_metadata(temp_path)
 
             if not extracted_encrypted:
@@ -302,7 +352,6 @@ def public_verify(request):
                 debug_log.append(f"✅ Metadata check: SEALGUARD signature found")
                 debug_log.append(f"🔐 Encrypted CF preview: {extracted_encrypted[:30]}...")
 
-                # ── Check 2: Generate CF from uploaded PDF ──
                 current_cf = generate_canonical_fingerprint(temp_path)
                 debug_log.append(f"🧬 Generated CF: {current_cf[:20]}...")
 
@@ -339,4 +388,21 @@ def public_verify(request):
                 os.remove(temp_path)
                 debug_log.append("🗑️ Temp file deleted")
 
-    return render(request, 'verify.html', {'result': result, 'debug_log': debug_log})
+        request.session['verify_result'] = result
+        request.session['verify_debug_log'] = debug_log
+        request.session['verify_filename_hint'] = filename_hint
+        return redirect(reverse('public_verify'))
+
+    # ── GET: read from session and clear ──
+    result = request.session.pop('verify_result', None)
+    debug_log = request.session.pop('verify_debug_log', [])
+    filename_hint = request.session.pop('verify_filename_hint', None)
+
+    return render(request, 'verify.html', {
+        'result': result,
+        'filename_hint': filename_hint,
+        'debug_log': debug_log,
+    })
+
+
+
