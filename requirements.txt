@@ -1,0 +1,8 @@
+Django==4.2
+firebase-admin
+pyrebase4
+PyMuPDF
+Pillow
+pycryptodome
+qrcode[pil]
+python-decouple
