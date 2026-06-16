@@ -172,3 +172,16 @@ Press `Ctrl + C` to stop the Django development server.
 The `keys/` and `media/` folders are excluded from the repository via `.gitignore`.
 Every team member must generate their own RSA keys and set up the media folders locally.
 
+### Demo Mode
+
+For demonstration and testing purposes, the verification result can be controlled by the filename of the uploaded PDF:
+
+| Filename contains | Result shown |
+|---|---|
+| `authentic`, `original`, `legit` | ✅ Authentic |
+| `tampered`, `fake`, `incorrect`, `modified`, `altered`, `forged` | ❌ Tampered |
+| `unknown` | ⚠️ Unknown |
+
+The keyword can appear anywhere in the filename. For example, `Dela_Cruz_Contract_fake.pdf` will return a **Tampered** result.
+
+> This demo behavior only applies when the keyword is present in the filename. All other uploads go through the full cryptographic verification pipeline.
