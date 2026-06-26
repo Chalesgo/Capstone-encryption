@@ -49,7 +49,7 @@ ROOT_URLCONF = 'capstone_system.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'contracts' / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
