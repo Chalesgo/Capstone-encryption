@@ -1,0 +1,6 @@
+keys/
+media/
+db.sqlite3
+.env
+*.pem
+*.sqlite3
