@@ -18,6 +18,7 @@ import os
 import fitz
 from .utils import generate_qr_code
 import base64
+from django.http import JsonResponse
 
 @login_required
 def upload_contract(request):
@@ -25,6 +26,7 @@ def upload_contract(request):
         form = ContractForm(request.POST, request.FILES)
         if form.is_valid():
             contract = form.save(commit=False)
+            contract.recipient = request.user
             contract.save()
 
             pdf_path = contract.file.path
@@ -404,5 +406,25 @@ def public_verify(request):
         'debug_log': debug_log,
     })
 
+# New rename view
+@login_required
+def rename_contract(request, pk):
+    if request.method == 'POST':
+        import json
+        contract = get_object_or_404(Contract, pk=pk)
+        data = json.loads(request.body)
+        contract.title = data.get('title', contract.title)
+        contract.save()
+        return JsonResponse({'success': True, 'title': contract.title})
+    return JsonResponse({'success': False}, status=400)
+
+# New status view
+@login_required
+def update_status(request, pk):
+    if request.method == 'POST':
+        contract = get_object_or_404(Contract, pk=pk)
+        contract.status = request.POST.get('status', contract.status)
+        contract.save()
+    return redirect('contract_list')
 
 

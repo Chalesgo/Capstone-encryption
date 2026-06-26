@@ -2,106 +2,411 @@
 {% block title %}Contracts{% endblock %}
 
 {% block content %}
-<div class="page-header" style="display: flex; align-items: center; justify-content: space-between;">
-    <div>
-        <h1>Contracts</h1>
-        <p>Manage and view all uploaded procurement contracts</p>
-    </div>
-    <a href="/upload/" class="btn btn-primary">+ Upload Contract</a>
+<style>
+  .contracts-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+  }
+  .contracts-header h1 { margin: 0; }
+  .contracts-header p { margin: 4px 0 0; color: #667788; font-size: 14px; }
+
+  .contracts-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+  }
+  .contracts-table th {
+    text-align: left;
+    padding: 12px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #889aab;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid #eef0f4;
+    background: #fafbfc;
+  }
+  .contracts-table td {
+    padding: 14px 16px;
+    font-size: 14px;
+    color: #2d3a47;
+    border-bottom: 1px solid #f0f2f5;
+    vertical-align: middle;
+  }
+  .contracts-table tr:last-child td { border-bottom: none; }
+  .contracts-table tr:hover td { background: #f8fafc; }
+
+  /* Contract name cell */
+  .contract-name-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .contract-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .contract-seal-thumb {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+  .contract-title-text {
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+  }
+  .rename-input {
+    font-size: 14px;
+    font-weight: 500;
+    border: 1px solid #4f8ef7;
+    border-radius: 5px;
+    padding: 3px 8px;
+    outline: none;
+    width: 200px;
+    display: none;
+  }
+
+  /* Status badge */
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .status-dot.pending  { background: #aab4be; }
+  .status-dot.sent     { background: #f5a623; }
+  .status-dot.approved { background: #27c485; }
+
+  /* Status dropdown */
+  .status-select {
+    font-size: 13px;
+    border: 1px solid #dde3ea;
+    border-radius: 6px;
+    padding: 4px 8px;
+    background: #fff;
+    cursor: pointer;
+    color: #2d3a47;
+  }
+
+  /* Actions */
+  .action-btns {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .icon-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 6px;
+    color: #889aab;
+    transition: background 0.15s, color 0.15s;
+    display: flex;
+    align-items: center;
+  }
+  .icon-btn:hover { background: #eef0f4; color: #2d3a47; }
+  .icon-btn.danger:hover { background: #fff0f0; color: #e53e3e; }
+  .icon-btn svg { width: 16px; height: 16px; }
+
+  /* Encryption badge */
+  .enc-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 99px;
+  }
+  .enc-badge.encrypted   { background: #e8f5ef; color: #27c485; }
+  .enc-badge.unencrypted { background: #fff8e6; color: #d97706; }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+  }
+  .empty-state .icon { font-size: 48px; margin-bottom: 1rem; }
+  .empty-state p { color: #667788; margin-bottom: 1.2rem; }
+
+  /* Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.35);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: #fff;
+    border-radius: 12px;
+    padding: 2rem;
+    max-width: 420px;
+    width: 90%;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+  }
+  .modal h3 { margin: 0 0 0.75rem; }
+  .modal p  { color: #667788; font-size: 14px; }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 1.5rem;
+  }
+</style>
+
+<div class="contracts-header">
+  <div>
+    <h1>Contracts</h1>
+    <p>Manage and view all uploaded procurement contracts</p>
+  </div>
+  <a href="/upload/" class="btn btn-primary">+ Upload Contract</a>
 </div>
 
 {% if contracts %}
+<table class="contracts-table">
+  <thead>
+    <tr>
+      <th style="width:28px;"><input type="checkbox" id="select-all"></th>
+      <th>Document Name</th>
+      <th>Recipient</th>
+      <th>Date Created ↑</th>
+      <th>Status</th>
+      <th>Modified</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
     {% for contract in contracts %}
-    <div class="card" style="display: flex; align-items: flex-start; gap: 1.2rem;">
+    <tr id="row-{{ contract.id }}">
 
-        {% if contract.seal_image %}
-            <img src="{{ contract.seal_image.url }}"
-                 style="width: 60px; height: 60px; border-radius: 8px; object-fit: cover; flex-shrink: 0;">
-        {% else %}
-            <div style="width: 60px; height: 60px; border-radius: 8px; background: #eef0f4;
-                        display: flex; align-items: center; justify-content: center;
-                        font-size: 24px; flex-shrink: 0;">📄</div>
-        {% endif %}
+      <!-- Checkbox -->
+      <td><input type="checkbox" class="row-check"></td>
 
-        <div style="flex: 1; min-width: 0;">
-            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                <strong style="font-size: 16px;">{{ contract.title }}</strong>
-                {% if contract.encrypted_cf %}
-                    <span class="badge badge-success">🔒 Encrypted</span>
-                {% else %}
-                    <span class="badge badge-warning">⚠ Not Encrypted</span>
-                {% endif %}
+      <!-- Document Name -->
+      <td>
+        <div class="contract-name-cell">
+          {% if contract.seal_image %}
+            <img src="{{ contract.seal_image.url }}" class="contract-seal-thumb">
+          {% else %}
+            <span class="contract-icon">📄</span>
+          {% endif %}
+
+          <div>
+            <span class="contract-title-text" id="title-text-{{ contract.id }}">{{ contract.title }}</span>
+            <input class="rename-input" id="rename-input-{{ contract.id }}"
+                   value="{{ contract.title }}"
+                   onblur="submitRename({{ contract.id }})"
+                   onkeydown="if(event.key==='Enter') submitRename({{ contract.id }}); if(event.key==='Escape') cancelRename({{ contract.id }});">
+            <div style="margin-top:3px;">
+              {% if contract.encrypted_cf %}
+                <span class="enc-badge encrypted">🔒 Encrypted</span>
+              {% else %}
+                <span class="enc-badge unencrypted">⚠ Not Encrypted</span>
+              {% endif %}
             </div>
-
-            <div style="color: #667788; font-size: 12px; margin-top: 4px;">
-                Uploaded {{ contract.uploaded_at|date:"F j, Y, g:i a" }}
-            </div>
-
-            {% if contract.fingerprint %}
-            <div style="margin-top: 8px; font-family: monospace; font-size: 11px;
-                        color: #889aab; background: #f5f7fa; padding: 6px 10px;
-                        border-radius: 6px; word-break: break-all;">
-                CF: {{ contract.fingerprint|slice:":48" }}...
-            </div>
-            {% endif %}
-
-            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;">
-                <a href="{{ contract.file.url }}" class="btn btn-outline" target="_blank">
-                    View PDF
-                </a>
-
-                {% if not contract.encrypted_cf %}
-                    <form action="/encrypt/{{ contract.id }}/" method="post" style="margin:0;">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn-warning">
-                            Encrypt
-                        </button>
-                    </form>
-                {% endif %}
-
-                {% if user.is_superuser %}
-                    <button class="btn btn-danger"
-                            onclick="openDeleteModal('{{ contract.id }}', '{{ contract.title|escapejs }}')">
-                        🗑 Delete
-                    </button>
-                {% endif %}
-            </div>
+          </div>
         </div>
-    </div>
+      </td>
+
+      <!-- Recipient -->
+      <td style="color:#667788;">
+        {{ contract.recipient.username|default:"—" }}
+      </td>
+
+      <!-- Date Created -->
+      <td style="color:#667788; white-space:nowrap;">
+        {{ contract.uploaded_at|date:"n/d/Y" }}
+      </td>
+
+      <!-- Status -->
+      <td>
+        {% if user.is_staff or user.is_superuser %}
+          <form method="post" action="/status/{{ contract.id }}/" style="margin:0;">
+            {% csrf_token %}
+            <select name="status" class="status-select" onchange="this.form.submit()">
+              <option value="pending"  {% if contract.status == 'pending'  %}selected{% endif %}>⬤ Pending</option>
+              <option value="sent"     {% if contract.status == 'sent'     %}selected{% endif %}>⬤ Sent</option>
+              <option value="approved" {% if contract.status == 'approved' %}selected{% endif %}>⬤ Approved</option>
+            </select>
+          </form>
+        {% else %}
+          <span class="status-badge">
+            <span class="status-dot {{ contract.status }}"></span>
+            {{ contract.get_status_display }}
+          </span>
+        {% endif %}
+      </td>
+
+      <!-- Modified -->
+      <td style="color:#889aab; white-space:nowrap; font-size:13px;">
+        {{ contract.modified_at|timesince }} ago
+      </td>
+
+      <!-- Actions -->
+      <td>
+        <div class="action-btns">
+
+          <!-- View PDF -->
+          <a href="{{ contract.file.url }}" target="_blank" class="icon-btn" title="View PDF">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+          </a>
+
+          <!-- Rename -->
+          <button class="icon-btn" title="Rename" onclick="startRename({{ contract.id }})">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </button>
+
+          <!-- Encrypt (if not yet encrypted) -->
+          {% if not contract.encrypted_cf %}
+          <form action="/encrypt/{{ contract.id }}/" method="post" style="margin:0;">
+            {% csrf_token %}
+            <button type="submit" class="icon-btn" title="Encrypt">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+            </button>
+          </form>
+          {% endif %}
+
+          <!-- Delete (superuser only) -->
+          {% if user.is_superuser %}
+          <button class="icon-btn danger" title="Delete"
+                  onclick="openDeleteModal('{{ contract.id }}', '{{ contract.title|escapejs }}')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+              <path d="M10 11v6M14 11v6"/>
+              <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+            </svg>
+          </button>
+          {% endif %}
+
+        </div>
+      </td>
+    </tr>
     {% endfor %}
+  </tbody>
+</table>
 
 {% else %}
-    <div class="card" style="text-align: center; padding: 3rem;">
-        <div style="font-size: 48px; margin-bottom: 1rem;">📂</div>
-        <p style="color: #667788;">No contracts uploaded yet.</p>
-        <a href="/upload/" class="btn btn-primary" style="margin-top: 1rem;">Upload your first contract</a>
-    </div>
+<div class="empty-state">
+  <div class="icon">📂</div>
+  <p>No contracts uploaded yet.</p>
+  <a href="/upload/" class="btn btn-primary">Upload your first contract</a>
+</div>
 {% endif %}
+
 
 <!-- Delete Modal -->
 <div class="modal-overlay" id="delete-modal">
-    <div class="modal">
-        <h3>🗑 Delete Contract</h3>
-        <p>Are you sure you want to delete <strong id="delete-contract-name"></strong>?
-           This action cannot be undone and will permanently remove the file.</p>
-        <div class="modal-actions">
-            <button class="btn btn-outline" onclick="closeDeleteModal()">Cancel</button>
-            <form id="delete-form" method="POST" style="margin:0;">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-danger">Yes, Delete</button>
-            </form>
-        </div>
+  <div class="modal">
+    <h3>🗑 Delete Contract</h3>
+    <p>Are you sure you want to delete <strong id="delete-contract-name"></strong>?
+       This action cannot be undone.</p>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeDeleteModal()">Cancel</button>
+      <form id="delete-form" method="POST" style="margin:0;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger">Yes, Delete</button>
+      </form>
     </div>
+  </div>
 </div>
 
+
 <script>
+// @ts-nocheck
+// Select all checkbox
+document.getElementById('select-all').addEventListener('change', function() {
+  document.querySelectorAll('.row-check').forEach(cb => cb.checked = this.checked);
+});
+
+// Inline rename
+function startRename(id) {
+  document.getElementById('title-text-' + id).style.display = 'none';
+  const input = document.getElementById('rename-input-' + id);
+  input.style.display = 'inline-block';
+  input.focus();
+  input.select();
+}
+
+function cancelRename(id) {
+  const titleEl = document.getElementById('title-text-' + id);
+  const input   = document.getElementById('rename-input-' + id);
+  input.value = titleEl.textContent.trim();
+  input.style.display = 'none';
+  titleEl.style.display = 'inline';
+}
+
+function submitRename(id) {
+  const titleEl = document.getElementById('title-text-' + id);
+  const input   = document.getElementById('rename-input-' + id);
+  const newTitle = input.value.trim();
+
+  if (!newTitle || newTitle === titleEl.textContent.trim()) {
+    return cancelRename(id);
+  }
+
+  fetch('/rename/' + id + '/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': '{{ csrf_token }}'
+    },
+    body: JSON.stringify({ title: newTitle })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      titleEl.textContent = data.title;
+      input.value = data.title;
+    }
+    input.style.display = 'none';
+    titleEl.style.display = 'inline';
+  })
+  .catch(() => cancelRename(id));
+}
+
+// Delete modal
 function openDeleteModal(contractId, contractName) {
-    document.getElementById('delete-contract-name').textContent = contractName;
-    document.getElementById('delete-form').action = '/delete/' + contractId + '/';
-    document.getElementById('delete-modal').classList.add('active');
+  document.getElementById('delete-contract-name').textContent = contractName;
+  document.getElementById('delete-form').action = '/delete/' + contractId + '/';
+  document.getElementById('delete-modal').classList.add('active');
 }
 function closeDeleteModal() {
-    document.getElementById('delete-modal').classList.remove('active');
+  document.getElementById('delete-modal').classList.remove('active');
 }
 </script>
 {% endblock %}

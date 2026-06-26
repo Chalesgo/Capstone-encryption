@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.auth.models import User
 
 class Contract(models.Model):
     title = models.CharField(max_length=255)
@@ -13,6 +14,14 @@ class Contract(models.Model):
     uploaded_at = models.DateTimeField(auto_now_add=True)
     # In models.py add this field
     original_fingerprint = models.CharField(max_length=64, blank=True)
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('sent', 'Sent'),
+        ('approved', 'Approved'),
+    ]
+    recipient = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='contracts')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    modified_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.title
