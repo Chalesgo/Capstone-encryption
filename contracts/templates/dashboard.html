@@ -1,0 +1,224 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<style>
+  .dash-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+  }
+  .dash-header h1 { margin: 0; }
+  .dash-header p { margin: 4px 0 0; color: #667788; font-size: 14px; }
+
+  .stat-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 1.5rem;
+  }
+  .stat-card {
+    background: #fff;
+    border-radius: 10px;
+    padding: 18px 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+  }
+  .stat-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    color: #667788;
+    margin-bottom: 6px;
+  }
+  .stat-card-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: #1a1a2e;
+  }
+  .stat-card-sub {
+    font-size: 12px;
+    color: #889aab;
+    margin-top: 4px;
+  }
+
+  .audit-panel {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    overflow: hidden;
+  }
+  .audit-panel-header {
+    padding: 16px 20px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #1a1a2e;
+    border-bottom: 1px solid #eef0f4;
+  }
+
+  .audit-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .audit-table th {
+    text-align: left;
+    padding: 10px 20px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #889aab;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid #eef0f4;
+    background: #fafbfc;
+  }
+  .audit-table td {
+    padding: 12px 20px;
+    font-size: 13px;
+    color: #2d3a47;
+    border-bottom: 1px solid #f0f2f5;
+    vertical-align: middle;
+  }
+  .audit-table tr:last-child td { border-bottom: none; }
+  .audit-table tr:hover td { background: #f8fafc; }
+
+  .audit-title-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 220px;
+  }
+  .audit-title-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .audit-user-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .user-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #eef2ff;
+    color: #3b5bdb;
+    font-size: 11px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .action-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 3px 10px;
+    border-radius: 99px;
+  }
+  .action-badge.viewed    { background: #eef2ff; color: #3b5bdb; }
+  .action-badge.added     { background: #e8f5ef; color: #1a9e6a; }
+  .action-badge.encrypted { background: #f3ecfd; color: #7c3aed; }
+  .action-badge.edited    { background: #fff8e6; color: #d97706; }
+  .action-badge.approved  { background: #e8f5ef; color: #27c485; }
+  .action-badge.rejected  { background: #fff0f0; color: #e53e3e; }
+  .action-badge.deleted   { background: #fff0f0; color: #e53e3e; }
+  .action-badge.reported_tampering { background: #fff0f0; color: #dc2626; }
+  .action-badge.failed_login       { background: #f3f4f6; color: #6b7280; }
+
+  .empty-audit {
+    padding: 3rem 2rem;
+    text-align: center;
+    color: #889aab;
+    font-size: 13px;
+  }
+</style>
+
+<div class="dash-header">
+  <div>
+    <h1>Document Dashboard</h1>
+    <p>Manage and organize your documents</p>
+  </div>
+  <a href="/upload/" class="btn btn-primary">+ Upload Document</a>
+</div>
+
+<div class="stat-cards">
+  <div class="stat-card">
+    <div class="stat-card-top">
+      <span>Total Documents</span>
+      <span>📄</span>
+    </div>
+    <div class="stat-card-value">{{ total_documents }}</div>
+    <div class="stat-card-sub">Across all categories</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-card-top">
+      <span>Verified Documents</span>
+      <span>✅</span>
+    </div>
+    <div class="stat-card-value">{{ verified_documents }}</div>
+    <div class="stat-card-sub">Across all categories</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-card-top">
+      <span>Flagged / Tampered Documents</span>
+      <span>⚠️</span>
+    </div>
+    <div class="stat-card-value">{{ flagged_documents }}</div>
+    <div class="stat-card-sub">Requires review</div>
+  </div>
+</div>
+
+<div class="audit-panel">
+  <div class="audit-panel-header">Recent Verification Audit Logs</div>
+
+  {% if recent_logs %}
+  <table class="audit-table">
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>IP address</th>
+        <th>User</th>
+        <th>Timestamp</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for log in recent_logs %}
+      <tr>
+        <td>
+          <div class="audit-title-cell">
+            <span>📄</span>
+            <span class="audit-title-text">{{ log.contract.title|default:"—" }}</span>
+          </div>
+        </td>
+        <td style="color:#889aab;">{{ log.ip_address|default:"—" }}</td>
+        <td>
+          <div class="audit-user-cell">
+            <span class="user-avatar">
+              {% if log.user %}{{ log.user.username|slice:":2"|upper }}{% else %}NA{% endif %}
+            </span>
+            <span>{{ log.user.username|default:"N/A" }}</span>
+          </div>
+        </td>
+        <td style="color:#889aab; white-space:nowrap;">{{ log.timestamp|date:"Y-m-d H:i:s" }}</td>
+        <td>
+          <span class="action-badge {{ log.action }}">{{ log.get_action_display }}</span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-audit">No activity recorded yet.</div>
+  {% endif %}
+</div>
+{% endblock %}

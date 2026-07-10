@@ -11,4 +11,5 @@ urlpatterns = [
     path('verify/physical/', views.verify_physical, name='verify_physical'),
     path('rename/<int:pk>/', views.rename_contract, name='rename_contract'),
     path('status/<int:pk>/',  views.update_status,   name='update_status'),
+    path('dashboard/', views.dashboard, name='dashboard'),
 ]

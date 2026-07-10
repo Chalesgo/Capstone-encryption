@@ -459,3 +459,21 @@ def extract_cf_from_metadata(pdf_path: str):
         return None
     except Exception:
         return None
+
+from .models import AuditLog
+
+def get_client_ip(request):
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        return x_forwarded_for.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR')
+
+
+def log_activity(request, action, contract=None, note=''):
+    AuditLog.objects.create(
+        contract=contract,
+        user=request.user if request.user.is_authenticated else None,
+        action=action,
+        ip_address=get_client_ip(request),
+        note=note,
+    )

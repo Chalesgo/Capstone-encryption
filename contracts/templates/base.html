@@ -319,17 +319,18 @@
             <span class="brand-sub">Barangay Sto. Niño, Biñan City</span>
         </div>
     </a>
-    <div class="navbar-right">
-        {% if user.is_authenticated %}
-            <span class="user-info">{{ user.username }}</span>
-            <form action="/accounts/logout/" method="post" style="margin:0;">
-                {% csrf_token %}
-                <button type="submit" class="btn-nav">Logout</button>
-            </form>
-        {% else %}
-            <a href="/accounts/login/" class="btn-nav">Staff Login</a>
-        {% endif %}
-    </div>
+        <div style="display:flex; justify-content:center; flex-wrap:wrap;
+                    gap:6px 18px; margin-bottom:16px;">
+            <a href="/verify/" style="font-size:12px; color:#778899; text-decoration:none;">Verify Document</a>
+            <span style ="color:#dde1e8;">|</span>
+            <a href="/contracts/" style="font-size:12px; color:#778899; text-decoration:none;">Contracts</a>
+            <span style="color:#dde1e8;">|</span>
+            {% if user.is_authenticated %}
+            <a href="/dashboard/" style="font-size:12px; color:#778899; text-decoration:none;">Dashboard</a>
+            <span style="color:#dde1e8;">|</span>
+            {% endif %}
+            <a href="/accounts/login/" style="font-size:12px; color:#778899; text-decoration:none;">Staff Login</a>
+        </div>
 </nav>
 
 <div class="container">

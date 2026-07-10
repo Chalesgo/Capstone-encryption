@@ -1,18 +1,36 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
+from django.core.validators import FileExtensionValidator
+
+
+def validate_pdf_signature(file):
+    """Model-level check — catches uploads made outside ContractForm (e.g. via /admin/)."""
+    try:
+        file.seek(0)
+        header = file.read(5)
+        file.seek(0)
+    except Exception:
+        raise ValidationError("Unable to read the uploaded file.")
+
+    if header != b'%PDF-':
+        raise ValidationError("This file is not a valid PDF.")
+
 
 class Contract(models.Model):
     title = models.CharField(max_length=255)
-    file = models.FileField(upload_to='contracts/')
+    file = models.FileField(
+        upload_to='contracts/',
+        validators=[FileExtensionValidator(['pdf']), validate_pdf_signature],
+    )
     fingerprint = models.CharField(max_length=64, blank=True)
     encrypted_cf = models.TextField(blank=True)
     aes_key = models.TextField(blank=True)
     aes_iv = models.TextField(blank=True)
-    wrapped_key = models.TextField(blank=True)    # RSA-wrapped AES key
-    hmac_value = models.TextField(blank=True)     # HMAC of the CF
+    wrapped_key = models.TextField(blank=True)
+    hmac_value = models.TextField(blank=True)
     seal_image = models.ImageField(upload_to='seals/', blank=True, null=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
-    # In models.py add this field
     original_fingerprint = models.CharField(max_length=64, blank=True)
     STATUS_CHOICES = [
         ('pending', 'Pending'),
@@ -25,3 +43,35 @@ class Contract(models.Model):
 
     def __str__(self):
         return self.title
+
+class AuditLog(models.Model):
+    ACTION_CHOICES = [
+        ('viewed', 'Viewed Document'),
+        ('added', 'Added Document'),
+        ('encrypted', 'Encrypted Document'),
+        ('edited', 'Edited Document'),
+        ('approved', 'Approved Document'),
+        ('rejected', 'Rejected Document'),
+        ('deleted', 'Deleted Document'),
+        ('reported_tampering', 'Reported Tampering'),
+        ('failed_login', 'Failed Login Attempt'),
+    ]
+
+    contract = models.ForeignKey(
+        Contract, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_logs'
+    )
+    user = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_logs'
+    )
+    action = models.CharField(max_length=30, choices=ACTION_CHOICES)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    note = models.CharField(max_length=255, blank=True)  # optional extra context
+
+    class Meta:
+        ordering = ['-timestamp']
+
+    def __str__(self):
+        who = self.user.username if self.user else 'N/A'
+        what = self.contract.title if self.contract else '(no document)'
+        return f"{who} — {self.get_action_display()} — {what}"

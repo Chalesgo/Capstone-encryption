@@ -1,3 +1,4 @@
+#views.py 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
@@ -19,6 +20,8 @@ import fitz
 from .utils import generate_qr_code
 import base64
 from django.http import JsonResponse
+from .utils import log_activity
+from .models import Contract, AuditLog
 
 @login_required
 def upload_contract(request):
@@ -72,6 +75,7 @@ def upload_contract(request):
             contract.file = f'contracts/{final_filename}'
             contract.seal_image = f'seals/seal_{contract.id}.png'
             contract.save()
+            log_activity(request, 'added', contract=contract)
             return redirect('contract_list')
     else:
         form = ContractForm()
@@ -119,6 +123,7 @@ def encrypt_contract(request, contract_id):
     contract.file = f'contracts/{final_filename}'
     contract.seal_image = f'seals/seal_{contract.id}.png'
     contract.save()
+    log_activity(request, 'encrypted', contract=contract)
 
     return redirect('contract_list')
 
@@ -154,6 +159,7 @@ def delete_contract(request, contract_id):
         if os.path.isfile(qr_path):
             os.remove(qr_path)
 
+        log_activity(request, 'deleted', contract=contract, note=contract.title)
         contract.delete()
         return redirect('contract_list')
 
@@ -182,8 +188,6 @@ def verify_physical(request):
                 
                 for contract in Contract.objects.exclude(encrypted_cf=''):
                     try:
-                        # QR contains the encrypted CF directly
-                        # so we just compare it against stored encrypted_cf
                         if qr_data == contract.encrypted_cf:
                             matched_contract = contract
                             break
@@ -192,8 +196,10 @@ def verify_physical(request):
                 
                 if matched_contract:
                     result = 'authentic'
+                    log_activity(request, 'viewed', contract=matched_contract, note='Verification: authentic')
                 else:
                     result = 'tampered'
+                    log_activity(request, 'reported_tampering', contract=None, note=f"QR verification failed for data: {qr_data[:50]}")
                     
             except Exception:
                 result = 'error'
@@ -205,7 +211,6 @@ def verify_physical(request):
         'result': result,
         'seal_url': seal_url
     })
-
 import re
 
 def is_valid_encrypted_cf(data: str):
@@ -415,6 +420,7 @@ def rename_contract(request, pk):
         data = json.loads(request.body)
         contract.title = data.get('title', contract.title)
         contract.save()
+        log_activity(request, 'edited', contract=contract, note=f"Renamed to '{contract.title}'")
         return JsonResponse({'success': True, 'title': contract.title})
     return JsonResponse({'success': False}, status=400)
 
@@ -425,6 +431,26 @@ def update_status(request, pk):
         contract = get_object_or_404(Contract, pk=pk)
         contract.status = request.POST.get('status', contract.status)
         contract.save()
+        status = request.POST.get('status', contract.status)
+        contract.status = status
+        contract.save()
+        if status == 'approved':
+            log_activity(request, 'approved', contract=contract)
     return redirect('contract_list')
 
+from django.db.models import Count
 
+@login_required
+def dashboard(request):
+    total_documents = Contract.objects.count()
+    verified_documents = Contract.objects.filter(encrypted_cf__gt='').count()
+    flagged_documents = AuditLog.objects.filter(action='reported_tampering').values('contract').distinct().count()
+
+    recent_logs = AuditLog.objects.select_related('user', 'contract').order_by('-timestamp')[:20]
+
+    return render(request, 'dashboard.html', {
+        'total_documents': total_documents,
+        'verified_documents': verified_documents,
+        'flagged_documents': flagged_documents,
+        'recent_logs': recent_logs,
+    })
