@@ -305,6 +305,74 @@
             .navbar { padding: 0 1rem; }
             .container { padding: 1rem; }
         }
+
+            .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #aabbcc;
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 500;
+            padding: 7px 12px;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .nav-link svg {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+        }
+
+        .nav-link:hover {
+            background: #262a45;
+            color: white;
+        }
+
+        .nav-link.active {
+            background: #262a45;
+            color: white;
+        }
+
+        .nav-divider {
+            width: 1px;
+            height: 18px;
+            background: #3a4a6b;
+            margin: 0 6px;
+        }
+        .nav-link-btn {
+            background: #1a1a2e;
+            border: none;
+            outline: none;
+            font-family: inherit;
+            font-size: inherit;
+            line-height: 1;
+            appearance: none;
+            -webkit-appearance: none;
+            cursor: pointer;
+        }
+
+        .nav-link-btn::-moz-focus-inner {
+            border: 0;
+            padding: 0;
+        }
+
+        .nav-link.nav-link-btn:hover {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .nav-link-btn:focus-visible {
+            outline: 2px solid #ef4444;
+            outline-offset: 2px;
+        }
     </style>
 </head>
 <body>
@@ -319,18 +387,69 @@
             <span class="brand-sub">Barangay Sto. Niño, Biñan City</span>
         </div>
     </a>
-        <div style="display:flex; justify-content:center; flex-wrap:wrap;
-                    gap:6px 18px; margin-bottom:16px;">
-            <a href="/verify/" style="font-size:12px; color:#778899; text-decoration:none;">Verify Document</a>
-            <span style ="color:#dde1e8;">|</span>
-            <a href="/contracts/" style="font-size:12px; color:#778899; text-decoration:none;">Contracts</a>
-            <span style="color:#dde1e8;">|</span>
-            {% if user.is_authenticated %}
-            <a href="/dashboard/" style="font-size:12px; color:#778899; text-decoration:none;">Dashboard</a>
-            <span style="color:#dde1e8;">|</span>
-            {% endif %}
-            <a href="/accounts/login/" style="font-size:12px; color:#778899; text-decoration:none;">Staff Login</a>
-        </div>
+
+    <div class="nav-links">
+        <a href="/verify/" class="nav-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                <path d="m9 12 2 2 4-4"/>
+            </svg>
+            Verify Document
+        </a>
+
+        {% if user.is_authenticated %}
+
+        <div class="nav-divider"></div>
+
+        <a href="/contracts/" class="nav-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/>
+                <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
+                <path d="M10 9H8"/>
+                <path d="M16 13H8"/>
+                <path d="M16 17H8"/>
+            </svg>
+            Contracts
+        </a>
+        <div class="nav-divider"></div>
+
+        <a href="/dashboard/" class="nav-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="9" rx="1"/>
+                <rect x="14" y="3" width="7" height="5" rx="1"/>
+                <rect x="14" y="12" width="7" height="9" rx="1"/>
+                <rect x="3" y="16" width="7" height="5" rx="1"/>
+            </svg>
+            Dashboard
+        </a>
+        <div class="nav-divider"></div>
+
+        <a href="#" class="nav-link nav-link-logout" onclick="document.getElementById('logout-form').submit(); return false;">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <path d="M16 17l5-5-5-5"/>
+                <path d="M21 12H9"/>
+            </svg>
+            Logout
+        </a>
+        <form id="logout-form" action="{% url 'logout' %}" method="post" style="display:none;">
+            {% csrf_token %}
+        </form>
+
+        {% else %}
+
+        <div class="nav-divider"></div>
+
+        <a href="/accounts/login/" class="nav-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+                <path d="M10 17l5-5-5-5"/>
+                <path d="M15 12H3"/>
+            </svg>
+            Staff Login
+        </a>
+        {% endif %}
+    </div>
 </nav>
 
 <div class="container">
