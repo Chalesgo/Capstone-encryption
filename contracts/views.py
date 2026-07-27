@@ -54,7 +54,8 @@ def upload_contract(request):
 
             # ── Step 5: Stamp ONCE with LSB seal + QR ──
             original_filename = os.path.basename(pdf_path)
-            final_filename = original_filename.replace('.pdf', '_sealed.pdf')
+            name, ext = os.path.splitext(original_filename)
+            final_filename = f"{name}_sealed{ext}"
             final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
             stamp_seal_on_pdf(pdf_path, final_pdf_path, stamped_seal, qr_path=qr_path, encrypted_cf=encrypted)
 
@@ -80,8 +81,7 @@ def upload_contract(request):
     else:
         form = ContractForm()
 
-    seal_url = settings.MEDIA_URL + 'seals/default_seal.png'
-    return render(request, 'upload.html', {'form': form, 'seal_url': seal_url})
+    return render(request, 'upload.html', {'form': form})
 
 
 @login_required
@@ -104,7 +104,8 @@ def encrypt_contract(request, contract_id):
     generate_qr_code(encrypted, qr_path)
 
     original_filename = os.path.basename(pdf_path)
-    final_filename = original_filename.replace('.pdf', '_sealed.pdf')
+    name, ext = os.path.splitext(original_filename)
+    final_filename = f"{name}_sealed{ext}"
     final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
     stamp_seal_on_pdf(pdf_path, final_pdf_path, stamped_seal, qr_path=qr_path, encrypted_cf=encrypted)
 
@@ -131,8 +132,7 @@ def encrypt_contract(request, contract_id):
 @login_required
 def contract_list(request):
     contracts = Contract.objects.all()
-    seal_url = settings.MEDIA_URL + 'seals/default_seal.png'
-    return render(request, 'list.html', {'contracts': contracts, 'seal_url': seal_url})
+    return render(request, 'list.html', {'contracts': contracts})
 
 @login_required
 def delete_contract(request, contract_id):
@@ -205,11 +205,8 @@ def verify_physical(request):
                 result = 'error'
         else:
             result = 'error'
-
-    seal_url = settings.MEDIA_URL + 'seals/default_seal.png'
     return render(request, 'verify_physical.html', {
-        'result': result,
-        'seal_url': seal_url
+        'result': result
     })
 import re
 
@@ -300,6 +297,7 @@ def public_verify(request):
             debug_log.append("SHA-256 fingerprint generated from document contents")
             debug_log.append("Comparing fingerprint against database records...")
             debug_log.append("Match found — document fingerprint verified")
+            log_activity(request, 'viewed', contract=None, note=f"Public verification: authentic ({uploaded_file.name})")
             request.session['verify_result'] = 'authentic'
             request.session['verify_debug_log'] = debug_log
             request.session['verify_filename_hint'] = filename_hint
@@ -312,6 +310,7 @@ def public_verify(request):
             debug_log.append("SHA-256 fingerprint generated from document contents")
             debug_log.append("Comparing fingerprint against database records...")
             debug_log.append("No matching contract found — document fingerprint mismatch")
+            log_activity(request, 'reported_tampering', contract=None, note=f"Public verification: tampered ({uploaded_file.name})")
             request.session['verify_result'] = 'tampered'
             request.session['verify_debug_log'] = debug_log
             request.session['verify_filename_hint'] = filename_hint
@@ -323,6 +322,7 @@ def public_verify(request):
             debug_log.append("Document structure does not match any known contract format")
             debug_log.append("Cross-referencing against all database records...")
             debug_log.append("No records matched — document origin could not be determined")
+            log_activity(request, 'reported_tampering', contract=None, note=f"Public verification: unknown origin ({uploaded_file.name})")
             request.session['verify_result'] = 'tampered'
             request.session['verify_debug_log'] = debug_log
             request.session['verify_filename_hint'] = 'unknown'
@@ -394,6 +394,11 @@ def public_verify(request):
             if os.path.isfile(temp_path):
                 os.remove(temp_path)
                 debug_log.append("🗑️ Temp file deleted")
+
+        if result == 'authentic':
+            log_activity(request, 'viewed', contract=matched_contract, note=f"Public verification: authentic ({uploaded_file.name})")
+        elif result == 'tampered':
+            log_activity(request, 'reported_tampering', contract=None, note=f"Public verification: tampered ({uploaded_file.name})")
 
         request.session['verify_result'] = result
         request.session['verify_debug_log'] = debug_log

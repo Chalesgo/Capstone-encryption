@@ -42,6 +42,20 @@
     color: #889aab;
     margin-top: 4px;
   }
+  .stat-card-top svg {
+    width: 16px;
+    height: 16px;
+    stroke-width: 2;
+  }
+  .icon-total { color: #3b5bdb; }
+  .icon-verified { color: #27c485; }
+  .icon-flagged { color: #d97706; }
+  .audit-title-cell svg {
+    width: 15px;
+    height: 15px;
+    color: #889aab;
+    flex-shrink: 0;
+  }
 
   .audit-panel {
     background: #fff;
@@ -152,7 +166,10 @@
   <div class="stat-card">
     <div class="stat-card-top">
       <span>Total Documents</span>
-      <span>📄</span>
+      <svg class="icon-total" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+      </svg>
     </div>
     <div class="stat-card-value">{{ total_documents }}</div>
     <div class="stat-card-sub">Across all categories</div>
@@ -161,7 +178,10 @@
   <div class="stat-card">
     <div class="stat-card-top">
       <span>Verified Documents</span>
-      <span>✅</span>
+      <svg class="icon-verified" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+        <polyline points="22 4 12 14.01 9 11.01"/>
+      </svg>
     </div>
     <div class="stat-card-value">{{ verified_documents }}</div>
     <div class="stat-card-sub">Across all categories</div>
@@ -170,7 +190,11 @@
   <div class="stat-card">
     <div class="stat-card-top">
       <span>Flagged / Tampered Documents</span>
-      <span>⚠️</span>
+      <svg class="icon-flagged" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
     </div>
     <div class="stat-card-value">{{ flagged_documents }}</div>
     <div class="stat-card-sub">Requires review</div>
@@ -196,7 +220,10 @@
       <tr>
         <td>
           <div class="audit-title-cell">
-            <span>📄</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
             <span class="audit-title-text">{{ log.contract.title|default:"—" }}</span>
           </div>
         </td>
