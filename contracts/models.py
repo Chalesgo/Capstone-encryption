@@ -33,13 +33,17 @@ class Contract(models.Model):
     uploaded_at = models.DateTimeField(auto_now_add=True)
     original_fingerprint = models.CharField(max_length=64, blank=True)
     STATUS_CHOICES = [
-        ('pending', 'Pending'),
+        ('pending', 'Draft'),
         ('sent', 'Sent'),
-        ('approved', 'Approved'),
+        ('approved', 'Signed'),
     ]
     recipient = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='contracts')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     modified_at = models.DateTimeField(auto_now=True)
+    tags = models.CharField(max_length=255, blank=True, help_text="Comma-separated tags")
+
+    def tag_list(self):
+        return [t.strip() for t in self.tags.split(',') if t.strip()]
 
     def __str__(self):
         return self.title

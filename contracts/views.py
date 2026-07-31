@@ -429,7 +429,21 @@ def rename_contract(request, pk):
         return JsonResponse({'success': True, 'title': contract.title})
     return JsonResponse({'success': False}, status=400)
 
+# New tag view
+@login_required
+def tag_contract(request, pk):
+    if request.method == 'POST':
+        import json
+        contract = get_object_or_404(Contract, pk=pk)
+        data = json.loads(request.body)
+        contract.tags = data.get('tags', contract.tags)
+        contract.save()
+        log_activity(request, 'edited', contract=contract, note=f"Tags updated: '{contract.tags}'")
+        return JsonResponse({'success': True, 'tags': contract.tags, 'tag_list': contract.tag_list()})
+    return JsonResponse({'success': False}, status=400)
+
 # New status view
+
 @login_required
 def update_status(request, pk):
     if request.method == 'POST':

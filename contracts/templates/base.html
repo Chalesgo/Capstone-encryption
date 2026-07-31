@@ -9,74 +9,218 @@
 
         body {
             font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            background: #f0f2f5;
-            color: #1a1a2e;
+            background: #f0efed;
+            color: #333;
             min-height: 100vh;
+            padding-left: 72px;
+            padding-top: 56px;
         }
 
-        /* ── Navigation ── */
-        .navbar {
-            background: #1a1a2e;
-            padding: 0 2rem;
+        /* ── Sidebar Navigation ── */
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: 72px;
+            background: #3a3a3a;
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: space-between;
-            height: 60px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            padding: 16px 0;
+            box-shadow: 2px 0 8px rgba(0,0,0,0.3);
+            z-index: 500;
         }
 
-        .navbar-brand {
+        .sidebar-logo {
             display: flex;
-            align-items: center;
-            gap: 10px;
-            color: white;
-            text-decoration: none;
-            font-size: 16px;
-            font-weight: 600;
+            margin-bottom: 18px;
         }
 
-        .navbar-brand img {
-            width: 32px;
-            height: 32px;
+        .sidebar-logo img {
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
         }
 
-        .navbar-brand .brand-sub {
-            font-size: 11px;
-            color: #8899aa;
-            font-weight: 400;
-            display: block;
-            line-height: 1;
+        .sidebar-icons {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            flex: 1;
         }
 
-        .navbar-right {
+        .sidebar-icon-link {
+            position: relative;
             display: flex;
             align-items: center;
-            gap: 12px;
-        }
-
-        .navbar-right .user-info {
-            color: #8899aa;
-            font-size: 13px;
-        }
-
-        .btn-nav {
-            background: transparent;
-            border: 1px solid #3a4a6b;
-            color: #aabbcc;
-            padding: 6px 14px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
+            justify-content: center;
+            width: 44px;
+            height: 44px;
+            border-radius: 10px;
+            color: #999;
             text-decoration: none;
+            background: transparent;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            font-family: inherit;
             transition: all 0.2s;
         }
 
-        .btn-nav:hover {
-            background: #3a4a6b;
+        .sidebar-icon-link svg {
+            width: 20px;
+            height: 20px;
+            stroke: currentColor;
+        }
+
+        .sidebar-icon-link:hover {
+            background: #4e4e4e;
             color: white;
         }
 
+        .sidebar-icon-link.active {
+            background: rgba(244,163,77,0.13);
+            color: #f4a34d;
+        }
+
+        .sidebar-icon-link[data-tooltip]:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            left: 56px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: #0f0f1e;
+            color: white;
+            font-size: 11px;
+            padding: 5px 10px;
+            border-radius: 6px;
+            white-space: nowrap;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            pointer-events: none;
+        }
+
+        .sidebar-divider {
+            width: 26px;
+            height: 1px;
+            background: #2a2f4a;
+            margin: 6px 0;
+        }
+
+        .sidebar-bottom {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* ── Top Bar ── */
+        .topbar {
+            position: fixed;
+            top: 0;
+            left: 72px;
+            right: 0;
+            height: 56px;
+            background: #f7f6f4;
+            border-bottom: 1px solid #e8e6e2;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding: 0 24px;
+            gap: 14px;
+            z-index: 400;
+        }
+
+        .topbar-icon-btn {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: transparent;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            color: #667788;
+            transition: all 0.2s;
+        }
+
+        .topbar-icon-btn svg {
+            width: 19px;
+            height: 19px;
+            stroke: currentColor;
+        }
+
+        .topbar-icon-btn:hover {
+            background: #eceae6;
+            color: #333;
+        }
+
+        .topbar-icon-btn .notif-badge {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #f4a34d;
+            border: 1.5px solid white;
+            display: none;
+        }
+
+        .topbar-divider {
+            width: 1px;
+            height: 24px;
+            background: #eef0f4;
+        }
+
+        .topbar-user {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .topbar-user .avatar {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+
+        .topbar-user .user-text {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.3;
+        }
+
+        .topbar-user .user-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: #222;
+        }
+
+        .topbar-user .user-role {
+            font-size: 11px;
+            color: #999;
+        }
+
+        @media (max-width: 600px) {
+            .sidebar { width: 56px; }
+            .topbar { left: 56px; }
+            body { padding-left: 56px; }
+            .container { padding: 1rem; }
+        }
         /* ── Page container ── */
         .container {
             max-width: 1100px;
@@ -102,10 +246,10 @@
 
         /* ── Cards ── */
         .card {
-            background: white;
+            background: #fff;
             border-radius: 12px;
             padding: 1.5rem;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
             margin-bottom: 1rem;
         }
 
@@ -125,11 +269,11 @@
         }
 
         .btn-primary {
-            background: #1a1a2e;
-            color: white;
+            background: #f4a34d;
+            color: #fff;
         }
 
-        .btn-primary:hover { background: #2a2a4e; }
+        .btn-primary:hover { background: #e09038; }
 
         .btn-success {
             background: #0f7b4e;
@@ -164,36 +308,24 @@
         .btn-warning:hover { background: #b45309; }
 
         /* ── Form elements ── */
-        .form-group {
-            margin-bottom: 1.2rem;
-        }
-
-        .form-group label {
-            display: block;
-            font-size: 13px;
-            font-weight: 500;
-            color: #445566;
-            margin-bottom: 6px;
-        }
-
         .form-group input,
         .form-group select,
         .form-group textarea {
             width: 100%;
             padding: 10px 14px;
-            border: 1px solid #dde1e8;
+            border: 1px solid #e0deda;
             border-radius: 8px;
             font-size: 14px;
-            color: #1a1a2e;
-            background: #fafbfc;
+            color: #333;
+            background: #fff;
             transition: border-color 0.2s;
             outline: none;
         }
 
         .form-group input:focus,
         .form-group select:focus {
-            border-color: #1a1a2e;
-            background: white;
+            border-color: #f4a34d;
+            background: #fff;
         }
 
         /* ── Badges ── */
@@ -207,10 +339,10 @@
             font-weight: 500;
         }
 
-        .badge-success { background: #dcfce7; color: #166534; }
-        .badge-warning { background: #fef9c3; color: #854d0e; }
+        .badge-success { background: #cdf2eb; color: #1f8a68; }
+        .badge-warning { background: #fde8ce; color: #c97a2e; }
         .badge-danger  { background: #fee2e2; color: #991b1b; }
-        .badge-info    { background: #dbeafe; color: #1e40af; }
+        .badge-info    { background: #e9d5f8; color: #7c3aac; }
 
         /* ── Alerts ── */
         .alert {
@@ -299,107 +431,25 @@
             width: 0%;
             transition: width 0.4s ease;
         }
-
-        /* ── Responsive ── */
-        @media (max-width: 600px) {
-            .navbar { padding: 0 1rem; }
-            .container { padding: 1rem; }
-        }
-
-            .nav-links {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        }
-
-        .nav-link {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            color: #aabbcc;
-            text-decoration: none;
-            font-size: 13px;
-            font-weight: 500;
-            padding: 7px 12px;
-            border-radius: 6px;
-            transition: all 0.2s;
-        }
-
-        .nav-link svg {
-            width: 16px;
-            height: 16px;
-            stroke: currentColor;
-        }
-
-        .nav-link:hover {
-            background: #262a45;
-            color: white;
-        }
-
-        .nav-link.active {
-            background: #262a45;
-            color: white;
-        }
-
-        .nav-divider {
-            width: 1px;
-            height: 18px;
-            background: #3a4a6b;
-            margin: 0 6px;
-        }
-        .nav-link-btn {
-            background: #1a1a2e;
-            border: none;
-            outline: none;
-            font-family: inherit;
-            font-size: inherit;
-            line-height: 1;
-            appearance: none;
-            -webkit-appearance: none;
-            cursor: pointer;
-        }
-
-        .nav-link-btn::-moz-focus-inner {
-            border: 0;
-            padding: 0;
-        }
-
-        .nav-link.nav-link-btn:hover {
-            background: #fee2e2;
-            color: #991b1b;
-        }
-
-        .nav-link-btn:focus-visible {
-            outline: 2px solid #ef4444;
-            outline-offset: 2px;
-        }
     </style>
 </head>
 <body>
 
-<nav class="navbar">
-    <a href="/" class="navbar-brand">
+<aside class="sidebar">
+    <a href="/" class="sidebar-logo">
         <img src="/media/seals/default_seal.png" alt="Seal">
-        <div>
-            SealGuard
-            <span class="brand-sub">Barangay Sto. Niño, Biñan City</span>
-        </div>
     </a>
 
-    <div class="nav-links">
-        <a href="/verify/" class="nav-link">
+    <nav class="sidebar-icons">
+        <a href="/verify/" class="sidebar-icon-link" data-tooltip="Verify Document">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                 <path d="m9 12 2 2 4-4"/>
             </svg>
-            Verify Document
         </a>
 
         {% if user.is_authenticated %}
-
-        <div class="nav-divider"></div>
-
-        <a href="/contracts/" class="nav-link">
+        <a href="/contracts/" class="sidebar-icon-link" data-tooltip="Contracts">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/>
                 <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
@@ -407,48 +457,81 @@
                 <path d="M16 13H8"/>
                 <path d="M16 17H8"/>
             </svg>
-            Contracts
         </a>
-        <div class="nav-divider"></div>
 
-        <a href="/dashboard/" class="nav-link">
+        <a href="/dashboard/" class="sidebar-icon-link" data-tooltip="Dashboard">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="3" y="3" width="7" height="9" rx="1"/>
                 <rect x="14" y="3" width="7" height="5" rx="1"/>
                 <rect x="14" y="12" width="7" height="9" rx="1"/>
                 <rect x="3" y="16" width="7" height="5" rx="1"/>
             </svg>
-            Dashboard
         </a>
-        <div class="nav-divider"></div>
 
-        <a href="#" class="nav-link nav-link-logout" onclick="document.getElementById('logout-form').submit(); return false;">
+        <div class="sidebar-divider"></div>
+
+        <a href="/upload/" class="sidebar-icon-link" data-tooltip="Add Document">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+        </a>
+
+        <a href="#" class="sidebar-icon-link" data-tooltip="Help &amp; Tutorials">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+        </a>
+        {% endif %}
+    </nav>
+
+    <div class="sidebar-bottom">
+        {% if user.is_authenticated %}
+        <a href="#" class="sidebar-icon-link" data-tooltip="Logout" onclick="document.getElementById('logout-form').submit(); return false;">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
                 <path d="M16 17l5-5-5-5"/>
                 <path d="M21 12H9"/>
             </svg>
-            Logout
         </a>
         <form id="logout-form" action="{% url 'logout' %}" method="post" style="display:none;">
             {% csrf_token %}
         </form>
-
         {% else %}
-
-        <div class="nav-divider"></div>
-
-        <a href="/accounts/login/" class="nav-link">
+        <a href="/accounts/login/" class="sidebar-icon-link" data-tooltip="Staff Login">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
                 <path d="M10 17l5-5-5-5"/>
                 <path d="M15 12H3"/>
             </svg>
-            Staff Login
         </a>
         {% endif %}
     </div>
-</nav>
+</aside>
+
+{% if user.is_authenticated %}
+<header class="topbar">
+    <button class="topbar-icon-btn" title="Notifications">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+        <span class="notif-badge"></span>
+    </button>
+
+    <div class="topbar-divider"></div>
+
+    <div class="topbar-user">
+        <div class="avatar">{{ user.username|slice:":2"|upper }}</div>
+        <div class="user-text">
+            <span class="user-name">{{ user.username }}</span>
+            <span class="user-role">{% if user.is_superuser %}Superuser{% elif user.is_staff %}Staff{% else %}User{% endif %}</span>
+        </div>
+    </div>
+</header>
+{% endif %}
 
 <div class="container">
     {% block content %}{% endblock %}

@@ -4,6 +4,75 @@
 #IDK WHY ITS NAMED LIST.HTML BUT IT IS. I GUESS IT LISTS CONTRACTS.
 {% block content %}
 <style>
+  /* Secondary panel (stacked next to main sidebar) */
+  .doc-panel {
+    position: fixed;
+    top: 56px;
+    left: 72px;
+    bottom: 0;
+    width: 200px;
+    background: #f7f6f4;
+    border-right: 1px solid #e8e6e2;
+    padding: 24px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    overflow-y: auto;
+    z-index: 300;
+  }
+  .panel-heading {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #888;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .panel-list { list-style: none; display: flex; flex-direction: column; gap: 2px; }
+  .panel-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #555;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .panel-item:hover { background: #eceae6; }
+  .panel-item.active { background: #eceae6; color: #222; font-weight: 500; }
+  .panel-item svg { width: 15px; height: 15px; flex-shrink: 0; }
+  .panel-item.disabled { color: #bbb; cursor: not-allowed; }
+  .panel-item.disabled:hover { background: none; }
+  .panel-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .panel-dot.pending  { background: #bbb; }
+  .panel-dot.sent     { background: #f4c54d; }
+  .panel-dot.approved { background: #4caf82; }
+  .panel-add-btn {
+    background: none; border: none; color: #aaa; cursor: pointer;
+    display: flex; align-items: center;
+  }
+  .panel-add-btn:hover { color: #555; }
+  .panel-add-btn svg { width: 13px; height: 13px; }
+  .panel-tags-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .panel-tag {
+    font-size: 11px; font-weight: 500; padding: 3px 10px;
+    border-radius: 20px; cursor: not-allowed; opacity: 0.7;
+  }
+  .panel-tag.orange { background: #fde8ce; color: #c97a2e; }
+  .panel-tag.purple { background: #e9d5f8; color: #7c3aac; }
+  .panel-tag.teal   { background: #cdf2eb; color: #1f8a68; }
+
+  /* Push content over to make room for the panel */
+  .container { margin-left: 216px; max-width: none; padding-right: 2rem; }
+  @media (max-width: 900px) {
+    .doc-panel { display: none; }
+    .container { margin-left: 0; }
+  }
   .contracts-header {
     display: flex;
     align-items: center;
@@ -49,9 +118,16 @@
     gap: 10px;
   }
   .contract-icon {
-    font-size: 18px;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    color: #889aab;
   }
+  .contract-icon svg { width: 20px; height: 20px; }
+  .empty-state .icon svg { width: 48px; height: 48px; color: #c3ccd6; }
+  .enc-badge svg { width: 12px; height: 12px; }
+  .modal h3 { display: flex; align-items: center; gap: 8px; }
+  .modal h3 svg { width: 18px; height: 18px; color: #e53e3e; }
   .contract-seal-thumb {
     width: 32px;
     height: 32px;
@@ -96,14 +172,75 @@
   .status-dot.approved { background: #27c485; }
 
   /* Status dropdown */
-  .status-select {
-    font-size: 13px;
-    border: 1px solid #dde3ea;
-    border-radius: 6px;
-    padding: 4px 8px;
-    background: #fff;
+  /* Tags */
+  .tag-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 5px;
+  }
+  .doc-tag {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 9px;
+    border-radius: 20px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .doc-tag.orange { background: #fde8ce; color: #c97a2e; }
+  .doc-tag.purple { background: #e9d5f8; color: #7c3aac; }
+  .doc-tag.teal   { background: #cdf2eb; color: #1f8a68; }
+  .doc-tag.pink   { background: #fbd5e0; color: #b13c63; }
+  .doc-tag-remove {
     cursor: pointer;
-    color: #2d3a47;
+    font-size: 10px;
+    line-height: 1;
+    opacity: 0.6;
+  }
+  .doc-tag-remove:hover { opacity: 1; }
+  .tag-add-btn {
+    background: none;
+    border: 1px dashed #cdd5de;
+    border-radius: 20px;
+    font-size: 10px;
+    color: #889aab;
+    padding: 2px 9px;
+    cursor: pointer;
+    line-height: 1.4;
+  }
+  .tag-add-btn:hover { border-color: #889aab; color: #2d3a47; }
+  .tag-input {
+    font-size: 11px;
+    border: 1px solid #4f8ef7;
+    border-radius: 20px;
+    padding: 2px 10px;
+    outline: none;
+    width: 90px;
+    display: none;
+  }
+
+  /* Search bar */
+  .search-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff;
+    border: 1px solid #e0deda;
+    border-radius: 22px;
+    padding: 7px 16px;
+    max-width: 280px;
+  }
+  .search-wrap svg { width: 14px; height: 14px; color: #aaa; flex-shrink: 0; }
+  .search-input {
+    border: none;
+    outline: none;
+    font-size: 13px;
+    background: transparent;
+    font-family: inherit;
+    color: #444;
+    width: 100%;
   }
 
   /* Actions */
@@ -239,12 +376,86 @@
   }
 </style>
 
+<aside class="doc-panel">
+  <div class="panel-section">
+    <p class="panel-heading">Documents</p>
+    <ul class="panel-list">
+      <li class="panel-item active" id="filter-all" onclick="setStatusFilter(null, this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+          <polyline points="14 2 14 8 20 8"/>
+        </svg>
+        All Documents
+      </li>
+      <li class="panel-item disabled" title="Not available yet">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+        </svg>
+        Trash
+      </li>
+    </ul>
+  </div>
+
+  <div class="panel-section">
+    <p class="panel-heading">Filters</p>
+    <ul class="panel-list">
+      <li class="panel-item" data-filter="pending" onclick="setStatusFilter('pending', this)">
+        <span class="panel-dot pending"></span> Draft
+      </li>
+      <li class="panel-item" data-filter="sent" onclick="setStatusFilter('sent', this)">
+        <span class="panel-dot sent"></span> Sent
+      </li>
+      <li class="panel-item" data-filter="approved" onclick="setStatusFilter('approved', this)">
+        <span class="panel-dot approved"></span> Signed
+      </li>
+    </ul>
+  </div>
+
+  <div class="panel-section">
+    <p class="panel-heading">
+      Folders
+      <button class="panel-add-btn" title="Coming soon" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>
+    </p>
+    <ul class="panel-list">
+      <li class="panel-item disabled" title="Not available yet">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
+        </svg>
+        Folder
+      </li>
+    </ul>
+  </div>
+
+  <div class="panel-section">
+    <p class="panel-heading">Tags</p>
+    <div class="panel-tags-row">
+      <span class="panel-tag orange" title="Not available yet">Jobs</span>
+      <span class="panel-tag purple" title="Not available yet">Quotes</span>
+      <span class="panel-tag teal" title="Not available yet">Requests</span>
+    </div>
+  </div>
+</aside>
+
 <div class="contracts-header">
   <div>
     <h1>Contracts</h1>
     <p>Manage and view all uploaded procurement contracts</p>
   </div>
-  <a href="/upload/" class="btn btn-primary">+ Upload Contract</a>
+  <div style="display:flex; align-items:center; gap:12px;">
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="text" id="doc-search" class="search-input" placeholder="Search title or uploader..." oninput="applyFilters()">
+    </div>
+    <a href="/upload/" class="btn btn-primary">+ Upload Contract</a>
+  </div>
 </div>
 
 {% if contracts %}
@@ -262,7 +473,8 @@
   </thead>
   <tbody>
     {% for contract in contracts %}
-    <tr id="row-{{ contract.id }}">
+    <tr id="row-{{ contract.id }}" data-status="{{ contract.status }}"
+        data-search="{{ contract.title|lower }} {{ contract.recipient.username|default:''|lower }} {{ contract.tags|lower }}">
 
       <!-- Checkbox -->
       <td><input type="checkbox" class="row-check"></td>
@@ -273,7 +485,12 @@
           {% if contract.seal_image %}
             <img src="{{ contract.seal_image.url }}" class="contract-seal-thumb">
           {% else %}
-            <span class="contract-icon">📄</span>
+            <span class="contract-icon">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+    <polyline points="14 2 14 8 20 8"/>
+  </svg>
+</span>
           {% endif %}
 
           <div>
@@ -284,10 +501,35 @@
                    onkeydown="if(event.key==='Enter') submitRename({{ contract.id }}); if(event.key==='Escape') cancelRename({{ contract.id }});">
             <div style="margin-top:3px;">
               {% if contract.encrypted_cf %}
-                <span class="enc-badge encrypted">🔒 Encrypted</span>
+                <span class="enc-badge encrypted">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+                Encrypted
+              </span>
               {% else %}
-                <span class="enc-badge unencrypted">⚠ Not Encrypted</span>
+                <span class="enc-badge unencrypted">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+                    <path d="M12 9v4"/><path d="M12 17h.01"/>
+                  </svg>
+                  Not Encrypted
+                </span>
               {% endif %}
+            </div>
+            <div class="tag-row" id="tag-row-{{ contract.id }}" data-tags="{{ contract.tags }}">
+              {% for tag in contract.tag_list %}
+                <span class="doc-tag {% cycle 'orange' 'purple' 'teal' 'pink' %}">
+                  {{ tag }}
+                  <span class="doc-tag-remove" onclick="removeTag({{ contract.id }}, '{{ tag|escapejs }}')">&times;</span>
+                </span>
+              {% endfor %}
+              <button class="tag-add-btn" onclick="showTagInput({{ contract.id }})">+ tag</button>
+              <input class="tag-input" id="tag-input-{{ contract.id }}"
+                     placeholder="tag name"
+                     onkeydown="if(event.key==='Enter') submitTag({{ contract.id }}); if(event.key==='Escape') hideTagInput({{ contract.id }});"
+                     onblur="hideTagInput({{ contract.id }})">
             </div>
           </div>
         </div>
@@ -309,9 +551,9 @@
           <form method="post" action="/status/{{ contract.id }}/" style="margin:0;">
             {% csrf_token %}
             <select name="status" class="status-select" onchange="this.form.submit()">
-              <option value="pending"  {% if contract.status == 'pending'  %}selected{% endif %}>⬤ Pending</option>
+              <option value="pending"  {% if contract.status == 'pending'  %}selected{% endif %}>⬤ Draft</option>
               <option value="sent"     {% if contract.status == 'sent'     %}selected{% endif %}>⬤ Sent</option>
-              <option value="approved" {% if contract.status == 'approved' %}selected{% endif %}>⬤ Approved</option>
+              <option value="approved" {% if contract.status == 'approved' %}selected{% endif %}>⬤ Signed</option>
             </select>
           </form>
         {% else %}
@@ -378,12 +620,19 @@
       </td>
     </tr>
     {% endfor %}
+    <tr id="no-match-row" style="display:none;">
+      <td colspan="7" style="text-align:center; color:#889aab; padding:2.5rem;">No documents match this filter.</td>
+    </tr>
   </tbody>
 </table>
 
 {% else %}
 <div class="empty-state">
-  <div class="icon">📂</div>
+  <div class="icon">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
+  </svg>
+  </div>
   <p>No contracts uploaded yet.</p>
   <a href="/upload/" class="btn btn-primary">Upload your first contract</a>
 </div>
@@ -393,7 +642,15 @@
 <!-- Delete Modal -->
 <div class="modal-overlay" id="delete-modal">
   <div class="modal">
-    <h3>🗑 Delete Contract</h3>
+    <h3>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="3 6 5 6 21 6"/>
+        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+        <path d="M10 11v6M14 11v6"/>
+        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+      </svg>
+      Delete Contract
+    </h3>
     <p>Are you sure you want to delete <strong id="delete-contract-name"></strong>?
        This action cannot be undone.</p>
     <div class="modal-actions">
@@ -432,6 +689,79 @@
 
 <script>
 // @ts-nocheck
+// Panel status filter + search (combined)
+let currentStatusFilter = null;
+
+function setStatusFilter(status, el) {
+  document.querySelectorAll('.doc-panel .panel-item').forEach(item => item.classList.remove('active'));
+  el.classList.add('active');
+  currentStatusFilter = status;
+  applyFilters();
+}
+
+function applyFilters() {
+  const query = document.getElementById('doc-search').value.trim().toLowerCase();
+  const rows = document.querySelectorAll('.contracts-table tbody tr[data-status]');
+  let visibleCount = 0;
+
+  rows.forEach(row => {
+    const matchesStatus = !currentStatusFilter || row.dataset.status === currentStatusFilter;
+    const matchesSearch = !query || row.dataset.search.includes(query);
+    const show = matchesStatus && matchesSearch;
+    row.style.display = show ? '' : 'none';
+    if (show) visibleCount++;
+  });
+
+  document.getElementById('no-match-row').style.display = visibleCount === 0 ? '' : 'none';
+}
+
+// Tags
+function showTagInput(id) {
+  const input = document.getElementById('tag-input-' + id);
+  input.style.display = 'inline-block';
+  input.focus();
+}
+
+function hideTagInput(id) {
+  const input = document.getElementById('tag-input-' + id);
+  input.style.display = 'none';
+  input.value = '';
+}
+
+function saveTags(id, tagsArray) {
+  const cleaned = tagsArray.map(t => t.trim()).filter(Boolean);
+  fetch('/tag/' + id + '/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': '{{ csrf_token }}'
+    },
+    body: JSON.stringify({ tags: cleaned.join(',') })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) location.reload();
+  });
+}
+
+function submitTag(id) {
+  const input = document.getElementById('tag-input-' + id);
+  const newTag = input.value.trim();
+  if (!newTag) return hideTagInput(id);
+
+  const row = document.getElementById('tag-row-' + id);
+  const existing = row.dataset.tags ? row.dataset.tags.split(',') : [];
+  existing.push(newTag);
+  saveTags(id, existing);
+}
+
+function removeTag(id, tag) {
+  const row = document.getElementById('tag-row-' + id);
+  const existing = row.dataset.tags ? row.dataset.tags.split(',') : [];
+  const filtered = existing.filter(t => t.trim() !== tag.trim());
+  saveTags(id, filtered);
+}
+
 // Select all checkbox
 document.getElementById('select-all').addEventListener('change', function() {
   document.querySelectorAll('.row-check').forEach(cb => cb.checked = this.checked);
