@@ -247,6 +247,126 @@
         justify-content: center;
         flex-shrink: 0;
     }
+
+    /* ── Verification Layout (doc preview + status panel) ── */
+    /* Breaks out of the 600px page wrapper to fill the viewport width */
+    .verify-layout {
+        display: flex;
+        gap: 1.5rem;
+        align-items: stretch;
+        width: 100vw;
+        max-width: 100vw;
+        position: relative;
+        left: 50%;
+        right: 50%;
+        margin-left: -50vw;
+        margin-right: -50vw;
+        padding: 0 2.5rem;
+        box-sizing: border-box;
+        height: calc(100vh - 160px);
+        min-height: 560px;
+    }
+    @media (max-width: 900px) {
+        .verify-layout {
+            flex-direction: column;
+            height: auto;
+            padding: 0 1rem;
+        }
+    }
+    .doc-preview-panel {
+        flex: 1.4;
+        background: #f4f5f7;
+        border-radius: 14px;
+        border: 1px solid #eef0f4;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        min-height: 480px;
+        height: 100%;
+    }
+    .doc-preview-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        font-size: 12px;
+        color: #889aab;
+        background: #fff;
+        border-bottom: 1px solid #eef0f4;
+    }
+    .doc-preview-body {
+        flex: 1;
+        background: #e9ebef;
+        display: flex;
+        min-height: 0;
+    }
+    .doc-preview-body iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+        background: white;
+    }
+    .status-panel {
+        flex: 1;
+        background: white;
+        border-radius: 14px;
+        border: 1px solid #eef0f4;
+        padding: 2rem 1.75rem;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 480px;
+        overflow-y: auto;
+        justify-content: center;
+    }
+    @media (max-width: 900px) {
+        .status-panel { min-height: unset; height: auto; }
+    }
+    .status-panel-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #ea580c;
+        font-weight: 600;
+        font-size: 14px;
+        margin-bottom: 1.25rem;
+    }
+    .status-title {
+        font-size: 13px;
+        color: #889aab;
+        text-align: center;
+        margin-bottom: 14px;
+    }
+    .status-spinner-main {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 20px;
+    }
+    .status-spinner-main svg { animation: spin 0.9s linear infinite; }
+    .status-step {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 10px 0;
+        border-bottom: 1px solid #f4f5f7;
+    }
+    .status-step:last-child { border-bottom: none; }
+    .step-icon {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        margin-top: 1px;
+    }
+    .step-icon svg { width: 100%; height: 100%; }
+    .step-icon.active svg { animation: spin 0.9s linear infinite; }
+    .step-label {
+        font-size: 13.5px;
+        color: #aabbcc;
+        line-height: 1.4;
+    }
+    .status-step.done .step-label { color: #1a1a2e; }
+    .status-step.active .step-label { color: #1a1a2e; font-weight: 500; }
 </style>
 
 <div style="max-width: 600px; margin: 0 auto;">
@@ -307,60 +427,95 @@
         </form>
     </div>
 
-    <!-- Loading Screen -->
+    <!-- Verifying Screen: document preview + status panel -->
     <div id="loading-screen" style="display:none;">
-        <div class="card" style="padding: 0; overflow: hidden;">
+        <div class="verify-layout">
 
-            <div class="scan-status" style="padding: 1.5rem 1.5rem 0;">
-                <div class="scan-status-icon">
-                    <svg width="26" height="26" viewBox="0 0 26 26" fill="none"
-                        xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="13" cy="13" r="10" stroke="#dde6ff" stroke-width="3"/>
-                        <path d="M13 3 A10 10 0 0 1 23 13" stroke="#3b5bdb" stroke-width="3"
-                            stroke-linecap="round"/>
+            <!-- Document preview (the uploaded "working contract") -->
+            <div class="doc-preview-panel">
+                <div class="doc-preview-header">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14,2 14,8 20,8"/>
                     </svg>
-                </div>          
-                <strong>Analyzing Document</strong>
-                <p id="loading-status">Initializing scan...</p>
-            </div>
-
-            <div style="padding: 0 1.5rem 6px;">
-                <div class="progress-wrap">
-                    <div class="progress-bar" id="progress-bar"></div>
+                    <span id="doc-page-count">Loading document…</span>
+                </div>
+                <div class="doc-preview-body">
+                    <iframe id="doc-preview-frame" title="Uploaded document preview"></iframe>
                 </div>
             </div>
 
-            <!-- Skeleton wave rows -->
-            <div class="skeleton-wrap show">
-                <div class="skeleton-row">
-                    <div class="skeleton-icon"></div>
-                    <div class="skeleton-lines">
-                        <div class="skeleton-line medium"></div>
-                        <div class="skeleton-line short"></div>
+            <!-- Verification status -->
+            <div class="status-panel">
+                <div class="status-panel-header">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                         stroke="#ea580c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="11" width="18" height="10" rx="2"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                    Verify
+                </div>
+                <div class="status-title">Verification Status</div>
+                <div class="status-spinner-main">
+                    <svg width="34" height="34" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="13" cy="13" r="10" stroke="#eef0f4" stroke-width="3"/>
+                        <path d="M13 3 A10 10 0 0 1 23 13" stroke="#ea580c" stroke-width="3" stroke-linecap="round"/>
+                    </svg>
+                </div>
+
+                <div class="status-steps" id="status-steps">
+                    <div class="status-step active" data-step="0">
+                        <div class="step-icon active">
+                            <svg viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="13" cy="13" r="10" stroke="#eef0f4" stroke-width="3"/>
+                                <path d="M13 3 A10 10 0 0 1 23 13" stroke="#3b5bdb" stroke-width="3" stroke-linecap="round"/>
+                            </svg>
+                        </div>
+                        <div class="step-label">Checking document authenticity...</div>
+                    </div>
+                    <div class="status-step" data-step="1">
+                        <div class="step-icon pending">
+                            <svg viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="13" cy="13" r="10" stroke="#dde1e8" stroke-width="3"/>
+                            </svg>
+                        </div>
+                        <div class="step-label">Comparing this document with the official barangay record</div>
+                    </div>
+                    <div class="status-step" data-step="2">
+                        <div class="step-icon pending">
+                            <svg viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="13" cy="13" r="10" stroke="#dde1e8" stroke-width="3"/>
+                            </svg>
+                        </div>
+                        <div class="step-label">Reviewing document contents for unauthorized changes...</div>
+                    </div>
+                    <div class="status-step" data-step="3">
+                        <div class="step-icon pending">
+                            <svg viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="13" cy="13" r="10" stroke="#dde1e8" stroke-width="3"/>
+                            </svg>
+                        </div>
+                        <div class="step-label">Validating document integrity and approval status...</div>
+                    </div>
+                    <div class="status-step" data-step="4">
+                        <div class="step-icon pending">
+                            <svg viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="13" cy="13" r="10" stroke="#dde1e8" stroke-width="3"/>
+                            </svg>
+                        </div>
+                        <div class="step-label">Finalizing verification results...</div>
                     </div>
                 </div>
-                <div class="skeleton-row">
-                    <div class="skeleton-icon" style="animation-delay:0.2s"></div>
-                    <div class="skeleton-lines">
-                        <div class="skeleton-line long"></div>
-                        <div class="skeleton-line medium"></div>
+
+                <div style="padding-top: 4px;">
+                    <div class="progress-wrap">
+                        <div class="progress-bar" id="progress-bar"></div>
                     </div>
-                </div>
-                <div class="skeleton-row">
-                    <div class="skeleton-icon" style="animation-delay:0.4s"></div>
-                    <div class="skeleton-lines">
-                        <div class="skeleton-line full"></div>
-                        <div class="skeleton-line short"></div>
-                    </div>
-                </div>
-                <div class="skeleton-row">
-                    <div class="skeleton-icon" style="animation-delay:0.6s"></div>
-                    <div class="skeleton-lines">
-                        <div class="skeleton-line medium"></div>
-                        <div class="skeleton-line long"></div>
-                    </div>
+                    <p id="loading-status" style="font-size:11px; color:#aabbcc; font-family:monospace; margin-top:8px; min-height:14px;"></p>
                 </div>
             </div>
+
         </div>
     </div>
 
@@ -534,6 +689,27 @@ const hasResult = "{{ result|default:'' }}" !== '';
 
 
 
+function updateStatusSteps(pct) {
+    const steps = document.querySelectorAll('.status-step');
+    const activeIndex = Math.min(steps.length - 1, Math.floor(pct / (100 / steps.length)));
+    steps.forEach(function(step, i) {
+        const icon = step.querySelector('.step-icon');
+        step.classList.remove('active', 'done');
+        if (i < activeIndex) {
+            step.classList.add('done');
+            icon.className = 'step-icon done';
+            icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20,6 9,17 4,12"/></svg>';
+        } else if (i === activeIndex) {
+            step.classList.add('active');
+            icon.className = 'step-icon active';
+            icon.innerHTML = '<svg viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="13" cy="13" r="10" stroke="#eef0f4" stroke-width="3"/><path d="M13 3 A10 10 0 0 1 23 13" stroke="#3b5bdb" stroke-width="3" stroke-linecap="round"/></svg>';
+        } else {
+            icon.className = 'step-icon pending';
+            icon.innerHTML = '<svg viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="13" cy="13" r="10" stroke="#dde1e8" stroke-width="3"/></svg>';
+        }
+    });
+}
+
 document.getElementById('verify-form').addEventListener('submit', function(e) {
     if (!hasResult) {
         const demoLog = "{{ debug_log|default:'[]'|escapejs }}" !== '[]' 
@@ -551,6 +727,12 @@ document.getElementById('verify-form').addEventListener('submit', function(e) {
         document.getElementById('upload-card').style.display = 'none';
         document.getElementById('loading-screen').style.display = 'block';
 
+        // Preview the uploaded document (the "working contract") while verification runs
+        const objectUrl = URL.createObjectURL(file);
+        document.getElementById('doc-preview-frame').src = objectUrl;
+        document.getElementById('doc-page-count').textContent =
+            estimatedPages + (estimatedPages === 1 ? ' Page' : ' Pages');
+
         const totalTime = 12000 + ((estimatedPages - 1) * 2000);
 
         if (isDemoMode) {
@@ -563,6 +745,7 @@ document.getElementById('verify-form').addEventListener('submit', function(e) {
                     document.getElementById('loading-status').textContent = line;
                     const pct = Math.min(((i + 1) / cleanedLines.length) * 95, 95);
                     document.getElementById('progress-bar').style.width = pct + '%';
+                    updateStatusSteps(pct);
                 }, i * interval);
             });
 
@@ -623,6 +806,7 @@ document.getElementById('verify-form').addEventListener('submit', function(e) {
                     document.getElementById('loading-status').textContent = step.msg;
                     const pct = Math.min(((step.time / totalTime) * 100), 95);
                     document.getElementById('progress-bar').style.width = pct + '%';
+                    updateStatusSteps(pct);
                 }, step.time);
             });
         }
@@ -630,6 +814,7 @@ document.getElementById('verify-form').addEventListener('submit', function(e) {
         setTimeout(function() {
             document.getElementById('loading-status').textContent = 'Submitting for final verification...';
             document.getElementById('progress-bar').style.width = '98%';
+            updateStatusSteps(100);
             setTimeout(function() { form.submit(); }, 500);
         }, totalTime);
     }
