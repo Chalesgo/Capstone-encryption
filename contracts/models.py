@@ -3,6 +3,16 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator
 
+class Folder(models.Model):
+    name = models.CharField(max_length=100)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='folders')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
 
 def validate_pdf_signature(file):
     """Model-level check — catches uploads made outside ContractForm (e.g. via /admin/)."""
@@ -38,6 +48,7 @@ class Contract(models.Model):
         ('approved', 'Signed'),
     ]
     recipient = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='contracts')
+    folder = models.ForeignKey('Folder', on_delete=models.SET_NULL, null=True, blank=True, related_name='contracts')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     modified_at = models.DateTimeField(auto_now=True)
     tags = models.CharField(max_length=255, blank=True, help_text="Comma-separated tags")

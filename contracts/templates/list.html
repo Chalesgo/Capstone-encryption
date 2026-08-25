@@ -56,6 +56,38 @@
     background: none; border: none; color: #aaa; cursor: pointer;
     display: flex; align-items: center;
   }
+    .folder-item.drag-over { background: #dfe9ff; outline: 1px dashed #4f8ef7; }
+  .folder-rename-input {
+    font-size: 13px;
+    border: 1px solid #4f8ef7;
+    border-radius: 5px;
+    padding: 2px 6px;
+    outline: none;
+    width: 100%;
+    display: none;
+  }
+  
+    .context-menu {
+    display: none;
+    position: fixed;
+    background: #fff;
+    border: 1px solid #e0deda;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    padding: 4px;
+    z-index: 2000;
+    min-width: 150px;
+  }
+  .context-menu.active { display: block; }
+  .context-menu-item {
+    padding: 8px 12px;
+    font-size: 13px;
+    color: #2d3a47;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .context-menu-item:hover { background: #f0f2f5; }
+  .context-menu-item.danger { color: #e53e3e; }
   .panel-add-btn:hover { color: #555; }
   .panel-add-btn svg { width: 13px; height: 13px; }
   .panel-tags-row { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -170,6 +202,59 @@
   .status-dot.pending  { background: #aab4be; }
   .status-dot.sent     { background: #f5a623; }
   .status-dot.approved { background: #27c485; }
+
+    .status-select {
+    border: 1px solid #e0deda;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    background: #fff;
+  }
+
+  .status-dropdown { position: relative; display: inline-block; }
+.status-select-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #e0deda;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 13px;
+  font-weight: 500;
+  background: #fff;
+  cursor: pointer;
+  color: #2d3a47;
+  width: 100px;
+  justify-content: space-between;
+}
+.status-select-btn:hover { background: #fafbfc; }
+.status-chevron { width: 12px; height: 12px; color: #aab4be; margin-left: 2px; }
+.status-dropdown-menu {
+  display: none;
+  position: fixed;
+  background: #fff;
+  border: 1px solid #e0deda;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  padding: 4px;
+  min-width: 130px;
+  z-index: 2000;
+  list-style: none;
+}
+.status-dropdown-menu.open { display: block; }
+.status-dropdown-menu li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #2d3a47;
+  cursor: pointer;
+}
+.status-dropdown-menu li:hover { background: #f0f2f5; }
 
   /* Status dropdown */
   /* Tags */
@@ -380,7 +465,7 @@
   <div class="panel-section">
     <p class="panel-heading">Documents</p>
     <ul class="panel-list">
-      <li class="panel-item active" id="filter-all" onclick="setStatusFilter(null, this)">
+            <li class="panel-item active" id="filter-all" onclick="currentFolderFilter=null; setStatusFilter(null, this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
           <polyline points="14 2 14 8 20 8"/>
@@ -415,22 +500,33 @@
   <div class="panel-section">
     <p class="panel-heading">
       Folders
-      <button class="panel-add-btn" title="Coming soon" disabled>
+      <button class="panel-add-btn" title="New folder" onclick="createFolder()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
       </button>
     </p>
-    <ul class="panel-list">
-      <li class="panel-item disabled" title="Not available yet">
+    <ul class="panel-list" id="folder-list">
+      {% for folder in folders %}
+            <li class="panel-item folder-item" id="folder-{{ folder.id }}" data-folder-id="{{ folder.id }}"
+          onclick="setFolderFilter({{ folder.id }}, this)"
+          oncontextmenu="showFolderContextMenu(event, {{ folder.id }})"
+          ondragover="event.preventDefault(); this.classList.add('drag-over');"
+          ondragleave="this.classList.remove('drag-over');"
+          ondrop="dropOnFolder(event, {{ folder.id }})">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
         </svg>
-        Folder
+        <span class="folder-name-text" id="folder-name-{{ folder.id }}">{{ folder.name }}</span>
+        <input class="folder-rename-input" id="folder-rename-input-{{ folder.id }}"
+               value="{{ folder.name }}"
+               onclick="event.stopPropagation()"
+               onblur="submitFolderRename({{ folder.id }})"
+               onkeydown="if(event.key==='Enter') submitFolderRename({{ folder.id }}); if(event.key==='Escape') cancelFolderRename({{ folder.id }});">
       </li>
+      {% endfor %}
     </ul>
   </div>
-
   <div class="panel-section">
     <p class="panel-heading">Tags</p>
     <div class="panel-tags-row">
@@ -440,6 +536,19 @@
     </div>
   </div>
 </aside>
+
+<div id="folder-context-menu" class="context-menu">
+  <div class="context-menu-item" onclick="contextMenuRename()">Rename</div>
+  <div class="context-menu-item danger" onclick="contextMenuDelete()">Delete</div>
+</div>
+
+<div class="modal-overlay" id="folder-delete-modal">
+  <div class="modal">
+    <h3>Delete Folder</h3>
+    <p id="folder-delete-message"></p>
+    <div class="modal-actions" id="folder-delete-actions"></div>
+  </div>
+</div>
 
 <div class="contracts-header">
   <div>
@@ -466,15 +575,17 @@
       <th>Document Name</th>
       <th>Recipient</th>
       <th>Date Created ↑</th>
-      <th>Status</th>
+      <th style="width:120px;">Status</th>
       <th>Modified</th>
       <th></th>
     </tr>
   </thead>
   <tbody>
     {% for contract in contracts %}
-    <tr id="row-{{ contract.id }}" data-status="{{ contract.status }}"
-        data-search="{{ contract.title|lower }} {{ contract.recipient.username|default:''|lower }} {{ contract.tags|lower }}">
+        <tr id="row-{{ contract.id }}" data-status="{{ contract.status }}" data-folder="{{ contract.folder_id|default:'' }}"
+        data-search="{{ contract.title|lower }} {{ contract.recipient.username|default:''|lower }} {{ contract.tags|lower }}"
+        draggable="true"
+        ondragstart="dragContractStart(event, {{ contract.id }})">
 
       <!-- Checkbox -->
       <td><input type="checkbox" class="row-check"></td>
@@ -548,20 +659,30 @@
       <!-- Status -->
       <td>
         {% if user.is_staff or user.is_superuser %}
-          <form method="post" action="/status/{{ contract.id }}/" style="margin:0;">
-            {% csrf_token %}
-            <select name="status" class="status-select" onchange="this.form.submit()">
-              <option value="pending"  {% if contract.status == 'pending'  %}selected{% endif %}>⬤ Draft</option>
-              <option value="sent"     {% if contract.status == 'sent'     %}selected{% endif %}>⬤ Sent</option>
-              <option value="approved" {% if contract.status == 'approved' %}selected{% endif %}>⬤ Signed</option>
-            </select>
-          </form>
-        {% else %}
-          <span class="status-badge">
-            <span class="status-dot {{ contract.status }}"></span>
-            {{ contract.get_status_display }}
-          </span>
-        {% endif %}
+  <div class="status-dropdown" data-contract="{{ contract.id }}">
+    <button type="button" class="status-select-btn" onclick="toggleStatusDropdown(event, {{ contract.id }})">
+      <span class="status-dot {{ contract.status }}" id="status-dot-{{ contract.id }}"></span>
+      <span id="status-label-{{ contract.id }}">{{ contract.get_status_display }}</span>
+      <svg class="status-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="6 9 12 15 18 9"/>
+      </svg>
+    </button>
+    <ul class="status-dropdown-menu" id="status-menu-{{ contract.id }}">
+      <li onclick="selectStatus({{ contract.id }}, 'pending', 'Draft')"><span class="status-dot pending"></span>Draft</li>
+      <li onclick="selectStatus({{ contract.id }}, 'sent', 'Sent')"><span class="status-dot sent"></span>Sent</li>
+      <li onclick="selectStatus({{ contract.id }}, 'approved', 'Signed')"><span class="status-dot approved"></span>Signed</li>
+    </ul>
+  </div>
+  <form id="status-form-{{ contract.id }}" method="post" action="/status/{{ contract.id }}/" style="display:none;">
+    {% csrf_token %}
+    <input type="hidden" name="status" id="status-input-{{ contract.id }}" value="{{ contract.status }}">
+  </form>
+{% else %}
+  <span class="status-badge">
+    <span class="status-dot {{ contract.status }}"></span>
+    {{ contract.get_status_display }}
+  </span>
+{% endif %}
       </td>
 
       <!-- Modified -->
@@ -704,10 +825,11 @@ function applyFilters() {
   const rows = document.querySelectorAll('.contracts-table tbody tr[data-status]');
   let visibleCount = 0;
 
-  rows.forEach(row => {
+    rows.forEach(row => {
     const matchesStatus = !currentStatusFilter || row.dataset.status === currentStatusFilter;
+    const matchesFolder = !currentFolderFilter || String(row.dataset.folder) === String(currentFolderFilter);
     const matchesSearch = !query || row.dataset.search.includes(query);
-    const show = matchesStatus && matchesSearch;
+    const show = matchesStatus && matchesFolder && matchesSearch;
     row.style.display = show ? '' : 'none';
     if (show) visibleCount++;
   });
@@ -799,6 +921,11 @@ function closePdfPreview() {
   document.getElementById('pdf-frame').src = '';
 }
 
+function setStatusColor(select) {
+  const colors = { pending: '#aab4be', sent: '#d98c1a', approved: '#1fa06b' };
+  select.style.color = colors[select.value] || '#2d3a47';
+}
+
 function submitRename(id) {
   const titleEl = document.getElementById('title-text-' + id);
   const input   = document.getElementById('rename-input-' + id);
@@ -836,6 +963,249 @@ function openDeleteModal(contractId, contractName) {
 }
 function closeDeleteModal() {
   document.getElementById('delete-modal').classList.remove('active');
+}
+
+// ── Folders ──
+let currentFolderFilter = null;
+
+function createFolder() {
+  fetch('/folder/create/', {
+    method: 'POST',
+    headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (!data.success) return;
+    const li = document.createElement('li');
+    li.className = 'panel-item folder-item';
+    li.id = 'folder-' + data.id;
+    li.dataset.folderId = data.id;
+        li.onclick = () => setFolderFilter(data.id, li);
+    li.oncontextmenu = (e) => showFolderContextMenu(e, data.id);
+    li.ondragover = (e) => { e.preventDefault(); li.classList.add('drag-over'); };
+    li.ondragleave = () => li.classList.remove('drag-over');
+    li.ondrop = (e) => dropOnFolder(e, data.id);
+    li.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
+      </svg>
+      <span class="folder-name-text" id="folder-name-${data.id}">${data.name}</span>
+      <input class="folder-rename-input" id="folder-rename-input-${data.id}" value="${data.name}"
+             onclick="event.stopPropagation()"
+             onblur="submitFolderRename(${data.id})"
+             onkeydown="if(event.key==='Enter') submitFolderRename(${data.id}); if(event.key==='Escape') cancelFolderRename(${data.id});">
+    `;
+    document.getElementById('folder-list').appendChild(li);
+    startFolderRename(data.id);
+  });
+}
+
+function startFolderRename(id) {
+  document.getElementById('folder-name-' + id).style.display = 'none';
+  const input = document.getElementById('folder-rename-input-' + id);
+  input.style.display = 'inline-block';
+  input.focus();
+  input.select();
+}
+
+function cancelFolderRename(id) {
+  const nameEl = document.getElementById('folder-name-' + id);
+  const input  = document.getElementById('folder-rename-input-' + id);
+  input.value = nameEl.textContent.trim();
+  input.style.display = 'none';
+  nameEl.style.display = 'inline';
+}
+
+function submitFolderRename(id) {
+  const nameEl = document.getElementById('folder-name-' + id);
+  const input  = document.getElementById('folder-rename-input-' + id);
+  const newName = input.value.trim();
+
+  if (!newName) return cancelFolderRename(id);
+
+  fetch('/folder/rename/' + id + '/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': '{{ csrf_token }}'
+    },
+    body: JSON.stringify({ name: newName })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      nameEl.textContent = data.name;
+      input.value = data.name;
+    }
+    input.style.display = 'none';
+    nameEl.style.display = 'inline';
+  })
+  .catch(() => cancelFolderRename(id));
+}
+
+function setFolderFilter(folderId, el) {
+  document.querySelectorAll('.doc-panel .panel-item').forEach(item => item.classList.remove('active'));
+  el.classList.add('active');
+  currentFolderFilter = folderId;
+  currentStatusFilter = null;
+  applyFilters();
+}
+
+
+function toggleStatusDropdown(event, id) {
+  event.stopPropagation();
+  const menu = document.getElementById('status-menu-' + id);
+  const isOpen = menu.classList.contains('open');
+
+  document.querySelectorAll('.status-dropdown-menu.open').forEach(m => m.classList.remove('open'));
+
+  if (!isOpen) {
+    const btnRect = event.currentTarget.getBoundingClientRect();
+    menu.style.left = btnRect.left + 'px';
+    menu.style.top = (btnRect.bottom + 4) + 'px';
+    menu.classList.add('open');
+  }
+}
+
+function selectStatus(id, status, label) {
+  document.getElementById('status-menu-' + id).classList.remove('open');
+  document.getElementById('status-dot-' + id).className = 'status-dot ' + status;
+  document.getElementById('status-label-' + id).textContent = label;
+  document.getElementById('status-input-' + id).value = status;
+  document.getElementById('status-form-' + id).submit();
+}
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.status-dropdown')) {
+    document.querySelectorAll('.status-dropdown-menu.open').forEach(m => m.classList.remove('open'));
+  }
+});
+// ── Drag contracts into folders ──
+let draggedContractId = null;
+
+function dragContractStart(event, contractId) {
+  draggedContractId = contractId;
+  event.dataTransfer.effectAllowed = 'move';
+}
+
+function dropOnFolder(event, folderId) {
+  event.preventDefault();
+  event.currentTarget.classList.remove('drag-over');
+  if (!draggedContractId) return;
+
+  const contractId = draggedContractId;
+  draggedContractId = null;
+
+  fetch('/folder/assign/' + contractId + '/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': '{{ csrf_token }}'
+    },
+    body: JSON.stringify({ folder_id: folderId })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      const row = document.getElementById('row-' + contractId);
+      if (row) row.dataset.folder = folderId;
+      applyFilters();
+    }
+  });
+}
+
+// ── Folder context menu ──
+let contextMenuFolderId = null;
+
+function showFolderContextMenu(event, folderId) {
+  event.preventDefault();
+  event.stopPropagation();
+  contextMenuFolderId = folderId;
+  const menu = document.getElementById('folder-context-menu');
+  menu.style.left = event.pageX + 'px';
+  menu.style.top = event.pageY + 'px';
+  menu.classList.add('active');
+}
+
+document.addEventListener('click', () => {
+  document.getElementById('folder-context-menu').classList.remove('active');
+});
+
+function contextMenuRename() {
+  const id = contextMenuFolderId;
+  document.getElementById('folder-context-menu').classList.remove('active');
+  if (id) startFolderRename(id);
+}
+
+const IS_SUPERUSER = {% if user.is_superuser %}true{% else %}false{% endif %};
+
+function contextMenuDelete() {
+  const id = contextMenuFolderId;
+  document.getElementById('folder-context-menu').classList.remove('active');
+  if (!id) return;
+
+  const itemCount = document.querySelectorAll(`tr[data-folder="${id}"]`).length;
+  const modal = document.getElementById('folder-delete-modal');
+  const msg = document.getElementById('folder-delete-message');
+  const actions = document.getElementById('folder-delete-actions');
+
+  if (itemCount > 0 && !IS_SUPERUSER) {
+    msg.textContent = `This folder contains ${itemCount} document${itemCount > 1 ? 's' : ''}. Only an admin can delete a folder that still has documents in it — move or remove the documents first.`;
+    actions.innerHTML = `<button class="btn btn-outline" onclick="closeFolderDeleteModal()">OK</button>`;
+  } else if (itemCount > 0 && IS_SUPERUSER) {
+    msg.textContent = `This folder contains ${itemCount} document${itemCount > 1 ? 's' : ''}. What would you like to do?`;
+    actions.innerHTML = `
+      <button class="btn btn-outline" onclick="closeFolderDeleteModal()">Cancel</button>
+      <button class="btn btn-outline" onclick="submitDeleteFolder('unassign')">Keep documents, delete folder only</button>
+      <button class="btn btn-danger" onclick="submitDeleteFolder('delete_items')">Delete documents too</button>
+    `;
+  } else {
+    msg.textContent = 'Are you sure you want to delete this folder?';
+    actions.innerHTML = `
+      <button class="btn btn-outline" onclick="closeFolderDeleteModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="submitDeleteFolder('unassign')">Yes, Delete</button>
+    `;
+  }
+
+  modal.classList.add('active');
+}
+
+function closeFolderDeleteModal() {
+  document.getElementById('folder-delete-modal').classList.remove('active');
+}
+
+function submitDeleteFolder(mode) {
+  const id = contextMenuFolderId;
+  fetch('/folder/delete/' + id + '/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': '{{ csrf_token }}'
+    },
+    body: JSON.stringify({ mode: mode })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (!data.success) {
+      alert('This folder has documents in it and can only be deleted by an admin.');
+      closeFolderDeleteModal();
+      return;
+    }
+    const li = document.getElementById('folder-' + id);
+    if (li) li.remove();
+
+    if (mode === 'delete_items') {
+      document.querySelectorAll(`tr[data-folder="${id}"]`).forEach(row => row.remove());
+    } else {
+      document.querySelectorAll(`tr[data-folder="${id}"]`).forEach(row => row.dataset.folder = '');
+    }
+
+    closeFolderDeleteModal();
+    if (String(currentFolderFilter) === String(id)) {
+      currentFolderFilter = null;
+      applyFilters();
+    }
+  });
 }
 </script>
 {% endblock %}

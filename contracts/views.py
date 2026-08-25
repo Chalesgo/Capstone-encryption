@@ -2,7 +2,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
-from .models import Contract
+from .models import Contract, Folder
 from .forms import ContractForm, RegisterForm
 from .utils import (
     generate_file_hash,
@@ -132,7 +132,8 @@ def encrypt_contract(request, contract_id):
 @login_required
 def contract_list(request):
     contracts = Contract.objects.all()
-    return render(request, 'list.html', {'contracts': contracts})
+    folders = Folder.objects.filter(owner=request.user)
+    return render(request, 'list.html', {'contracts': contracts, 'folders': folders})
 
 @login_required
 def delete_contract(request, contract_id):
@@ -442,8 +443,80 @@ def tag_contract(request, pk):
         return JsonResponse({'success': True, 'tags': contract.tags, 'tag_list': contract.tag_list()})
     return JsonResponse({'success': False}, status=400)
 
-# New status view
+@login_required
+def create_folder(request):
+    if request.method == 'POST':
+        folder = Folder.objects.create(name='Untitled Folder', owner=request.user)
+        return JsonResponse({'success': True, 'id': folder.id, 'name': folder.name})
+    return JsonResponse({'success': False}, status=400)
 
+
+@login_required
+def rename_folder(request, pk):
+    if request.method == 'POST':
+        import json
+        folder = get_object_or_404(Folder, pk=pk, owner=request.user)
+        data = json.loads(request.body)
+        new_name = data.get('name', '').strip()
+        if new_name:
+            folder.name = new_name
+            folder.save()
+        return JsonResponse({'success': True, 'name': folder.name})
+    return JsonResponse({'success': False}, status=400)
+
+
+@login_required
+def assign_folder(request, contract_id):
+    if request.method == 'POST':
+        import json
+        contract = get_object_or_404(Contract, pk=contract_id)
+        data = json.loads(request.body)
+        folder_id = data.get('folder_id')
+        if folder_id:
+            folder = get_object_or_404(Folder, pk=folder_id, owner=request.user)
+            contract.folder = folder
+        else:
+            contract.folder = None
+        contract.save()
+        return JsonResponse({'success': True, 'folder_id': contract.folder_id})
+    return JsonResponse({'success': False}, status=400)
+
+@login_required
+def delete_folder(request, pk):
+    if request.method == 'POST':
+        import json
+        folder = get_object_or_404(Folder, pk=pk, owner=request.user)
+        data = json.loads(request.body)
+        mode = data.get('mode', 'unassign')  # 'unassign' or 'delete_items'
+        has_items = folder.contracts.exists()
+
+        if has_items and not request.user.is_superuser:
+            return JsonResponse({'success': False, 'error': 'not_allowed'}, status=403)
+
+        if mode == 'delete_items':
+            if not request.user.is_superuser:
+                return JsonResponse({'success': False, 'error': 'not_allowed'}, status=403)
+            for contract in folder.contracts.all():
+                if contract.file:
+                    pdf_path = os.path.join(settings.MEDIA_ROOT, str(contract.file))
+                    if os.path.isfile(pdf_path):
+                        os.remove(pdf_path)
+                if contract.seal_image:
+                    seal_path = os.path.join(settings.MEDIA_ROOT, str(contract.seal_image))
+                    if os.path.isfile(seal_path):
+                        os.remove(seal_path)
+                qr_path = os.path.join(settings.MEDIA_ROOT, 'seals', f'qr_{contract.id}.png')
+                if os.path.isfile(qr_path):
+                    os.remove(qr_path)
+                log_activity(request, 'deleted', contract=contract, note=contract.title)
+                contract.delete()
+        else:
+            folder.contracts.update(folder=None)
+
+        folder.delete()
+        return JsonResponse({'success': True})
+    return JsonResponse({'success': False}, status=400)
+# New status view
 @login_required
 def update_status(request, pk):
     if request.method == 'POST':
