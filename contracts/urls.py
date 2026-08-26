@@ -17,4 +17,9 @@ urlpatterns = [
     path('folder/rename/<int:pk>/', views.rename_folder, name='rename_folder'),
     path('folder/assign/<int:contract_id>/', views.assign_folder, name='assign_folder'),
     path('folder/delete/<int:pk>/', views.delete_folder, name='delete_folder'),
+    path('contract/<int:contract_id>/upload-signed/', views.upload_signed_scan, name='upload_signed_scan'),
+    path('contract/<int:contract_id>/add-revision/', views.add_revision, name='add_revision'),
+    path('contract/<int:pk>/publish/', views.publish_contract, name='publish_contract'),
+    path('contract/<int:contract_id>/version-history/', views.contract_version_history, name='contract_version_history'),
 ]
+

@@ -90,14 +90,7 @@
   .context-menu-item.danger { color: #e53e3e; }
   .panel-add-btn:hover { color: #555; }
   .panel-add-btn svg { width: 13px; height: 13px; }
-  .panel-tags-row { display: flex; flex-wrap: wrap; gap: 6px; }
-  .panel-tag {
-    font-size: 11px; font-weight: 500; padding: 3px 10px;
-    border-radius: 20px; cursor: not-allowed; opacity: 0.7;
-  }
-  .panel-tag.orange { background: #fde8ce; color: #c97a2e; }
-  .panel-tag.purple { background: #e9d5f8; color: #7c3aac; }
-  .panel-tag.teal   { background: #cdf2eb; color: #1f8a68; }
+
 
   /* Push content over to make room for the panel */
   .container { margin-left: 216px; max-width: none; padding-right: 2rem; }
@@ -257,54 +250,6 @@
 .status-dropdown-menu li:hover { background: #f0f2f5; }
 
   /* Status dropdown */
-  /* Tags */
-  .tag-row {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 5px;
-    margin-top: 5px;
-  }
-  .doc-tag {
-    font-size: 10px;
-    font-weight: 600;
-    padding: 2px 9px;
-    border-radius: 20px;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-  }
-  .doc-tag.orange { background: #fde8ce; color: #c97a2e; }
-  .doc-tag.purple { background: #e9d5f8; color: #7c3aac; }
-  .doc-tag.teal   { background: #cdf2eb; color: #1f8a68; }
-  .doc-tag.pink   { background: #fbd5e0; color: #b13c63; }
-  .doc-tag-remove {
-    cursor: pointer;
-    font-size: 10px;
-    line-height: 1;
-    opacity: 0.6;
-  }
-  .doc-tag-remove:hover { opacity: 1; }
-  .tag-add-btn {
-    background: none;
-    border: 1px dashed #cdd5de;
-    border-radius: 20px;
-    font-size: 10px;
-    color: #889aab;
-    padding: 2px 9px;
-    cursor: pointer;
-    line-height: 1.4;
-  }
-  .tag-add-btn:hover { border-color: #889aab; color: #2d3a47; }
-  .tag-input {
-    font-size: 11px;
-    border: 1px solid #4f8ef7;
-    border-radius: 20px;
-    padding: 2px 10px;
-    outline: none;
-    width: 90px;
-    display: none;
-  }
 
   /* Search bar */
   .search-wrap {
@@ -413,9 +358,9 @@
   .pdf-panel {
     position: fixed;
     top: 0;
-    right: -55%;
-    width: 52%;
-    min-width: 380px;
+    right: -70%;
+    width: 68%;
+    min-width: 620px;
     height: 100vh;
     background: #fff;
     border-left: 1px solid #eef0f4;
@@ -427,34 +372,106 @@
   }
   .pdf-panel.open { right: 0; }
 
-  .pdf-panel-header {
-    padding: 14px 20px;
-    border-bottom: 1px solid #eef0f4;
-    background: #fafbfc;
+  .pdf-panel-body {
+    flex: 1;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-shrink: 0;
+    min-height: 0;
   }
-  .pdf-panel-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: #2d3a47;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 70%;
-  }
-  .pdf-panel-actions {
+  .pdf-frame-wrap {
+    flex: 1;
+    position: relative;
     display: flex;
-    align-items: center;
-    gap: 6px;
+    min-width: 0;
   }
   .pdf-frame {
     flex: 1;
     border: none;
     background: #f5f6f8;
   }
+  .pdf-floating-actions {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(255,255,255,0.9);
+    border: 1px solid #eef0f4;
+    border-radius: 8px;
+    padding: 3px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+
+  .pdf-sidebar {
+    width: 240px;
+    flex-shrink: 0;
+    background: #fafbfc;
+    border-left: 1px solid #eef0f4;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .pdf-sidebar-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #2d3a47;
+    padding: 16px 16px 4px;
+    line-height: 1.35;
+    word-break: break-word;
+  }
+  .sidebar-section-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #aabbcc;
+    padding: 14px 16px 8px;
+  }
+  .meta-list { padding: 0 16px 12px; border-bottom: 1px solid #eef0f4; }
+  .meta-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 5px 0;
+    font-size: 12.5px;
+  }
+  .meta-row-label { color: #889aab; }
+  .meta-row-value { color: #2d3a47; font-weight: 500; text-align: right; }
+
+  .version-list { flex: 1; overflow-y: auto; }
+  .version-list-loading {
+    padding: 12px 16px;
+    font-size: 12.5px;
+    color: #aabbcc;
+  }
+  .version-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 16px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f2f5;
+    transition: background 0.15s;
+  }
+  .version-item:hover { background: #f0f2f5; }
+  .version-item.active { background: #eef2ff; }
+  .version-chain-icon {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+    color: #fff;
+  }
+  .version-chain-icon.valid { background: #27c485; }
+  .version-chain-icon.invalid { background: #e53e3e; }
+  .version-item-title { font-size: 12.5px; font-weight: 500; color: #2d3a47; }
+  .version-item-date { font-size: 11px; color: #889aab; margin-top: 1px; }
 
   @media (max-width: 900px) {
     .pdf-panel { width: 100%; right: -100%; }
@@ -465,7 +482,7 @@
   <div class="panel-section">
     <p class="panel-heading">Documents</p>
     <ul class="panel-list">
-            <li class="panel-item active" id="filter-all" onclick="currentFolderFilter=null; setStatusFilter(null, this)">
+                  <li class="panel-item active" id="filter-all" onclick="currentFolderFilter=null; document.getElementById('contracts-title').textContent='Contracts'; setStatusFilter(null, this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
           <polyline points="14 2 14 8 20 8"/>
@@ -527,19 +544,31 @@
       {% endfor %}
     </ul>
   </div>
-  <div class="panel-section">
-    <p class="panel-heading">Tags</p>
-    <div class="panel-tags-row">
-      <span class="panel-tag orange" title="Not available yet">Jobs</span>
-      <span class="panel-tag purple" title="Not available yet">Quotes</span>
-      <span class="panel-tag teal" title="Not available yet">Requests</span>
-    </div>
-  </div>
+
 </aside>
 
 <div id="folder-context-menu" class="context-menu">
   <div class="context-menu-item" onclick="contextMenuRename()">Rename</div>
   <div class="context-menu-item danger" onclick="contextMenuDelete()">Delete</div>
+</div>
+
+<div id="contract-context-menu" class="context-menu">
+  <div class="context-menu-item" onclick="contractContextMenuRename()">Rename</div>
+  <div class="context-menu-item" onclick="contractContextMenuAddRevision()">Add Revision</div>
+  {% if user.is_superuser %}
+  <div class="context-menu-item" id="contract-publish-toggle" onclick="contractContextMenuTogglePublic()">Add to Public Verified Contracts</div>
+  {% endif %}
+</div>
+
+<div class="modal-overlay" id="publish-modal">
+  <div class="modal">
+    <h3>Show Document to Public?</h3>
+    <p id="publish-modal-message">This will make the document visible to anyone browsing the public verified contracts page, without requiring a login. Make sure it does not contain private or sensitive information before continuing.</p>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closePublishModal()">Cancel</button>
+      <button class="btn btn-primary" id="publish-modal-confirm" onclick="confirmTogglePublic()">Yes, Make Public</button>
+    </div>
+  </div>
 </div>
 
 <div class="modal-overlay" id="folder-delete-modal">
@@ -552,7 +581,7 @@
 
 <div class="contracts-header">
   <div>
-    <h1>Contracts</h1>
+    <h1 id="contracts-title">Contracts</h1>
     <p>Manage and view all uploaded procurement contracts</p>
   </div>
   <div style="display:flex; align-items:center; gap:12px;">
@@ -583,7 +612,8 @@
   <tbody>
     {% for contract in contracts %}
         <tr id="row-{{ contract.id }}" data-status="{{ contract.status }}" data-folder="{{ contract.folder_id|default:'' }}"
-        data-search="{{ contract.title|lower }} {{ contract.recipient.username|default:''|lower }} {{ contract.tags|lower }}"
+        data-public="{{ contract.is_public|yesno:'1,0' }}"
+        data-search="{{ contract.title|lower }} {{ contract.recipient.username|default:''|lower }}"
         draggable="true"
         ondragstart="dragContractStart(event, {{ contract.id }})">
 
@@ -628,19 +658,6 @@
                   Not Encrypted
                 </span>
               {% endif %}
-            </div>
-            <div class="tag-row" id="tag-row-{{ contract.id }}" data-tags="{{ contract.tags }}">
-              {% for tag in contract.tag_list %}
-                <span class="doc-tag {% cycle 'orange' 'purple' 'teal' 'pink' %}">
-                  {{ tag }}
-                  <span class="doc-tag-remove" onclick="removeTag({{ contract.id }}, '{{ tag|escapejs }}')">&times;</span>
-                </span>
-              {% endfor %}
-              <button class="tag-add-btn" onclick="showTagInput({{ contract.id }})">+ tag</button>
-              <input class="tag-input" id="tag-input-{{ contract.id }}"
-                     placeholder="tag name"
-                     onkeydown="if(event.key==='Enter') submitTag({{ contract.id }}); if(event.key==='Escape') hideTagInput({{ contract.id }});"
-                     onblur="hideTagInput({{ contract.id }})">
             </div>
           </div>
         </div>
@@ -696,15 +713,15 @@
 
           <!-- View PDF -->
           <button class="icon-btn" title="View PDF"
-                  onclick="openPdfPreview('{{ contract.file.url }}', '{{ contract.title|escapejs }}')">
+                  onclick="openPdfPreview({{ contract.id }}, '{{ contract.file.url }}', '{{ contract.title|escapejs }}')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
             </svg>
           </button>
 
-          <!-- Rename -->
-          <button class="icon-btn" title="Rename" onclick="startRename({{ contract.id }})">
+          <!-- Edit (Rename / Add Revision) -->
+          <button class="icon-btn" title="Edit" onclick="showContractContextMenu(event, {{ contract.id }})">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -787,25 +804,38 @@
 <!-- PDF Preview Panel -->
 <div class="pdf-overlay" id="pdf-overlay" onclick="closePdfPreview()"></div>
 <div class="pdf-panel" id="pdf-panel">
-  <div class="pdf-panel-header">
-    <span class="pdf-panel-title" id="pdf-panel-title">Contract</span>
-    <div class="pdf-panel-actions">
-      <a class="icon-btn" id="pdf-download-btn" href="#" download target="_blank" title="Download">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="7 10 12 15 17 10"/>
-          <line x1="12" y1="15" x2="12" y2="3"/>
-        </svg>
-      </a>
-      <button class="icon-btn" onclick="closePdfPreview()" title="Close">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="18" y1="6" x2="6" y2="18"/>
-          <line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
+  <div class="pdf-panel-body">
+    <div class="pdf-frame-wrap">
+      <div class="pdf-floating-actions">
+        <a class="icon-btn" id="pdf-download-btn" href="#" download target="_blank" title="Download">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </a>
+        <button class="icon-btn" onclick="closePdfPreview()" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <iframe class="pdf-frame" id="pdf-frame" src=""></iframe>
+    </div>
+    <div class="pdf-sidebar">
+      <p class="pdf-sidebar-title" id="pdf-panel-title">Contract</p>
+      <p class="sidebar-section-label">Document Info</p>
+      <div class="meta-list">
+        <div class="meta-row"><span class="meta-row-label">Created</span><span class="meta-row-value" id="pdf-meta-created">—</span></div>
+        <div class="meta-row"><span class="meta-row-label">Last Encrypted</span><span class="meta-row-value" id="pdf-meta-encrypted">—</span></div>
+        <div class="meta-row"><span class="meta-row-label">Last Verified</span><span class="meta-row-value" id="pdf-meta-verified">—</span></div>
+        <div class="meta-row"><span class="meta-row-label">Version</span><span class="meta-row-value" id="pdf-meta-version">—</span></div>
+      </div>
+      <p class="sidebar-section-label">Version History</p>
+      <div class="version-list" id="pdf-version-list"></div>
     </div>
   </div>
-  <iframe class="pdf-frame" id="pdf-frame" src=""></iframe>
 </div>
 
 <script>
@@ -837,53 +867,6 @@ function applyFilters() {
   document.getElementById('no-match-row').style.display = visibleCount === 0 ? '' : 'none';
 }
 
-// Tags
-function showTagInput(id) {
-  const input = document.getElementById('tag-input-' + id);
-  input.style.display = 'inline-block';
-  input.focus();
-}
-
-function hideTagInput(id) {
-  const input = document.getElementById('tag-input-' + id);
-  input.style.display = 'none';
-  input.value = '';
-}
-
-function saveTags(id, tagsArray) {
-  const cleaned = tagsArray.map(t => t.trim()).filter(Boolean);
-  fetch('/tag/' + id + '/', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRFToken': '{{ csrf_token }}'
-    },
-    body: JSON.stringify({ tags: cleaned.join(',') })
-  })
-  .then(r => r.json())
-  .then(data => {
-    if (data.success) location.reload();
-  });
-}
-
-function submitTag(id) {
-  const input = document.getElementById('tag-input-' + id);
-  const newTag = input.value.trim();
-  if (!newTag) return hideTagInput(id);
-
-  const row = document.getElementById('tag-row-' + id);
-  const existing = row.dataset.tags ? row.dataset.tags.split(',') : [];
-  existing.push(newTag);
-  saveTags(id, existing);
-}
-
-function removeTag(id, tag) {
-  const row = document.getElementById('tag-row-' + id);
-  const existing = row.dataset.tags ? row.dataset.tags.split(',') : [];
-  const filtered = existing.filter(t => t.trim() !== tag.trim());
-  saveTags(id, filtered);
-}
-
 // Select all checkbox
 document.getElementById('select-all').addEventListener('change', function() {
   document.querySelectorAll('.row-check').forEach(cb => cb.checked = this.checked);
@@ -906,13 +889,55 @@ function cancelRename(id) {
   titleEl.style.display = 'inline';
 }
 
-function openPdfPreview(url, title) {
+function openPdfPreview(contractId, url, title) {
   document.getElementById('pdf-frame').src = url;
   document.getElementById('pdf-panel-title').textContent = title;
   document.getElementById('pdf-download-btn').href = url;
   document.getElementById('pdf-download-btn').download = title;
   document.getElementById('pdf-panel').classList.add('open');
   document.getElementById('pdf-overlay').classList.add('open');
+
+  document.getElementById('pdf-meta-created').textContent = '—';
+  document.getElementById('pdf-meta-encrypted').textContent = '—';
+  document.getElementById('pdf-meta-verified').textContent = '—';
+  document.getElementById('pdf-meta-version').textContent = '—';
+  document.getElementById('pdf-version-list').innerHTML = '<div class="version-list-loading">Loading version history…</div>';
+
+  fetch('/contract/' + contractId + '/version-history/')
+    .then(r => r.json())
+    .then(data => {
+      if (!data.success) return;
+
+      document.getElementById('pdf-meta-created').textContent = data.created;
+      document.getElementById('pdf-meta-encrypted').textContent = data.encrypted || '—';
+      document.getElementById('pdf-meta-verified').textContent = data.verified;
+      document.getElementById('pdf-meta-version').textContent = 'v' + data.version_count;
+
+      const listEl = document.getElementById('pdf-version-list');
+      listEl.innerHTML = '';
+
+      data.versions.forEach(function(v) {
+        const item = document.createElement('div');
+        item.className = 'version-item' + (v.is_current ? ' active' : '');
+        item.onclick = function() { viewPdfVersion(v.file_url, item); };
+        item.innerHTML = `
+          <span class="version-chain-icon ${v.valid ? 'valid' : 'invalid'}" title="${v.valid ? 'Chain verified' : 'Chain broken — this version does not match the expected fingerprint'}">
+            ${v.valid ? '✓' : '✕'}
+          </span>
+          <div>
+            <div class="version-item-title">v${v.version_number} — ${v.source}${v.is_current ? ' (Current)' : ''}</div>
+            <div class="version-item-date">${v.created_at}</div>
+          </div>
+        `;
+        listEl.appendChild(item);
+      });
+    });
+}
+
+function viewPdfVersion(url, el) {
+  document.getElementById('pdf-frame').src = url;
+  document.querySelectorAll('.version-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
 }
 
 function closePdfPreview() {
@@ -1036,6 +1061,9 @@ function submitFolderRename(id) {
     if (data.success) {
       nameEl.textContent = data.name;
       input.value = data.name;
+      if (String(currentFolderFilter) === String(id)) {
+        document.getElementById('contracts-title').textContent = data.name;
+      }
     }
     input.style.display = 'none';
     nameEl.style.display = 'inline';
@@ -1048,6 +1076,10 @@ function setFolderFilter(folderId, el) {
   el.classList.add('active');
   currentFolderFilter = folderId;
   currentStatusFilter = null;
+
+  const nameEl = el.querySelector('.folder-name-text');
+  document.getElementById('contracts-title').textContent = nameEl ? nameEl.textContent.trim() : 'Contracts';
+
   applyFilters();
 }
 
@@ -1135,6 +1167,89 @@ function contextMenuRename() {
   const id = contextMenuFolderId;
   document.getElementById('folder-context-menu').classList.remove('active');
   if (id) startFolderRename(id);
+}
+
+// ── Contract edit context menu ──
+let contextMenuContractId = null;
+
+function showContractContextMenu(event, contractId) {
+  event.preventDefault();
+  event.stopPropagation();
+  contextMenuContractId = contractId;
+  const menu = document.getElementById('contract-context-menu');
+  menu.style.left = event.pageX + 'px';
+  menu.style.top = event.pageY + 'px';
+  menu.classList.add('active');
+}
+
+document.addEventListener('click', () => {
+  document.getElementById('contract-context-menu').classList.remove('active');
+});
+
+function contractContextMenuRename() {
+  const id = contextMenuContractId;
+  document.getElementById('contract-context-menu').classList.remove('active');
+  if (id) startRename(id);
+}
+
+function contractContextMenuAddRevision() {
+  const id = contextMenuContractId;
+  document.getElementById('contract-context-menu').classList.remove('active');
+  if (id) window.location.href = '/contract/' + id + '/add-revision/';
+}
+
+function contractContextMenuTogglePublic() {
+  const id = contextMenuContractId;
+  document.getElementById('contract-context-menu').classList.remove('active');
+  if (!id) return;
+
+  const row = document.getElementById('row-' + id);
+  const isCurrentlyPublic = row.dataset.public === '1';
+
+  const modal = document.getElementById('publish-modal');
+  const msg = document.getElementById('publish-modal-message');
+  const confirmBtn = document.getElementById('publish-modal-confirm');
+
+  if (isCurrentlyPublic) {
+    msg.textContent = 'This document is currently visible to the public. Removing it will hide it from the public verified contracts page immediately.';
+    confirmBtn.textContent = 'Yes, Remove from Public';
+    confirmBtn.className = 'btn btn-danger';
+  } else {
+    msg.textContent = 'This will make the document visible to anyone browsing the public verified contracts page, without requiring a login. Make sure it does not contain private or sensitive information before continuing.';
+    confirmBtn.textContent = 'Yes, Make Public';
+    confirmBtn.className = 'btn btn-primary';
+  }
+
+  modal.dataset.contractId = id;
+  modal.dataset.nextState = isCurrentlyPublic ? '0' : '1';
+  modal.classList.add('active');
+}
+
+function closePublishModal() {
+  document.getElementById('publish-modal').classList.remove('active');
+}
+
+function confirmTogglePublic() {
+  const modal = document.getElementById('publish-modal');
+  const id = modal.dataset.contractId;
+  const makePublic = modal.dataset.nextState === '1';
+
+  fetch('/contract/' + id + '/publish/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': '{{ csrf_token }}'
+    },
+    body: JSON.stringify({ is_public: makePublic })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      const row = document.getElementById('row-' + id);
+      if (row) row.dataset.public = makePublic ? '1' : '0';
+    }
+    closePublishModal();
+  });
 }
 
 const IS_SUPERUSER = {% if user.is_superuser %}true{% else %}false{% endif %};

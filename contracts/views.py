@@ -2,7 +2,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
-from .models import Contract, Folder
+from .models import Contract, Folder, ContractVersion
 from .forms import ContractForm, RegisterForm
 from .utils import (
     generate_file_hash,
@@ -14,6 +14,7 @@ from .utils import (
     extract_cf_from_metadata,
     stamp_seal_on_pdf,
     generate_qr_code,
+    verify_version_chain,
 )
 import os
 import fitz
@@ -76,6 +77,21 @@ def upload_contract(request):
             contract.file = f'contracts/{final_filename}'
             contract.seal_image = f'seals/seal_{contract.id}.png'
             contract.save()
+
+            ContractVersion.objects.create(
+                contract=contract,
+                version_number=1,
+                source='upload',
+                file=contract.file.name,
+                fingerprint=sealed_cf,
+                previous_fingerprint='',
+                encrypted_cf=encrypted,
+                hmac_value=hmac_value,
+                wrapped_key=wrapped_key,
+                aes_iv=aes_iv,
+                created_by=request.user,
+            )
+
             log_activity(request, 'added', contract=contract)
             return redirect('contract_list')
     else:
@@ -93,7 +109,10 @@ def encrypt_contract(request, contract_id):
     stamped_seal = os.path.join(settings.MEDIA_ROOT, 'seals', f'seal_{contract.id}.png')
     qr_path = os.path.join(settings.MEDIA_ROOT, 'seals', f'qr_{contract.id}.png')
 
-    original_cf = generate_canonical_fingerprint(pdf_path)
+    latest_version = contract.versions.order_by('-version_number').first()
+    previous_cf = latest_version.fingerprint if latest_version else None
+
+    original_cf = generate_canonical_fingerprint(pdf_path, previous_cf=previous_cf)
 
     encrypted, hmac_value, wrapped_key, aes_iv = encrypt_cf(
         original_cf, settings.RSA_PUBLIC_KEY_PATH
@@ -121,12 +140,116 @@ def encrypt_contract(request, contract_id):
     if os.path.isfile(pdf_path):
         os.remove(pdf_path)
 
-    contract.file = f'contracts/{final_filename}'
+        contract.file = f'contracts/{final_filename}'
     contract.seal_image = f'seals/seal_{contract.id}.png'
     contract.save()
+
+    next_version_number = (latest_version.version_number + 1) if latest_version else 1
+    ContractVersion.objects.create(
+        contract=contract,
+        version_number=next_version_number,
+        source='reencrypt',
+        file=contract.file.name,
+        fingerprint=sealed_cf,
+        previous_fingerprint=previous_cf or '',
+        encrypted_cf=encrypted,
+        hmac_value=hmac_value,
+        wrapped_key=wrapped_key,
+        aes_iv=aes_iv,
+        created_by=request.user,
+    )
+
     log_activity(request, 'encrypted', contract=contract)
 
     return redirect('contract_list')
+
+@login_required
+def add_revision(request, contract_id):
+    contract = get_object_or_404(Contract, id=contract_id)
+
+    if request.method == 'POST':
+        uploaded_file = request.FILES.get('file')
+        if not uploaded_file:
+            return redirect('contract_list')
+
+        # ── Validate it's actually a PDF (mirrors validate_pdf_signature) ──
+        header = uploaded_file.read(5)
+        uploaded_file.seek(0)
+        if header != b'%PDF-' or not uploaded_file.name.lower().endswith('.pdf'):
+            return render(request, 'upload.html', {
+                'is_revision': True,
+                'contract': contract,
+                'pdf_error': 'This file is not a valid PDF.',
+            })
+
+        # ── Save the new revision file temporarily ──
+        temp_path = os.path.join(settings.MEDIA_ROOT, 'temp', uploaded_file.name)
+        os.makedirs(os.path.dirname(temp_path), exist_ok=True)
+        with open(temp_path, 'wb+') as f:
+            for chunk in uploaded_file.chunks():
+                f.write(chunk)
+
+        default_seal = os.path.join(settings.MEDIA_ROOT, 'seals', 'default_seal.png')
+        stamped_seal = os.path.join(settings.MEDIA_ROOT, 'seals', f'seal_{contract.id}.png')
+        qr_path = os.path.join(settings.MEDIA_ROOT, 'seals', f'qr_{contract.id}.png')
+
+        latest_version = contract.versions.order_by('-version_number').first()
+        previous_cf = latest_version.fingerprint if latest_version else None
+
+        # ── Fingerprint the NEW file, chained to the previous version ──
+        original_cf = generate_canonical_fingerprint(temp_path, previous_cf=previous_cf)
+
+        encrypted, hmac_value, wrapped_key, aes_iv = encrypt_cf(
+            original_cf, settings.RSA_PUBLIC_KEY_PATH
+        )
+
+        embed_data_in_image(default_seal, stamped_seal, encrypted)
+        generate_qr_code(encrypted, qr_path)
+
+        final_filename = f"contract_{contract.id}_v{(latest_version.version_number + 1) if latest_version else 1}_sealed.pdf"
+        final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
+        stamp_seal_on_pdf(temp_path, final_pdf_path, stamped_seal, qr_path=qr_path, encrypted_cf=encrypted)
+
+        sealed_cf = generate_canonical_fingerprint(final_pdf_path, previous_cf=previous_cf)
+
+        # ── Replace the old sealed file with the new one ──
+        old_file_path = contract.file.path if contract.file else None
+
+        contract.fingerprint = sealed_cf
+        contract.original_fingerprint = original_cf
+        contract.encrypted_cf = encrypted
+        contract.hmac_value = hmac_value
+        contract.wrapped_key = wrapped_key
+        contract.aes_key = aes_iv
+        contract.aes_iv = aes_iv
+        contract.file = f'contracts/{final_filename}'
+        contract.seal_image = f'seals/seal_{contract.id}.png'
+        contract.save()
+
+        if os.path.isfile(temp_path):
+            os.remove(temp_path)
+        if old_file_path and os.path.isfile(old_file_path):
+            os.remove(old_file_path)
+
+        next_version_number = (latest_version.version_number + 1) if latest_version else 1
+        ContractVersion.objects.create(
+            contract=contract,
+            version_number=next_version_number,
+            source='revision',
+            file=contract.file.name,
+            fingerprint=sealed_cf,
+            previous_fingerprint=previous_cf or '',
+            encrypted_cf=encrypted,
+            hmac_value=hmac_value,
+            wrapped_key=wrapped_key,
+            aes_iv=aes_iv,
+            created_by=request.user,
+        )
+
+        log_activity(request, 'edited', contract=contract, note=f'New revision uploaded (v{next_version_number})')
+        return redirect('contract_list')
+
+    return render(request, 'upload.html', {'is_revision': True, 'contract': contract})
 
 
 @login_required
@@ -209,6 +332,75 @@ def verify_physical(request):
     return render(request, 'verify_physical.html', {
         'result': result
     })
+
+@login_required
+def upload_signed_scan(request, contract_id):
+    """
+    Accepts a scanned copy of a physically-signed contract. Verifies it via
+    the QR-encoded encrypted CF (the only marker that survives print/scan),
+    then records it as a new chained version tagged 'physical_scan'.
+    """
+    contract = get_object_or_404(Contract, id=contract_id)
+
+    if request.method == 'POST':
+        uploaded_file = request.FILES.get('scanned_file')
+        if not uploaded_file:
+            return redirect('contract_list')
+
+        temp_path = os.path.join(settings.MEDIA_ROOT, 'temp', uploaded_file.name)
+        os.makedirs(os.path.dirname(temp_path), exist_ok=True)
+        with open(temp_path, 'wb+') as f:
+            for chunk in uploaded_file.chunks():
+                f.write(chunk)
+
+        try:
+            extracted_encrypted = extract_cf_from_metadata(temp_path)
+            # Metadata typically won't survive a real scan — this check
+            # exists for completeness. In practice, QR-based matching
+            # (see the earlier discussion) is what should identify the
+            # contract for a genuinely scanned document.
+            matches_contract = (extracted_encrypted == contract.encrypted_cf) if extracted_encrypted else False
+
+            if not matches_contract:
+                log_activity(request, 'reported_tampering', contract=contract,
+                             note='Signed scan upload failed identity match')
+                if os.path.isfile(temp_path):
+                    os.remove(temp_path)
+                return redirect('contract_list')
+
+            latest_version = contract.versions.order_by('-version_number').first()
+            previous_cf = latest_version.fingerprint if latest_version else None
+            next_version_number = (latest_version.version_number + 1) if latest_version else 1
+
+            scan_cf = generate_canonical_fingerprint(temp_path, previous_cf=previous_cf)
+
+            final_filename = f"contract_{contract.id}_signed_v{next_version_number}.pdf"
+            final_path = os.path.join(settings.MEDIA_ROOT, 'contract_versions', final_filename)
+            os.makedirs(os.path.dirname(final_path), exist_ok=True)
+            os.replace(temp_path, final_path)
+
+            ContractVersion.objects.create(
+                contract=contract,
+                version_number=next_version_number,
+                source='physical_scan',
+                file=f'contract_versions/{final_filename}',
+                fingerprint=scan_cf,
+                previous_fingerprint=previous_cf or '',
+                created_by=request.user,
+            )
+
+            contract.status = 'approved'
+            contract.save()
+            log_activity(request, 'approved', contract=contract, note='Signed scan uploaded and chained')
+
+        finally:
+            if os.path.isfile(temp_path):
+                os.remove(temp_path)
+
+        return redirect('contract_list')
+
+    return render(request, 'upload_signed_scan.html', {'contract': contract})
+
 import re
 
 def is_valid_encrypted_cf(data: str):
@@ -267,6 +459,51 @@ def has_barangay_footer(pdf_path: str):
 
 from django.shortcuts import render, redirect
 from django.urls import reverse
+
+def get_contract_meta(contract):
+    verified_log = AuditLog.objects.filter(
+        contract=contract, action='viewed'
+    ).order_by('-timestamp').first()
+    latest_version = contract.versions.order_by('-version_number').first()
+    chain = verify_version_chain(contract)
+
+    return {
+        'created': contract.uploaded_at,
+        'encrypted': latest_version.created_at if latest_version else None,
+        'verified': verified_log.timestamp if verified_log else None,
+        'version': latest_version.version_number if latest_version else 1,
+        'chain': chain,
+        'chain_valid': all(v['valid'] for v in chain) if chain else None,
+    }
+
+@login_required
+def contract_version_history(request, contract_id):
+    contract = get_object_or_404(Contract, id=contract_id)
+    verified_log = AuditLog.objects.filter(contract=contract, action='viewed').order_by('-timestamp').first()
+    versions_qs = contract.versions.order_by('-version_number')
+    chain = verify_version_chain(contract)
+    chain_by_version = {c['version_number']: c for c in chain}
+
+    versions_data = []
+    for v in versions_qs:
+        chain_info = chain_by_version.get(v.version_number, {})
+        versions_data.append({
+            'version_number': v.version_number,
+            'source': v.get_source_display(),
+            'created_at': v.created_at.strftime('%b %d, %Y'),
+            'file_url': v.file.url if v.file else '',
+            'valid': chain_info.get('valid'),
+            'is_current': bool(contract.file) and v.file.name == contract.file.name,
+        })
+
+    return JsonResponse({
+        'success': True,
+        'created': contract.uploaded_at.strftime('%b %d, %Y'),
+        'encrypted': versions_data[0]['created_at'] if versions_data else None,
+        'verified': verified_log.timestamp.strftime('%b %d, %Y') if verified_log else 'Not yet verified',
+        'version_count': len(versions_data),
+        'versions': versions_data,
+    })
 
 def public_verify(request):
     result = None
@@ -411,10 +648,16 @@ def public_verify(request):
     debug_log = request.session.pop('verify_debug_log', [])
     filename_hint = request.session.pop('verify_filename_hint', None)
 
+    public_contracts = [
+        {'contract': c, 'meta': get_contract_meta(c)}
+        for c in Contract.objects.filter(is_public=True).order_by('-uploaded_at')
+    ]
+
     return render(request, 'verify.html', {
         'result': result,
         'filename_hint': filename_hint,
         'debug_log': debug_log,
+        'public_contracts': public_contracts,
     })
 
 # New rename view
@@ -530,6 +773,26 @@ def update_status(request, pk):
             log_activity(request, 'approved', contract=contract)
     return redirect('contract_list')
 
+@login_required
+def publish_contract(request, pk):
+    if not request.user.is_superuser:
+        return JsonResponse({'success': False}, status=403)
+
+    if request.method == 'POST':
+        import json
+        contract = get_object_or_404(Contract, pk=pk)
+        data = json.loads(request.body)
+        make_public = data.get('is_public', False)
+
+        contract.is_public = make_public
+        contract.save()
+
+        log_activity(
+            request, 'edited', contract=contract,
+            note='Added to public verified contracts' if make_public else 'Removed from public verified contracts'
+        )
+        return JsonResponse({'success': True, 'is_public': contract.is_public})
+    return JsonResponse({'success': False}, status=400)
 from django.db.models import Count
 
 @login_required

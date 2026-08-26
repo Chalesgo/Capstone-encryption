@@ -17,10 +17,15 @@ def generate_file_hash(file):
     return sha256.hexdigest()
 
 # ─── Canonical Fingerprint ─────────────────────────────────
-def generate_canonical_fingerprint(pdf_path):
+def generate_canonical_fingerprint(pdf_path, previous_cf=None):
     """
     Generates CF by hashing text, images, and metadata from the PDF.
     h_text + h_images + h_vectors all combined into one SHA-256 hash.
+
+    If previous_cf is provided, it is folded into the hash as well,
+    chaining this version's fingerprint to the prior version's fingerprint
+    (hash-chained version history — tampering with an earlier version
+    breaks the chain for every version after it).
     """
     doc = fitz.open(pdf_path)
     combined = ""
@@ -40,8 +45,42 @@ def generate_canonical_fingerprint(pdf_path):
     combined += hashlib.sha256(str(doc.metadata).encode()).hexdigest()
     doc.close()
 
+    if previous_cf:
+        combined += previous_cf
+
     cf = hashlib.sha256(combined.encode()).hexdigest()
     return cf
+
+def verify_version_chain(contract):
+    """
+    Walks a contract's full version history and recomputes each version's
+    fingerprint using its own file content plus the recorded previous
+    fingerprint, confirming the entire chain is internally consistent.
+
+    Returns a list of dicts, one per version, each noting whether that
+    link in the chain checked out.
+    """
+    versions = contract.versions.order_by('version_number')
+    results = []
+    running_prev = None
+
+    for version in versions:
+        try:
+            recomputed = generate_canonical_fingerprint(version.file.path, previous_cf=running_prev)
+            valid = (recomputed == version.fingerprint)
+        except Exception:
+            valid = False
+
+        results.append({
+            'version_number': version.version_number,
+            'source': version.get_source_display(),
+            'valid': valid,
+            'created_at': version.created_at,
+        })
+
+        running_prev = version.fingerprint
+
+    return results
 
 # ─── HMAC ──────────────────────────────────────────────────
 def generate_hmac(cf: str, key: bytes):
