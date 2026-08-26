@@ -919,7 +919,8 @@ function openPdfPreview(contractId, url, title) {
       data.versions.forEach(function(v) {
         const item = document.createElement('div');
         item.className = 'version-item' + (v.is_current ? ' active' : '');
-        item.onclick = function() { viewPdfVersion(v.file_url, item); };
+        const downloadName = document.getElementById('pdf-panel-title').textContent.trim() + ' (v' + v.version_number + ').pdf';
+        item.onclick = function() { viewPdfVersion(v.file_url, item, downloadName); };
         item.innerHTML = `
           <span class="version-chain-icon ${v.valid ? 'valid' : 'invalid'}" title="${v.valid ? 'Chain verified' : 'Chain broken — this version does not match the expected fingerprint'}">
             ${v.valid ? '✓' : '✕'}
@@ -934,10 +935,14 @@ function openPdfPreview(contractId, url, title) {
     });
 }
 
-function viewPdfVersion(url, el) {
+function viewPdfVersion(url, el, versionLabel) {
   document.getElementById('pdf-frame').src = url;
   document.querySelectorAll('.version-item').forEach(i => i.classList.remove('active'));
   el.classList.add('active');
+
+  const downloadBtn = document.getElementById('pdf-download-btn');
+  downloadBtn.href = url;
+  downloadBtn.download = versionLabel;
 }
 
 function closePdfPreview() {

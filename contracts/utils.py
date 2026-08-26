@@ -226,16 +226,22 @@ def extract_data_from_image(image_path: str):
 
 def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None, encrypted_cf=None):
     """
-    Creates a new PDF with extended page size to fit the signature strip below content.
-    Stores encrypted CF in PDF metadata for reliable verification.
+    Creates a new PDF with extended page size to fit an authentication
+    strip below content. Stores encrypted CF in PDF metadata for
+    reliable verification.
     """
     src = fitz.open(input_pdf)
     dst = fitz.open()
 
-    strip_height = 130
-    seal_size = 110
-    qr_size = 100
-    padding = 15
+    strip_height = 150
+    seal_box_size = 100
+    qr_box_size = 90
+    padding = 18
+    accent_color = (0.15, 0.35, 0.75)      # barangay blue accent bar
+    border_color = (0.75, 0.78, 0.83)      # box borders
+    text_dark = (0.15, 0.18, 0.22)
+    text_muted = (0.45, 0.5, 0.56)
+    badge_color = (0.16, 0.6, 0.4)         # verified checkmark green
 
     for src_page in src:
         src_rect = src_page.rect
@@ -253,80 +259,116 @@ def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None, encrypted_
 
         strip_y = page_height
 
+        # ── Strip background ──
         new_page.draw_rect(
             fitz.Rect(0, strip_y, page_width, new_height),
-            color=(0.95, 0.95, 0.95),
-            fill=(0.95, 0.95, 0.95)
+            color=None,
+            fill=(0.98, 0.98, 0.99),
         )
 
-        new_page.draw_line(
-            fitz.Point(0, strip_y),
-            fitz.Point(page_width, strip_y),
-            color=(0.5, 0.5, 0.5),
-            width=1
+        # ── Accent bar along the top edge of the strip ──
+        new_page.draw_rect(
+            fitz.Rect(0, strip_y, page_width, strip_y + 3),
+            color=None,
+            fill=accent_color,
         )
 
-        seal_x = padding
-        seal_y = strip_y + (strip_height - seal_size) // 2
+        # ── Seal box (left) ──
+        seal_box_x = padding
+        seal_box_y = strip_y + (strip_height - seal_box_size) / 2 - 6
+        seal_box_rect = fitz.Rect(seal_box_x, seal_box_y, seal_box_x + seal_box_size, seal_box_y + seal_box_size)
+
+        new_page.draw_rect(seal_box_rect, color=border_color, fill=(1, 1, 1), width=1)
         new_page.insert_image(
-            fitz.Rect(seal_x, seal_y, seal_x + seal_size, seal_y + seal_size),
+            fitz.Rect(seal_box_x + 6, seal_box_y + 6, seal_box_x + seal_box_size - 6, seal_box_y + seal_box_size - 6),
             filename=seal_path,
             overlay=True,
         )
 
+        # ── Small verified badge, overlapping the seal box's bottom-right corner ──
+        badge_r = 11
+        badge_cx = seal_box_x + seal_box_size - 2
+        badge_cy = seal_box_y + seal_box_size - 2
+        new_page.draw_circle(
+            fitz.Point(badge_cx, badge_cy), badge_r,
+            color=(1, 1, 1), fill=badge_color, width=1.5,
+        )
         new_page.insert_text(
-            fitz.Point(seal_x + (seal_size // 2) - 20, seal_y + seal_size + 10),
-            "Official Seal",
-            fontsize=6,
-            color=(0.4, 0.4, 0.4)
+            fitz.Point(badge_cx - 4, badge_cy + 4),
+            "✓", fontsize=13, color=(1, 1, 1), fontname="helv",
         )
 
+        new_page.insert_textbox(
+            fitz.Rect(seal_box_x - 10, seal_box_y + seal_box_size + 6, seal_box_x + seal_box_size + 10, seal_box_y + seal_box_size + 20),
+            "Official Seal", fontsize=7, color=text_muted, align=1,
+        )
+
+        # ── Vertical divider between seal and center text ──
+        divider1_x = seal_box_x + seal_box_size + padding
+        new_page.draw_line(
+            fitz.Point(divider1_x, strip_y + 16),
+            fitz.Point(divider1_x, new_height - 16),
+            color=border_color, width=1,
+        )
+
+        # ── QR box (right), only if provided ──
         if qr_path:
-            qr_x = page_width - qr_size - padding
-            qr_y = strip_y + (strip_height - qr_size) // 2
+            qr_box_x = page_width - qr_box_size - padding
+            qr_box_y = strip_y + (strip_height - qr_box_size) / 2 - 6
+            qr_box_rect = fitz.Rect(qr_box_x, qr_box_y, qr_box_x + qr_box_size, qr_box_y + qr_box_size)
+
+            new_page.draw_rect(qr_box_rect, color=border_color, fill=(1, 1, 1), width=1)
             new_page.insert_image(
-                fitz.Rect(qr_x, qr_y, qr_x + qr_size, qr_y + qr_size),
+                fitz.Rect(qr_box_x + 6, qr_box_y + 6, qr_box_x + qr_box_size - 6, qr_box_y + qr_box_size - 6),
                 filename=qr_path,
                 overlay=True,
             )
-
-            new_page.insert_text(
-                fitz.Point(qr_x + (qr_size // 2) - 25, qr_y + qr_size + 10),
-                "Scan to Verify",
-                fontsize=6,
-                color=(0.4, 0.4, 0.4)
+            new_page.insert_textbox(
+                fitz.Rect(qr_box_x - 10, qr_box_y + qr_box_size + 6, qr_box_x + qr_box_size + 10, qr_box_y + qr_box_size + 20),
+                "Scan to Verify", fontsize=7, color=text_muted, align=1,
             )
 
-            center_x = (seal_x + seal_size + qr_x) / 2
+            # ── Vertical divider between center text and QR ──
+            divider2_x = qr_box_x - padding
+            new_page.draw_line(
+                fitz.Point(divider2_x, strip_y + 16),
+                fitz.Point(divider2_x, new_height - 16),
+                color=border_color, width=1,
+            )
 
-            page_num_text = f"Page {src_page.number + 1} of {src.page_count}"
-            new_page.insert_text(
-                fitz.Point(center_x - 30, strip_y + 20),
-                page_num_text,
-                fontsize=6,
-                color=(0.5, 0.5, 0.5)
-            )
-            new_page.insert_text(
-                fitz.Point(center_x - 60, strip_y + 38),
-                "Barangay Sto. Nino, Binan City",
-                fontsize=7,
-                color=(0.3, 0.3, 0.3)
-            )
-            new_page.insert_text(
-                fitz.Point(center_x - 55, strip_y + 52),
-                "Digitally Authenticated Document",
-                fontsize=7,
-                color=(0.3, 0.3, 0.3)
-            )
-            new_page.insert_text(
-                fitz.Point(center_x - 50, strip_y + 66),
-                "Verify at: [your website URL]",
-                fontsize=6,
-                color=(0.4, 0.4, 0.4)
-            )
+            center_left = divider1_x + 14
+            center_right = divider2_x - 14
+        else:
+            center_left = divider1_x + 14
+            center_right = page_width - padding
+
+        # ── Center text block ──
+        center_rect = fitz.Rect(center_left, strip_y + 18, center_right, new_height - 14)
+
+        new_page.insert_textbox(
+            fitz.Rect(center_left, strip_y + 18, center_right, strip_y + 34),
+            "BARANGAY STO. NIÑO, BIÑAN CITY",
+            fontsize=9.5, color=text_dark, fontname="helv", align=0,
+        )
+        new_page.insert_textbox(
+            fitz.Rect(center_left, strip_y + 34, center_right, strip_y + 48),
+            "Digitally Authenticated Document",
+            fontsize=8, color=accent_color, fontname="helv", align=0,
+        )
+
+        page_num_text = f"Page {src_page.number + 1} of {src.page_count}"
+        new_page.insert_textbox(
+            fitz.Rect(center_left, strip_y + 56, center_right, strip_y + 68),
+            page_num_text,
+            fontsize=7.5, color=text_muted, align=0,
+        )
+        new_page.insert_textbox(
+            fitz.Rect(center_left, new_height - 30, center_right, new_height - 16),
+            "Verify at: [your website URL]",
+            fontsize=7, color=text_muted, align=0,
+        )
 
     # ── Store encrypted CF in PDF metadata ──
-    # This is hidden from normal viewers but readable by our system
     if encrypted_cf:
         metadata = dst.metadata
         metadata['keywords'] = f'SEALGUARD:{encrypted_cf}'
@@ -335,7 +377,7 @@ def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None, encrypted_
     dst.save(output_pdf)
     dst.close()
     src.close()
-
+    
 def generate_qr_code(data: str, output_path: str):
     """
     Generates a QR code containing the encrypted CF.
@@ -370,8 +412,6 @@ def extract_cf_from_metadata(pdf_path: str):
     except Exception:
         return None
     
-
-def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None, encrypted_cf=None):
     """
     Creates a new PDF with extended page size to fit the signature strip below content.
     Stores encrypted CF in PDF metadata for reliable verification.

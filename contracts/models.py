@@ -81,6 +81,7 @@ class Contract(models.Model):
     is_public = models.BooleanField(default=False)
     modified_at = models.DateTimeField(auto_now=True)
     tags = models.CharField(max_length=255, blank=True, help_text="Comma-separated tags")
+    base_filename = models.CharField(max_length=200, blank=True, help_text="Original filename (no extension), reused across versions")
 
     def tag_list(self):
         return [t.strip() for t in self.tags.split(',') if t.strip()]

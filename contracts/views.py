@@ -34,6 +34,8 @@ def upload_contract(request):
             contract.save()
 
             pdf_path = contract.file.path
+            original_filename_only = os.path.splitext(os.path.basename(pdf_path))[0]
+            contract.base_filename = original_filename_only
 
             default_seal = os.path.join(settings.MEDIA_ROOT, 'seals', 'default_seal.png')
             stamped_seal = os.path.join(settings.MEDIA_ROOT, 'seals', f'seal_{contract.id}.png')
@@ -54,9 +56,7 @@ def upload_contract(request):
             generate_qr_code(encrypted, qr_path)
 
             # ── Step 5: Stamp ONCE with LSB seal + QR ──
-            original_filename = os.path.basename(pdf_path)
-            name, ext = os.path.splitext(original_filename)
-            final_filename = f"{name}_sealed{ext}"
+            final_filename = f"{contract.base_filename}_v1.pdf"
             final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
             stamp_seal_on_pdf(pdf_path, final_pdf_path, stamped_seal, qr_path=qr_path, encrypted_cf=encrypted)
 
@@ -122,9 +122,9 @@ def encrypt_contract(request, contract_id):
 
     generate_qr_code(encrypted, qr_path)
 
-    original_filename = os.path.basename(pdf_path)
-    name, ext = os.path.splitext(original_filename)
-    final_filename = f"{name}_sealed{ext}"
+    next_version_number = (latest_version.version_number + 1) if latest_version else 1
+    base_name = contract.base_filename or os.path.splitext(os.path.basename(pdf_path))[0]
+    final_filename = f"{base_name}_v{next_version_number}.pdf"
     final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
     stamp_seal_on_pdf(pdf_path, final_pdf_path, stamped_seal, qr_path=qr_path, encrypted_cf=encrypted)
 
@@ -137,14 +137,10 @@ def encrypt_contract(request, contract_id):
     contract.aes_key = aes_iv
     contract.aes_iv = aes_iv
 
-    if os.path.isfile(pdf_path):
-        os.remove(pdf_path)
-
-        contract.file = f'contracts/{final_filename}'
+    contract.file = f'contracts/{final_filename}'
     contract.seal_image = f'seals/seal_{contract.id}.png'
     contract.save()
 
-    next_version_number = (latest_version.version_number + 1) if latest_version else 1
     ContractVersion.objects.create(
         contract=contract,
         version_number=next_version_number,
@@ -206,14 +202,13 @@ def add_revision(request, contract_id):
         embed_data_in_image(default_seal, stamped_seal, encrypted)
         generate_qr_code(encrypted, qr_path)
 
-        final_filename = f"contract_{contract.id}_v{(latest_version.version_number + 1) if latest_version else 1}_sealed.pdf"
+        next_version_number = (latest_version.version_number + 1) if latest_version else 1
+        base_name = contract.base_filename or os.path.splitext(uploaded_file.name)[0]
+        final_filename = f"{base_name}_v{next_version_number}.pdf"
         final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
         stamp_seal_on_pdf(temp_path, final_pdf_path, stamped_seal, qr_path=qr_path, encrypted_cf=encrypted)
 
         sealed_cf = generate_canonical_fingerprint(final_pdf_path, previous_cf=previous_cf)
-
-        # ── Replace the old sealed file with the new one ──
-        old_file_path = contract.file.path if contract.file else None
 
         contract.fingerprint = sealed_cf
         contract.original_fingerprint = original_cf
@@ -228,10 +223,7 @@ def add_revision(request, contract_id):
 
         if os.path.isfile(temp_path):
             os.remove(temp_path)
-        if old_file_path and os.path.isfile(old_file_path):
-            os.remove(old_file_path)
 
-        next_version_number = (latest_version.version_number + 1) if latest_version else 1
         ContractVersion.objects.create(
             contract=contract,
             version_number=next_version_number,
@@ -266,11 +258,12 @@ def delete_contract(request, contract_id):
     contract = get_object_or_404(Contract, id=contract_id)
 
     if request.method == 'POST':
-        # ── Delete PDF ──
-        if contract.file:
-            pdf_path = os.path.join(settings.MEDIA_ROOT, str(contract.file))
-            if os.path.isfile(pdf_path):
-                os.remove(pdf_path)
+        # ── Delete every version's file on disk ──
+        for version in contract.versions.all():
+            if version.file:
+                version_path = os.path.join(settings.MEDIA_ROOT, str(version.file))
+                if os.path.isfile(version_path):
+                    os.remove(version_path)
 
         # ── Delete seal image ──
         if contract.seal_image:
@@ -286,7 +279,6 @@ def delete_contract(request, contract_id):
         log_activity(request, 'deleted', contract=contract, note=contract.title)
         contract.delete()
         return redirect('contract_list')
-
     return render(request, 'confirm_delete.html', {'contract': contract})
 
 def register(request):
@@ -740,10 +732,11 @@ def delete_folder(request, pk):
             if not request.user.is_superuser:
                 return JsonResponse({'success': False, 'error': 'not_allowed'}, status=403)
             for contract in folder.contracts.all():
-                if contract.file:
-                    pdf_path = os.path.join(settings.MEDIA_ROOT, str(contract.file))
-                    if os.path.isfile(pdf_path):
-                        os.remove(pdf_path)
+                for version in contract.versions.all():
+                    if version.file:
+                        version_path = os.path.join(settings.MEDIA_ROOT, str(version.file))
+                        if os.path.isfile(version_path):
+                            os.remove(version_path)
                 if contract.seal_image:
                     seal_path = os.path.join(settings.MEDIA_ROOT, str(contract.seal_image))
                     if os.path.isfile(seal_path):
