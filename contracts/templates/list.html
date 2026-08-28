@@ -167,6 +167,38 @@
     text-overflow: ellipsis;
     max-width: 220px;
   }
+
+  .folder-assign-list {
+    list-style: none;
+    margin: 12px 0 4px;
+    max-height: 240px;
+    overflow-y: auto;
+    border: 1px solid #eef0f4;
+    border-radius: 8px;
+  }
+  .folder-assign-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    font-size: 13.5px;
+    color: #2d3a47;
+    cursor: pointer;
+    border-bottom: 1px solid #f4f5f7;
+  }
+  .folder-assign-item:last-child { border-bottom: none; }
+  .folder-assign-item:hover { background: #f8fafc; }
+  .folder-assign-item.current { background: #eef2ff; font-weight: 500; }
+  .folder-assign-item svg { width: 15px; height: 15px; color: #889aab; flex-shrink: 0; }
+  .folder-assign-item .check-icon {
+    margin-left: auto;
+    color: #4f8ef7;
+    width: 15px;
+    height: 15px;
+    display: none;
+  }
+  .folder-assign-item.current .check-icon { display: inline-flex; }
+  .folder-assign-empty { padding: 14px; font-size: 12.5px; color: #aabbcc; text-align: center; }
   .rename-input {
     font-size: 14px;
     font-weight: 500;
@@ -294,6 +326,10 @@
   .icon-btn.danger:hover { background: #fff0f0; color: #e53e3e; }
   .icon-btn svg { width: 16px; height: 16px; }
 
+  .eye-toggle-btn.public-on { color: #27c485; }
+  .eye-toggle-btn.public-on:hover { background: #e8f5ef; color: #1fa06b; }
+  .eye-toggle-btn.public-off { color: #c3ccd6; }
+  .eye-toggle-btn.public-off:hover { background: #eef0f4; color: #889aab; }
   /* Encryption badge */
   .enc-badge {
     display: inline-flex;
@@ -489,6 +525,15 @@
         </svg>
         All Documents
       </li>
+      {% if user.is_superuser %}
+      <li class="panel-item" onclick="window.location.href='{% url 'trash_list' %}'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+        </svg>
+        Trash
+      </li>
+      {% else %}
       <li class="panel-item disabled" title="Not available yet">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="3 6 5 6 21 6"/>
@@ -496,6 +541,7 @@
         </svg>
         Trash
       </li>
+      {% endif %}
     </ul>
   </div>
 
@@ -555,6 +601,7 @@
 <div id="contract-context-menu" class="context-menu">
   <div class="context-menu-item" onclick="contractContextMenuRename()">Rename</div>
   <div class="context-menu-item" onclick="contractContextMenuAddRevision()">Add Revision</div>
+  <div class="context-menu-item" onclick="contractContextMenuAddToFolder()">Add to Folder</div>
   {% if user.is_superuser %}
   <div class="context-menu-item" id="contract-publish-toggle" onclick="contractContextMenuTogglePublic()">Add to Public Verified Contracts</div>
   {% endif %}
@@ -571,11 +618,38 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="folder-assign-modal">
+  <div class="modal">
+    <h3>Add to Folder</h3>
+    <p>Choose a folder for <strong id="folder-assign-contract-name"></strong>.</p>
+    <ul class="folder-assign-list" id="folder-assign-list"></ul>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeFolderAssignModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="folder-delete-modal">
   <div class="modal">
     <h3>Delete Folder</h3>
     <p id="folder-delete-message"></p>
     <div class="modal-actions" id="folder-delete-actions"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="public-block-modal">
+  <div class="modal">
+    <h3>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+        <path d="M12 9v4"/><path d="M12 17h.01"/>
+      </svg>
+      Document Is Public
+    </h3>
+    <p>This document is public. Remove it from Public Verified Contracts before deleting it.</p>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="closePublicBlockModal()">Got it</button>
+    </div>
   </div>
 </div>
 
@@ -635,7 +709,9 @@
           {% endif %}
 
           <div>
-            <span class="contract-title-text" id="title-text-{{ contract.id }}">{{ contract.title }}</span>
+            <span class="contract-title-text" id="title-text-{{ contract.id }}"
+                  title="{{ contract.title }}"
+                  data-full-title="{{ contract.title|escapejs }}">{{ contract.title|truncatechars:28 }}</span>
             <input class="rename-input" id="rename-input-{{ contract.id }}"
                    value="{{ contract.title }}"
                    onblur="submitRename({{ contract.id }})"
@@ -754,6 +830,19 @@
           </button>
           {% endif %}
 
+          <!-- Public visibility toggle (superuser only) -->
+          {% if user.is_superuser %}
+          <button class="icon-btn eye-toggle-btn {% if contract.is_public %}public-on{% else %}public-off{% endif %}"
+                  id="eye-btn-{{ contract.id }}"
+                  title="{% if contract.is_public %}Public — click to remove{% else %}Not public — click to add{% endif %}"
+                  onclick="toggleEyeVisibility({{ contract.id }})">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+          {% endif %}
+
         </div>
       </td>
     </tr>
@@ -790,12 +879,12 @@
       Delete Contract
     </h3>
     <p>Are you sure you want to delete <strong id="delete-contract-name"></strong>?
-       This action cannot be undone.</p>
+       It will be moved to Trash and permanently deleted after 15 days.</p>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeDeleteModal()">Cancel</button>
       <form id="delete-form" method="POST" style="margin:0;">
         {% csrf_token %}
-        <button type="submit" class="btn btn-danger">Yes, Delete</button>
+        <button type="submit" class="btn btn-danger">Move to Trash</button>
       </form>
     </div>
   </div>
@@ -867,10 +956,12 @@ function applyFilters() {
   document.getElementById('no-match-row').style.display = visibleCount === 0 ? '' : 'none';
 }
 
+
 // Select all checkbox
 document.getElementById('select-all').addEventListener('change', function() {
   document.querySelectorAll('.row-check').forEach(cb => cb.checked = this.checked);
 });
+
 
 // Inline rename
 function startRename(id) {
@@ -881,13 +972,43 @@ function startRename(id) {
   input.select();
 }
 
+const TITLE_TRUNCATE_LENGTH = 28;
+function truncateTitle(title) {
+  if (!title) return '';
+  return title.length > TITLE_TRUNCATE_LENGTH
+    ? title.slice(0, TITLE_TRUNCATE_LENGTH - 3) + '...'
+    : title;
+}
+
 function cancelRename(id) {
   const titleEl = document.getElementById('title-text-' + id);
   const input   = document.getElementById('rename-input-' + id);
-  input.value = titleEl.textContent.trim();
+  input.value = titleEl.dataset.fullTitle;
   input.style.display = 'none';
   titleEl.style.display = 'inline';
 }
+
+(function applyFilterFromQuery() {
+  const params = new URLSearchParams(window.location.search);
+  const statusParam = params.get('status');
+  const folderParam = params.get('folder');
+  const isNewFolder = params.get('new') === '1';
+
+  if (statusParam) {
+    const el = document.querySelector('.doc-panel .panel-item[data-filter="' + statusParam + '"]');
+    if (el) setStatusFilter(statusParam, el);
+  } else if (folderParam) {
+    const el = document.getElementById('folder-' + folderParam);
+    if (el) {
+      setFolderFilter(folderParam, el);
+      if (isNewFolder) startFolderRename(folderParam);
+    }
+  }
+
+  if (statusParam || folderParam) {
+    history.replaceState(null, '', window.location.pathname);
+  }
+})();
 
 function openPdfPreview(contractId, url, title) {
   document.getElementById('pdf-frame').src = url;
@@ -961,7 +1082,7 @@ function submitRename(id) {
   const input   = document.getElementById('rename-input-' + id);
   const newTitle = input.value.trim();
 
-  if (!newTitle || newTitle === titleEl.textContent.trim()) {
+  if (!newTitle || newTitle === titleEl.dataset.fullTitle) {
     return cancelRename(id);
   }
 
@@ -976,7 +1097,9 @@ function submitRename(id) {
   .then(r => r.json())
   .then(data => {
     if (data.success) {
-      titleEl.textContent = data.title;
+      titleEl.dataset.fullTitle = data.title;
+      titleEl.title = data.title;
+      titleEl.textContent = truncateTitle(data.title);
       input.value = data.title;
     }
     input.style.display = 'none';
@@ -987,12 +1110,20 @@ function submitRename(id) {
 
 // Delete modal
 function openDeleteModal(contractId, contractName) {
+  const row = document.getElementById('row-' + contractId);
+  if (row && row.dataset.public === '1') {
+    document.getElementById('public-block-modal').classList.add('active');
+    return;
+  }
   document.getElementById('delete-contract-name').textContent = contractName;
   document.getElementById('delete-form').action = '/delete/' + contractId + '/';
   document.getElementById('delete-modal').classList.add('active');
 }
 function closeDeleteModal() {
   document.getElementById('delete-modal').classList.remove('active');
+}
+function closePublicBlockModal() {
+  document.getElementById('public-block-modal').classList.remove('active');
 }
 
 // ── Folders ──
@@ -1074,6 +1205,89 @@ function submitFolderRename(id) {
     nameEl.style.display = 'inline';
   })
   .catch(() => cancelFolderRename(id));
+}
+
+function contractContextMenuAddToFolder() {
+  const id = contextMenuContractId;
+  document.getElementById('contract-context-menu').classList.remove('active');
+  if (!id) return;
+  openFolderAssignModal(id);
+}
+
+function openFolderAssignModal(contractId) {
+  const row = document.getElementById('row-' + contractId);
+  const titleEl = document.getElementById('title-text-' + contractId);
+  const currentFolder = row ? row.dataset.folder : '';
+
+  document.getElementById('folder-assign-contract-name').textContent =
+    titleEl ? titleEl.dataset.fullTitle : '';
+
+  const listEl = document.getElementById('folder-assign-list');
+  listEl.innerHTML = '';
+
+  const noFolderLi = document.createElement('li');
+  noFolderLi.className = 'folder-assign-item' + (!currentFolder ? ' current' : '');
+  noFolderLi.innerHTML = `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+    </svg>
+    No Folder
+    <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+  `;
+  noFolderLi.onclick = () => assignContractToFolder(contractId, null);
+  listEl.appendChild(noFolderLi);
+
+  const folderItems = document.querySelectorAll('#folder-list .folder-item');
+  folderItems.forEach(function(item) {
+    const folderId = item.dataset.folderId;
+    const nameEl = item.querySelector('.folder-name-text');
+    const name = nameEl ? nameEl.textContent.trim() : 'Untitled Folder';
+
+    const li = document.createElement('li');
+    li.className = 'folder-assign-item' + (String(currentFolder) === String(folderId) ? ' current' : '');
+    li.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
+      </svg>
+      ${name}
+      <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+    `;
+    li.onclick = () => assignContractToFolder(contractId, folderId);
+    listEl.appendChild(li);
+  });
+
+  if (folderItems.length === 0) {
+    const emptyLi = document.createElement('li');
+    emptyLi.className = 'folder-assign-empty';
+    emptyLi.textContent = "You don't have any folders yet — create one from the sidebar first.";
+    listEl.appendChild(emptyLi);
+  }
+
+  document.getElementById('folder-assign-modal').classList.add('active');
+}
+
+function closeFolderAssignModal() {
+  document.getElementById('folder-assign-modal').classList.remove('active');
+}
+
+function assignContractToFolder(contractId, folderId) {
+  fetch('/folder/assign/' + contractId + '/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': '{{ csrf_token }}'
+    },
+    body: JSON.stringify({ folder_id: folderId })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      const row = document.getElementById('row-' + contractId);
+      if (row) row.dataset.folder = folderId || '';
+      applyFilters();
+    }
+    closeFolderAssignModal();
+  });
 }
 
 function setFolderFilter(folderId, el) {
@@ -1181,12 +1395,21 @@ function showContractContextMenu(event, contractId) {
   event.preventDefault();
   event.stopPropagation();
   contextMenuContractId = contractId;
+
+  const toggleEl = document.getElementById('contract-publish-toggle');
+  if (toggleEl) {
+    const row = document.getElementById('row-' + contractId);
+    const isPublic = row && row.dataset.public === '1';
+    toggleEl.textContent = isPublic
+      ? 'Remove from Public Verified Contracts'
+      : 'Add to Public Verified Contracts';
+  }
+
   const menu = document.getElementById('contract-context-menu');
   menu.style.left = event.pageX + 'px';
   menu.style.top = event.pageY + 'px';
   menu.classList.add('active');
 }
-
 document.addEventListener('click', () => {
   document.getElementById('contract-context-menu').classList.remove('active');
 });
@@ -1207,7 +1430,10 @@ function contractContextMenuTogglePublic() {
   const id = contextMenuContractId;
   document.getElementById('contract-context-menu').classList.remove('active');
   if (!id) return;
+  openPublishModal(id);
+}
 
+function openPublishModal(id) {
   const row = document.getElementById('row-' + id);
   const isCurrentlyPublic = row.dataset.public === '1';
 
@@ -1252,8 +1478,45 @@ function confirmTogglePublic() {
     if (data.success) {
       const row = document.getElementById('row-' + id);
       if (row) row.dataset.public = makePublic ? '1' : '0';
+      updateEyeButton(id, makePublic);
     }
     closePublishModal();
+  });
+}
+
+function updateEyeButton(id, isPublic) {
+  const btn = document.getElementById('eye-btn-' + id);
+  if (!btn) return;
+  btn.classList.toggle('public-on', isPublic);
+  btn.classList.toggle('public-off', !isPublic);
+  btn.title = isPublic ? 'Public — click to remove' : 'Not public — click to add';
+}
+
+function toggleEyeVisibility(id) {
+  const row = document.getElementById('row-' + id);
+  const isCurrentlyPublic = row.dataset.public === '1';
+
+  if (!isCurrentlyPublic) {
+    // Going public needs a warning first
+    openPublishModal(id);
+    return;
+  }
+
+  // Removing from public stays instant, no warning needed
+  fetch('/contract/' + id + '/publish/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': '{{ csrf_token }}'
+    },
+    body: JSON.stringify({ is_public: false })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      row.dataset.public = data.is_public ? '1' : '0';
+      updateEyeButton(id, data.is_public);
+    }
   });
 }
 

@@ -23,6 +23,44 @@ import base64
 from django.http import JsonResponse
 from .utils import log_activity
 from .models import Contract, AuditLog
+from django.utils import timezone
+from datetime import timedelta
+
+TRASH_RETENTION_DAYS = 15
+
+
+def _hard_delete_contract(contract, request=None, note=''):
+    """Permanently removes a contract's files, seal, QR, and DB row. No way back after this."""
+    for version in contract.versions.all():
+        if version.file:
+            version_path = os.path.join(settings.MEDIA_ROOT, str(version.file))
+            if os.path.isfile(version_path):
+                os.remove(version_path)
+
+    if contract.seal_image:
+        seal_path = os.path.join(settings.MEDIA_ROOT, str(contract.seal_image))
+        if os.path.isfile(seal_path):
+            os.remove(seal_path)
+
+    qr_path = os.path.join(settings.MEDIA_ROOT, 'seals', f'qr_{contract.id}.png')
+    if os.path.isfile(qr_path):
+        os.remove(qr_path)
+
+    title = contract.title
+    if request is not None:
+        log_activity(request, 'deleted', contract=None, note=note or f'Permanently deleted: {title}')
+    contract.delete()
+
+
+def _purge_expired_trash(request=None):
+    """Hard-deletes any trashed contract whose 15-day window has passed."""
+    cutoff = timezone.now() - timedelta(days=TRASH_RETENTION_DAYS)
+    expired = Contract.objects.filter(is_trashed=True, trashed_at__lt=cutoff)
+    for contract in expired:
+        _hard_delete_contract(
+            contract, request=request,
+            note=f'Auto-purged after {TRASH_RETENTION_DAYS} days: {contract.title}'
+        )
 
 @login_required
 def upload_contract(request):
@@ -246,7 +284,7 @@ def add_revision(request, contract_id):
 
 @login_required
 def contract_list(request):
-    contracts = Contract.objects.all()
+    contracts = Contract.objects.filter(is_trashed=False)
     folders = Folder.objects.filter(owner=request.user)
     return render(request, 'list.html', {'contracts': contracts, 'folders': folders})
 
@@ -258,28 +296,81 @@ def delete_contract(request, contract_id):
     contract = get_object_or_404(Contract, id=contract_id)
 
     if request.method == 'POST':
-        # ── Delete every version's file on disk ──
-        for version in contract.versions.all():
-            if version.file:
-                version_path = os.path.join(settings.MEDIA_ROOT, str(version.file))
-                if os.path.isfile(version_path):
-                    os.remove(version_path)
+        if contract.is_public:
+            # Public contracts must be unpublished before they can be trashed.
+            # (Blocked client-side too, but enforce it server-side either way.)
+            return redirect('contract_list')
 
-        # ── Delete seal image ──
-        if contract.seal_image:
-            seal_path = os.path.join(settings.MEDIA_ROOT, str(contract.seal_image))
-            if os.path.isfile(seal_path):
-                os.remove(seal_path)
+        contract.is_trashed = True
+        contract.trashed_at = timezone.now()
+        contract.save()
 
-        # ── Delete QR code ──
-        qr_path = os.path.join(settings.MEDIA_ROOT, 'seals', f'qr_{contract.id}.png')
-        if os.path.isfile(qr_path):
-            os.remove(qr_path)
-
-        log_activity(request, 'deleted', contract=contract, note=contract.title)
-        contract.delete()
+        log_activity(request, 'deleted', contract=contract, note=f'Moved to trash: {contract.title}')
         return redirect('contract_list')
     return render(request, 'confirm_delete.html', {'contract': contract})
+
+@login_required
+def trash_list(request):
+    if not request.user.is_superuser:
+        return redirect('contract_list')
+
+    _purge_expired_trash(request)
+
+    trashed = Contract.objects.filter(is_trashed=True).order_by('-trashed_at')
+    trash_items = []
+    for c in trashed:
+        expires_at = c.trashed_at + timedelta(days=TRASH_RETENTION_DAYS)
+        days_left = max((expires_at - timezone.now()).days, 0)
+        trash_items.append({
+            'contract': c,
+            'expires_at': expires_at,
+            'days_left': days_left,
+        })
+
+    folders = Folder.objects.filter(owner=request.user)
+    return render(request, 'trash.html', {'trash_items': trash_items, 'folders': folders})
+
+
+@login_required
+def restore_contract(request, contract_id):
+    if not request.user.is_superuser:
+        return JsonResponse({'success': False}, status=403)
+
+    if request.method == 'POST':
+        contract = get_object_or_404(Contract, id=contract_id, is_trashed=True)
+        contract.is_trashed = False
+        contract.trashed_at = None
+        contract.save()
+        log_activity(request, 'edited', contract=contract, note=f'Restored from trash: {contract.title}')
+        return JsonResponse({'success': True})
+    return JsonResponse({'success': False}, status=400)
+
+
+@login_required
+def permanently_delete_contract(request, contract_id):
+    if not request.user.is_superuser:
+        return JsonResponse({'success': False}, status=403)
+
+    if request.method == 'POST':
+        contract = get_object_or_404(Contract, id=contract_id, is_trashed=True)
+        title = contract.title
+        _hard_delete_contract(contract, request=request, note=f'Permanently deleted from trash: {title}')
+        return JsonResponse({'success': True})
+    return JsonResponse({'success': False}, status=400)
+
+
+@login_required
+def empty_trash(request):
+    if not request.user.is_superuser:
+        return JsonResponse({'success': False}, status=403)
+
+    if request.method == 'POST':
+        trashed = Contract.objects.filter(is_trashed=True)
+        count = trashed.count()
+        for contract in trashed:
+            _hard_delete_contract(contract, request=request, note=f'Trash emptied: {contract.title}')
+        return JsonResponse({'success': True, 'count': count})
+    return JsonResponse({'success': False}, status=400)
 
 def register(request):
     if request.method == 'POST':
@@ -302,7 +393,7 @@ def verify_physical(request):
             try:
                 matched_contract = None
                 
-                for contract in Contract.objects.exclude(encrypted_cf=''):
+                for contract in Contract.objects.exclude(encrypted_cf='').filter(is_trashed=False):
                     try:
                         if qr_data == contract.encrypted_cf:
                             matched_contract = contract
@@ -597,7 +688,7 @@ def public_verify(request):
 
                 matched_contract = None
 
-                for contract in Contract.objects.exclude(fingerprint=''):
+                for contract in Contract.objects.exclude(fingerprint='').filter(is_trashed=False):
                     stored_cf = contract.fingerprint
                     match = current_cf == stored_cf
                     debug_log.append(

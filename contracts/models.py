@@ -82,6 +82,8 @@ class Contract(models.Model):
     modified_at = models.DateTimeField(auto_now=True)
     tags = models.CharField(max_length=255, blank=True, help_text="Comma-separated tags")
     base_filename = models.CharField(max_length=200, blank=True, help_text="Original filename (no extension), reused across versions")
+    is_trashed = models.BooleanField(default=False)
+    trashed_at = models.DateTimeField(null=True, blank=True)
 
     def tag_list(self):
         return [t.strip() for t in self.tags.split(',') if t.strip()]

@@ -528,6 +528,26 @@
   .meta-row-label { color: #889aab; }
   .meta-row-value { color: #2d3a47; font-weight: 500; text-align: right; }
 
+  .sidebar-admin-actions { padding: 4px 16px 16px; }
+  .btn-remove-public {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    background: #fff0f0;
+    color: #e53e3e;
+    border: 1px solid #fbd5d5;
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-remove-public:hover { background: #ffe4e4; }
+  .btn-remove-public svg { width: 14px; height: 14px; flex-shrink: 0; }
+
   @media (max-width: 900px) {
     .pdf-panel { width: 100%; right: -100%; min-width: 0; }
   }
@@ -587,6 +607,17 @@
         <div class="meta-row"><span class="meta-row-label">Last Verified</span><span class="meta-row-value" id="public-pdf-verified">—</span></div>
         <div class="meta-row"><span class="meta-row-label">Version</span><span class="meta-row-value" id="public-pdf-version">—</span></div>
       </div>
+      {% if user.is_superuser %}
+      <div class="sidebar-admin-actions">
+        <button class="btn-remove-public" onclick="removeFromPublicVerify()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+            <line x1="1" y1="1" x2="23" y2="23"/>
+          </svg>
+          Remove from Public Verified Contracts
+        </button>
+      </div>
+      {% endif %}
     </div>
   </div>
 </div>
@@ -908,7 +939,10 @@ uploadArea.addEventListener('drop', function(e) {
 
 const hasResult = "{{ result|default:'' }}" !== '';
 
+let currentPublicContractId = null;
+
 function openPublicPdfPreview(el) {
+  currentPublicContractId = el.dataset.contractId;
   document.getElementById('public-pdf-frame').src = el.dataset.url;
   document.getElementById('public-pdf-title').textContent = el.dataset.title;
   document.getElementById('public-pdf-download-btn').href = el.dataset.url;
@@ -925,6 +959,34 @@ function closePublicPdfPreview() {
   document.getElementById('public-pdf-panel').classList.remove('open');
   document.getElementById('public-pdf-overlay').classList.remove('open');
   document.getElementById('public-pdf-frame').src = '';
+  currentPublicContractId = null;
+}
+
+function removeFromPublicVerify() {
+  if (!currentPublicContractId) return;
+
+  fetch('/contract/' + currentPublicContractId + '/publish/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': '{{ csrf_token }}'
+    },
+    body: JSON.stringify({ is_public: false })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      const item = document.querySelector('.panel-item[data-contract-id="' + currentPublicContractId + '"]');
+      if (item) item.remove();
+
+      const list = document.querySelector('.doc-panel .panel-list');
+      if (list && list.children.length === 0) {
+        list.innerHTML = '<li class="doc-panel-empty">No verified contracts published yet.</li>';
+      }
+
+      closePublicPdfPreview();
+    }
+  });
 }
 
 function updateStatusSteps(pct) {

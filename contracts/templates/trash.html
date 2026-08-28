@@ -1,0 +1,475 @@
+{% extends 'base.html' %}
+{% block title %}Trash{% endblock %}
+
+{% block content %}
+<style>
+  /* Secondary panel — identical layout to list.html's doc-panel */
+  .doc-panel {
+    position: fixed;
+    top: 56px;
+    left: 72px;
+    bottom: 0;
+    width: 200px;
+    background: #f7f6f4;
+    border-right: 1px solid #e8e6e2;
+    padding: 24px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    overflow-y: auto;
+    z-index: 300;
+  }
+  .panel-heading {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #888;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .panel-list { list-style: none; display: flex; flex-direction: column; gap: 2px; }
+  .panel-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #555;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .panel-item:hover { background: #eceae6; }
+  .panel-item.active { background: #eceae6; color: #222; font-weight: 500; }
+  .panel-item svg { width: 15px; height: 15px; flex-shrink: 0; }
+  .panel-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .panel-dot.pending  { background: #bbb; }
+  .panel-dot.sent     { background: #f4c54d; }
+  .panel-dot.approved { background: #4caf82; }
+  .panel-add-btn {
+    background: none; border: none; color: #aaa; cursor: pointer;
+    display: flex; align-items: center;
+  }
+  .panel-add-btn:hover { color: #555; }
+  .panel-add-btn svg { width: 13px; height: 13px; }
+
+  .container { margin-left: 216px; max-width: none; padding-right: 2rem; }
+  @media (max-width: 900px) {
+    .doc-panel { display: none; }
+    .container { margin-left: 0; }
+  }
+
+  .contracts-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+  }
+  .contracts-header h1 { margin: 0; }
+  .contracts-header p { margin: 4px 0 0; color: #667788; font-size: 14px; }
+
+  .btn-empty-trash {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #fff0f0;
+    color: #e53e3e;
+    border: 1px solid #fbd5d5;
+    border-radius: 8px;
+    padding: 9px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.15s;
+  }
+  .btn-empty-trash:hover { background: #ffe4e4; }
+  .btn-empty-trash svg { width: 15px; height: 15px; }
+  .btn-empty-trash:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .contracts-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+  }
+  .contracts-table th {
+    text-align: left;
+    padding: 12px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #889aab;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid #eef0f4;
+    background: #fafbfc;
+  }
+  .contracts-table td {
+    padding: 14px 16px;
+    font-size: 14px;
+    color: #2d3a47;
+    border-bottom: 1px solid #f0f2f5;
+    vertical-align: middle;
+  }
+  .contracts-table tr:last-child td { border-bottom: none; }
+  .contracts-table tr:hover td { background: #f8fafc; }
+
+  .contract-name-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .contract-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    color: #889aab;
+  }
+  .contract-icon svg { width: 20px; height: 20px; }
+  .contract-seal-thumb {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    object-fit: cover;
+    flex-shrink: 0;
+    opacity: 0.6;
+  }
+  .contract-title-text {
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 260px;
+  }
+
+  .expiry-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 99px;
+  }
+  .expiry-badge.plenty  { background: #e8f5ef; color: #27c485; }
+  .expiry-badge.soon    { background: #fff8e6; color: #d97706; }
+  .expiry-badge.urgent  { background: #fff0f0; color: #e53e3e; }
+
+  .action-btns {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .icon-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 6px;
+    color: #889aab;
+    transition: background 0.15s, color 0.15s;
+    display: flex;
+    align-items: center;
+  }
+  .icon-btn:hover { background: #eef0f4; color: #2d3a47; }
+  .icon-btn.danger:hover { background: #fff0f0; color: #e53e3e; }
+  .icon-btn svg { width: 16px; height: 16px; }
+
+  .empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+  }
+  .empty-state .icon { margin-bottom: 1rem; }
+  .empty-state .icon svg { width: 48px; height: 48px; color: #c3ccd6; }
+  .empty-state p { color: #667788; }
+
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.35);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: #fff;
+    border-radius: 12px;
+    padding: 2rem;
+    max-width: 420px;
+    width: 90%;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+  }
+  .modal h3 { margin: 0 0 0.75rem; }
+  .modal p  { color: #667788; font-size: 14px; }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 1.5rem;
+  }
+</style>
+
+<aside class="doc-panel">
+  <div class="panel-section">
+    <p class="panel-heading">Documents</p>
+    <ul class="panel-list">
+      <li class="panel-item" onclick="window.location.href='{% url 'contract_list' %}'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+          <polyline points="14 2 14 8 20 8"/>
+        </svg>
+        All Documents
+      </li>
+      <li class="panel-item active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+        </svg>
+        Trash
+      </li>
+    </ul>
+  </div>
+
+  <div class="panel-section">
+    <p class="panel-heading">Filters</p>
+    <ul class="panel-list">
+      <li class="panel-item" onclick="window.location.href='{% url 'contract_list' %}?status=pending'">
+        <span class="panel-dot pending"></span> Draft
+      </li>
+      <li class="panel-item" onclick="window.location.href='{% url 'contract_list' %}?status=sent'">
+        <span class="panel-dot sent"></span> Sent
+      </li>
+      <li class="panel-item" onclick="window.location.href='{% url 'contract_list' %}?status=approved'">
+        <span class="panel-dot approved"></span> Signed
+      </li>
+    </ul>
+  </div>
+
+  <div class="panel-section">
+    <p class="panel-heading">
+      Folders
+      <button class="panel-add-btn" title="New folder" onclick="createFolderFromTrash()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>
+    </p>
+    <ul class="panel-list" id="folder-list">
+      {% for folder in folders %}
+      <li class="panel-item folder-item" onclick="window.location.href='{% url 'contract_list' %}?folder={{ folder.id }}'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
+        </svg>
+        <span class="folder-name-text">{{ folder.name }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</aside>
+
+<div class="contracts-header">
+  <div>
+    <h1>Trash</h1>
+    <p>Documents here are deleted permanently 15 days after being trashed.</p>
+  </div>
+  <button class="btn-empty-trash" onclick="openEmptyTrashModal()" {% if not trash_items %}disabled{% endif %}>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <polyline points="3 6 5 6 21 6"/>
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+      <path d="M10 11v6M14 11v6"/>
+      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+    </svg>
+    Empty Trash
+  </button>
+</div>
+
+{% if trash_items %}
+<table class="contracts-table">
+  <thead>
+    <tr>
+      <th>Document Name</th>
+      <th>Trashed On</th>
+      <th style="width:140px;">Expires</th>
+      <th style="width:100px;"></th>
+    </tr>
+  </thead>
+  <tbody id="trash-tbody">
+    {% for item in trash_items %}
+    <tr id="trash-row-{{ item.contract.id }}">
+      <td>
+        <div class="contract-name-cell">
+          {% if item.contract.seal_image %}
+            <img src="{{ item.contract.seal_image.url }}" class="contract-seal-thumb">
+          {% else %}
+            <span class="contract-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+            </span>
+          {% endif %}
+          <span class="contract-title-text">{{ item.contract.title }}</span>
+        </div>
+      </td>
+      <td style="color:#667788; white-space:nowrap;">{{ item.contract.trashed_at|date:"n/d/Y" }}</td>
+      <td style="white-space:nowrap;">
+        {% if item.days_left <= 1 %}
+          <span class="expiry-badge urgent">{{ item.days_left }} day{{ item.days_left|pluralize }} left</span>
+        {% elif item.days_left <= 5 %}
+          <span class="expiry-badge soon">{{ item.days_left }} days left</span>
+        {% else %}
+          <span class="expiry-badge plenty">{{ item.days_left }} days left</span>
+        {% endif %}
+      </td>
+      <td>
+        <div class="action-btns">
+          <button class="icon-btn" title="Restore" onclick="restoreContract({{ item.contract.id }})">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="1 4 1 10 7 10"/>
+              <path d="M3.51 15a9 9 0 1 0 .49-4.54"/>
+            </svg>
+          </button>
+          <button class="icon-btn danger" title="Delete Forever"
+                  onclick="openDeleteForeverModal({{ item.contract.id }}, '{{ item.contract.title|escapejs }}')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+              <path d="M10 11v6M14 11v6"/>
+              <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+            </svg>
+          </button>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <div class="icon">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <polyline points="3 6 5 6 21 6"/>
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+      <path d="M10 11v6M14 11v6"/>
+      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+    </svg>
+  </div>
+  <p>Trash is empty.</p>
+</div>
+{% endif %}
+
+<!-- Delete Forever Modal -->
+<div class="modal-overlay" id="delete-forever-modal">
+  <div class="modal">
+    <h3>Delete Forever</h3>
+    <p>Are you sure you want to permanently delete <strong id="delete-forever-name"></strong>?
+       This cannot be undone — the document, all its revisions, and its seal will be removed for good.</p>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeDeleteForeverModal()">Cancel</button>
+      <button class="btn btn-danger" id="delete-forever-confirm">Yes, Delete Forever</button>
+    </div>
+  </div>
+</div>
+
+<!-- Empty Trash Modal -->
+<div class="modal-overlay" id="empty-trash-modal">
+  <div class="modal">
+    <h3>Empty Trash</h3>
+    <p>This will permanently delete every document currently in Trash. This cannot be undone.</p>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeEmptyTrashModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmEmptyTrash()">Yes, Empty Trash</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// @ts-nocheck
+function restoreContract(id) {
+  fetch('/trash/restore/' + id + '/', {
+    method: 'POST',
+    headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      const row = document.getElementById('trash-row-' + id);
+      if (row) row.remove();
+      maybeReloadIfEmpty();
+    }
+  });
+}
+
+let deleteForeverId = null;
+
+function openDeleteForeverModal(id, title) {
+  deleteForeverId = id;
+  document.getElementById('delete-forever-name').textContent = title;
+  document.getElementById('delete-forever-modal').classList.add('active');
+}
+function closeDeleteForeverModal() {
+  document.getElementById('delete-forever-modal').classList.remove('active');
+}
+document.getElementById('delete-forever-confirm').addEventListener('click', function() {
+  if (!deleteForeverId) return;
+  fetch('/trash/delete-forever/' + deleteForeverId + '/', {
+    method: 'POST',
+    headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      const row = document.getElementById('trash-row-' + deleteForeverId);
+      if (row) row.remove();
+      maybeReloadIfEmpty();
+    }
+    closeDeleteForeverModal();
+  });
+});
+
+function openEmptyTrashModal() {
+  document.getElementById('empty-trash-modal').classList.add('active');
+}
+function closeEmptyTrashModal() {
+  document.getElementById('empty-trash-modal').classList.remove('active');
+}
+function confirmEmptyTrash() {
+  fetch('/trash/empty/', {
+    method: 'POST',
+    headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) window.location.reload();
+  });
+}
+
+function maybeReloadIfEmpty() {
+  const tbody = document.getElementById('trash-tbody');
+  if (tbody && tbody.children.length === 0) window.location.reload();
+}
+
+function createFolderFromTrash() {
+  fetch('/folder/create/', {
+    method: 'POST',
+    headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      window.location.href = '{% url "contract_list" %}?folder=' + data.id + '&new=1';
+    }
+  });
+}
+</script>
+{% endblock %}

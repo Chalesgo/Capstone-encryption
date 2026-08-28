@@ -21,5 +21,9 @@ urlpatterns = [
     path('contract/<int:contract_id>/add-revision/', views.add_revision, name='add_revision'),
     path('contract/<int:pk>/publish/', views.publish_contract, name='publish_contract'),
     path('contract/<int:contract_id>/version-history/', views.contract_version_history, name='contract_version_history'),
+    path('trash/', views.trash_list, name='trash_list'),
+    path('trash/restore/<int:contract_id>/', views.restore_contract, name='restore_contract'),
+    path('trash/delete-forever/<int:contract_id>/', views.permanently_delete_contract, name='permanently_delete_contract'),
+    path('trash/empty/', views.empty_trash, name='empty_trash'),
 ]
 
