@@ -14,6 +14,7 @@ urlpatterns = [
     path('dashboard/', views.dashboard, name='dashboard'),
     path('tag/<int:pk>/', views.tag_contract, name='tag_contract'),
     path('folder/create/', views.create_folder, name='create_folder'),
+    path('folder/reorder/', views.reorder_folders, name='reorder_folders'),
     path('folder/rename/<int:pk>/', views.rename_folder, name='rename_folder'),
     path('folder/assign/<int:contract_id>/', views.assign_folder, name='assign_folder'),
     path('folder/delete/<int:pk>/', views.delete_folder, name='delete_folder'),

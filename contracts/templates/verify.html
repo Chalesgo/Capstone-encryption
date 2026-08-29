@@ -251,26 +251,17 @@
     /* ── Verification Layout (doc preview + status panel) ── */
     /* Breaks out of the 600px page wrapper to fill the viewport width */
     .verify-layout {
-        display: flex;
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.75fr);
         gap: 1.5rem;
         align-items: stretch;
-        width: 100vw;
-        max-width: 100vw;
-        position: relative;
-        left: 50%;
-        right: 50%;
-        margin-left: -50vw;
-        margin-right: -50vw;
-        padding: 0 2.5rem;
-        box-sizing: border-box;
-        height: calc(100vh - 160px);
-        min-height: 560px;
+        width: 100%;
+        height: 100%;
+        min-height: 0;
     }
     @media (max-width: 900px) {
         .verify-layout {
-            flex-direction: column;
-            height: auto;
-            padding: 0 1rem;
+            display: block;
         }
     }
     .doc-preview-panel {
@@ -281,7 +272,7 @@
         overflow: hidden;
         display: flex;
         flex-direction: column;
-        min-height: 480px;
+        min-height: 0;
         height: 100%;
     }
     .doc-preview-header {
@@ -315,12 +306,9 @@
         display: flex;
         flex-direction: column;
         height: 100%;
-        min-height: 480px;
-        overflow-y: auto;
+        min-height: 0;
+        overflow: hidden;
         justify-content: center;
-    }
-    @media (max-width: 900px) {
-        .status-panel { min-height: unset; height: auto; }
     }
     .status-panel-header {
         display: flex;
@@ -413,16 +401,43 @@
   }
   .doc-panel-empty { font-size: 12.5px; color: #aabbcc; padding: 8px 10px; }
 
-  .verify-page-wrap {
-    max-width: 600px;
-    margin: 0 auto;
-  }
+  .verify-page-wrap { margin-left: 240px; min-width: 0; }
+  .verify-page-header,
+  #upload-card,
+  #results-section { max-width: 620px; margin-left: auto; margin-right: auto; }
   @media (min-width: 901px) {
-    .verify-page-wrap { margin-left: 260px; margin-right: auto; }
+    body.verification-active .container {
+      height: calc(100dvh - 56px);
+      padding-top: 1.25rem;
+      padding-bottom: 1.25rem;
+      overflow: hidden;
+    }
   }
   @media (max-width: 900px) {
     .doc-panel { display: none; }
+    .verify-page-wrap { margin-left: 0; }
+    body.verification-active .container {
+      height: calc(100dvh - 56px);
+      padding-top: 1rem;
+      padding-bottom: 1rem;
+      overflow: hidden;
+    }
+    body.verification-active .doc-preview-panel { display: none; }
+    body.verification-active .status-panel { width: 100%; }
   }
+  body.verification-active { overflow: hidden; }
+  body.verification-active .page-footer { display: none; }
+  body.verification-active .verify-page-wrap,
+  body.verification-active #loading-screen { height: 100%; min-height: 0; }
+
+  /* Hide the public sidebar + any open PDF panel while verifying, and reclaim its space */
+  body.verification-active .doc-panel { display: none; }
+  body.verification-active .pdf-panel,
+  body.verification-active .pdf-overlay { display: none !important; }
+  body.verification-active .verify-page-wrap { margin-left: 0; }
+
+  /* Belt-and-suspenders scroll lock — some browsers scroll <html> even when body is hidden */
+  html:has(body.verification-active) { overflow: hidden; height: 100%; }
 
 
   /* ── Pop-out PDF panel (public browse) ── */
@@ -624,7 +639,7 @@
 <div class="verify-page-wrap">
 
     <!-- Header -->
-    <div style="text-align: center; margin-bottom: 2rem;">
+    <div class="verify-page-header" id="verify-page-header" style="text-align: center; margin-bottom: 2rem;">
         <div style="display:inline-flex; align-items:center; justify-content:center;
                     width:64px; height:64px; border-radius:16px;
                     background:#eef2ff; margin-bottom:12px;">
@@ -1024,6 +1039,9 @@ document.getElementById('verify-form').addEventListener('submit', function(e) {
         const fileSizeMB = file.size / (1024 * 1024);
         const estimatedPages = Math.max(2, Math.min(Math.ceil(fileSizeMB * 3), 8));
 
+        document.body.classList.add('verification-active');
+        document.documentElement.classList.add('verification-active'); // fallback for browsers without :has()
+        document.getElementById('verify-page-header').style.display = 'none';
         document.getElementById('upload-card').style.display = 'none';
         document.getElementById('loading-screen').style.display = 'block';
 

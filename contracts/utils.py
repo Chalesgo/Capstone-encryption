@@ -62,12 +62,17 @@ def verify_version_chain(contract):
     """
     versions = contract.versions.order_by('version_number')
     results = []
-    running_prev = None
+    running_prev = ''
 
     for version in versions:
+        expected_previous = running_prev
+        link_valid = version.previous_fingerprint == expected_previous
         try:
-            recomputed = generate_canonical_fingerprint(version.file.path, previous_cf=running_prev)
-            valid = (recomputed == version.fingerprint)
+            recomputed = generate_canonical_fingerprint(
+                version.file.path,
+                previous_cf=expected_previous or None,
+            )
+            valid = link_valid and recomputed == version.fingerprint
         except Exception:
             valid = False
 
@@ -397,21 +402,16 @@ def generate_qr_code(data: str, output_path: str):
     return output_path
 
 def extract_cf_from_metadata(pdf_path: str):
-    """
-    Extracts the encrypted CF from the PDF metadata keywords field.
-    Returns the encrypted CF string or None if not found.
-    """
+    """Extracts the SEALGUARD value from the PDF metadata, if present."""
     try:
-        doc = fitz.open(pdf_path)
-        keywords = doc.metadata.get('keywords', '')
-        doc.close()
-
+        with fitz.open(pdf_path) as doc:
+            keywords = doc.metadata.get('keywords', '')
         if keywords.startswith('SEALGUARD:'):
             return keywords[len('SEALGUARD:'):]
-        return None
     except Exception:
-        return None
-    
+        pass
+    return None
+
     """
     Creates a new PDF with extended page size to fit the signature strip below content.
     Stores encrypted CF in PDF metadata for reliable verification.
@@ -523,22 +523,6 @@ def extract_cf_from_metadata(pdf_path: str):
     dst.close()
     src.close()
 
-def extract_cf_from_metadata(pdf_path: str):
-    """
-    Extracts the encrypted CF from the PDF metadata keywords field.
-    Returns the encrypted CF string or None if not found.
-    """
-    try:
-        doc = fitz.open(pdf_path)
-        keywords = doc.metadata.get('keywords', '')
-        doc.close()
-
-        if keywords.startswith('SEALGUARD:'):
-            return keywords[len('SEALGUARD:'):]
-        return None
-    except Exception:
-        return None
-
 from .models import AuditLog
 
 def get_client_ip(request):
@@ -551,6 +535,7 @@ def get_client_ip(request):
 def log_activity(request, action, contract=None, note=''):
     AuditLog.objects.create(
         contract=contract,
+        document_title=contract.title if contract else '',
         user=request.user if request.user.is_authenticated else None,
         action=action,
         ip_address=get_client_ip(request),

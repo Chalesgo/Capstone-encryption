@@ -65,10 +65,45 @@
   }
   .audit-panel-header {
     padding: 16px 20px;
+    border-bottom: 1px solid #eef0f4;
+  }
+  .audit-panel-heading {
+    margin-bottom: 12px;
+    color: #1a1a2e;
     font-size: 15px;
     font-weight: 600;
-    color: #1a1a2e;
-    border-bottom: 1px solid #eef0f4;
+  }
+  .audit-filters {
+    display: flex;
+    align-items: end;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .audit-filter-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .audit-filter-field label {
+    color: #52606d;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .audit-filter-field select {
+    min-width: 180px;
+    min-height: 42px;
+    padding: 8px 34px 8px 11px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #fff;
+    color: #1f2937;
+    font-size: 14px;
+  }
+  .audit-filter-status {
+    align-self: center;
+    margin-left: auto;
+    color: #667788;
+    font-size: 13px;
   }
 
   .audit-table {
@@ -152,6 +187,51 @@
     color: #889aab;
     font-size: 13px;
   }
+  .audit-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 20px;
+    border-top: 1px solid #eef0f4;
+  }
+  .pagination-summary {
+    color: #667788;
+    font-size: 13px;
+  }
+  .pagination-links {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .pagination-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    padding: 8px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    color: #2d3a47;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .pagination-link:hover { background: #f8fafc; }
+  .pagination-current {
+    min-width: 90px;
+    color: #52606d;
+    font-size: 13px;
+    text-align: center;
+  }
+  @media (max-width: 760px) {
+    .stat-cards { grid-template-columns: 1fr; }
+    .audit-panel { overflow-x: auto; }
+    .audit-filter-field, .audit-filter-field select { width: 100%; }
+    .audit-filter-status { width: 100%; margin-left: 0; }
+    .audit-table { min-width: 760px; }
+    .audit-pagination { min-width: 760px; }
+  }
 </style>
 
 <div class="dash-header">
@@ -202,7 +282,38 @@
 </div>
 
 <div class="audit-panel">
-  <div class="audit-panel-header">Recent Verification Audit Logs</div>
+  <div class="audit-panel-header">
+    <div class="audit-panel-heading">Document Activity</div>
+    <form class="audit-filters" id="audit-filters" method="get">
+      <div class="audit-filter-field">
+        <label for="activity-filter">Show activity</label>
+        <select id="activity-filter" name="activity" onchange="this.form.requestSubmit()">
+          <option value="all" {% if activity_filter == 'all' %}selected{% endif %}>All activity</option>
+          <option value="added" {% if activity_filter == 'added' %}selected{% endif %}>Added documents</option>
+          <option value="edited" {% if activity_filter == 'edited' %}selected{% endif %}>Edited documents</option>
+          <option value="deleted" {% if activity_filter == 'deleted' %}selected{% endif %}>Deleted documents</option>
+        </select>
+      </div>
+      <div class="audit-filter-field">
+        <label for="sort-order">Sort by date</label>
+        <select id="sort-order" name="sort" onchange="this.form.requestSubmit()">
+          <option value="newest" {% if sort_order == 'newest' %}selected{% endif %}>Newest first</option>
+          <option value="oldest" {% if sort_order == 'oldest' %}selected{% endif %}>Oldest first</option>
+        </select>
+      </div>
+      <div class="audit-filter-field">
+        <label for="rows-per-page">Rows per page</label>
+        <select id="rows-per-page" name="per_page" onchange="this.form.requestSubmit()">
+          <option value="10" {% if rows_per_page == 10 %}selected{% endif %}>10 rows</option>
+          <option value="20" {% if rows_per_page == 20 %}selected{% endif %}>20 rows</option>
+          <option value="50" {% if rows_per_page == 50 %}selected{% endif %}>50 rows</option>
+          <option value="100" {% if rows_per_page == 100 %}selected{% endif %}>100 rows</option>
+        </select>
+      </div>
+      <div class="audit-filter-status" aria-live="polite">Updates automatically</div>
+      <noscript><button class="btn btn-primary" type="submit">Apply</button></noscript>
+    </form>
+  </div>
 
   {% if recent_logs %}
   <table class="audit-table">
@@ -224,7 +335,7 @@
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
             </svg>
-            <span class="audit-title-text">{{ log.contract.title|default:"—" }}</span>
+            <span class="audit-title-text" title="{{ log.display_document_title }}">{{ log.display_document_title|default:"—" }}</span>
           </div>
         </td>
         <td style="color:#889aab;">{{ log.ip_address|default:"—" }}</td>
@@ -245,7 +356,24 @@
     </tbody>
   </table>
   {% else %}
-  <div class="empty-audit">No activity recorded yet.</div>
+  <div class="empty-audit">No matching document activity was found.</div>
+  {% endif %}
+
+  {% if page_obj.paginator.count %}
+  <nav class="audit-pagination" aria-label="Document activity pages">
+    <div class="pagination-summary">
+      Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} records
+    </div>
+    <div class="pagination-links">
+      {% if page_obj.has_previous %}
+        <a class="pagination-link" href="?activity={{ activity_filter }}&amp;sort={{ sort_order }}&amp;per_page={{ rows_per_page }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>
+      {% endif %}
+      <span class="pagination-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+      {% if page_obj.has_next %}
+        <a class="pagination-link" href="?activity={{ activity_filter }}&amp;sort={{ sort_order }}&amp;per_page={{ rows_per_page }}&amp;page={{ page_obj.next_page_number }}">Next</a>
+      {% endif %}
+    </div>
+  </nav>
   {% endif %}
 </div>
 {% endblock %}

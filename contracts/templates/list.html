@@ -56,7 +56,9 @@
     background: none; border: none; color: #aaa; cursor: pointer;
     display: flex; align-items: center;
   }
-    .folder-item.drag-over { background: #dfe9ff; outline: 1px dashed #4f8ef7; }
+  .folder-item.drag-over { background: #dfe9ff; outline: 1px dashed #4f8ef7; }
+  .folder-item[draggable="true"] { cursor: grab; }
+  .folder-item.folder-sorting { opacity: 0.55; cursor: grabbing; }
   .folder-rename-input {
     font-size: 13px;
     border: 1px solid #4f8ef7;
@@ -571,12 +573,14 @@
     </p>
     <ul class="panel-list" id="folder-list">
       {% for folder in folders %}
-            <li class="panel-item folder-item" id="folder-{{ folder.id }}" data-folder-id="{{ folder.id }}"
-          onclick="setFolderFilter({{ folder.id }}, this)"
+            <li class="panel-item folder-item" id="folder-{{ folder.id }}" data-folder-id="{{ folder.id }}" draggable="true"
+          onclick="handleFolderClick({{ folder.id }}, this)"
           oncontextmenu="showFolderContextMenu(event, {{ folder.id }})"
-          ondragover="event.preventDefault(); this.classList.add('drag-over');"
-          ondragleave="this.classList.remove('drag-over');"
-          ondrop="dropOnFolder(event, {{ folder.id }})">
+          ondragstart="folderDragStart(event, {{ folder.id }})"
+          ondragover="folderDragOver(event, this)"
+          ondragleave="folderDragLeave(event, this)"
+          ondragend="folderDragEnd(event)"
+          ondrop="handleFolderDrop(event, {{ folder.id }})">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
         </svg>
@@ -664,7 +668,7 @@
         <circle cx="11" cy="11" r="8"/>
         <line x1="21" y1="21" x2="16.65" y2="16.65"/>
       </svg>
-      <input type="text" id="doc-search" class="search-input" placeholder="Search title or uploader..." oninput="applyFilters()">
+      <input type="text" id="doc-search" class="search-input" placeholder="Search title or uploader..." oninput="scheduleSearchFilter()">
     </div>
     <a href="/upload/" class="btn btn-primary">+ Upload Contract</a>
   </div>
@@ -931,6 +935,19 @@
 // @ts-nocheck
 // Panel status filter + search (combined)
 let currentStatusFilter = null;
+let searchFilterTimer = null;
+let lastAppliedSearchQuery = '';
+
+function scheduleSearchFilter() {
+  clearTimeout(searchFilterTimer);
+  const query = document.getElementById('doc-search').value.trim().toLowerCase();
+  if (query === lastAppliedSearchQuery) return;
+
+  searchFilterTimer = setTimeout(() => {
+    lastAppliedSearchQuery = query;
+    applyFilters();
+  }, 350);
+}
 
 function setStatusFilter(status, el) {
   document.querySelectorAll('.doc-panel .panel-item').forEach(item => item.classList.remove('active'));
@@ -1141,11 +1158,14 @@ function createFolder() {
     li.className = 'panel-item folder-item';
     li.id = 'folder-' + data.id;
     li.dataset.folderId = data.id;
-        li.onclick = () => setFolderFilter(data.id, li);
+    li.draggable = true;
+    li.onclick = () => handleFolderClick(data.id, li);
     li.oncontextmenu = (e) => showFolderContextMenu(e, data.id);
-    li.ondragover = (e) => { e.preventDefault(); li.classList.add('drag-over'); };
-    li.ondragleave = () => li.classList.remove('drag-over');
-    li.ondrop = (e) => dropOnFolder(e, data.id);
+    li.ondragstart = (e) => folderDragStart(e, data.id);
+    li.ondragover = (e) => folderDragOver(e, li);
+    li.ondragleave = (e) => folderDragLeave(e, li);
+    li.ondragend = folderDragEnd;
+    li.ondrop = (e) => handleFolderDrop(e, data.id);
     li.innerHTML = `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
@@ -1333,10 +1353,109 @@ document.addEventListener('click', function(e) {
 });
 // ── Drag contracts into folders ──
 let draggedContractId = null;
+let draggedFolderId = null;
+let folderOriginalOrder = [];
+let folderDropCommitted = false;
+let suppressFolderClick = false;
 
 function dragContractStart(event, contractId) {
+  draggedFolderId = null;
   draggedContractId = contractId;
   event.dataTransfer.effectAllowed = 'move';
+}
+
+function handleFolderClick(folderId, el) {
+  if (suppressFolderClick) return;
+  setFolderFilter(folderId, el);
+}
+
+function folderDragStart(event, folderId) {
+  draggedContractId = null;
+  draggedFolderId = String(folderId);
+  folderDropCommitted = false;
+  folderOriginalOrder = getFolderOrder();
+  suppressFolderClick = true;
+  event.currentTarget.classList.add('folder-sorting');
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', 'folder:' + folderId);
+}
+
+function folderDragOver(event, target) {
+  event.preventDefault();
+  if (!draggedFolderId) {
+    target.classList.add('drag-over');
+    return;
+  }
+
+  event.dataTransfer.dropEffect = 'move';
+  const dragged = document.getElementById('folder-' + draggedFolderId);
+  if (!dragged || dragged === target) return;
+
+  const placeAfter = event.clientY > target.getBoundingClientRect().top + target.offsetHeight / 2;
+  target.parentNode.insertBefore(dragged, placeAfter ? target.nextSibling : target);
+}
+
+function folderDragLeave(event, target) {
+  if (!draggedFolderId && !target.contains(event.relatedTarget)) {
+    target.classList.remove('drag-over');
+  }
+}
+
+function handleFolderDrop(event, folderId) {
+  event.preventDefault();
+  event.currentTarget.classList.remove('drag-over');
+
+  if (draggedFolderId) {
+    folderDropCommitted = true;
+    saveFolderOrder();
+    return;
+  }
+
+  dropOnFolder(event, folderId);
+}
+
+function folderDragEnd(event) {
+  event.currentTarget.classList.remove('folder-sorting');
+  document.querySelectorAll('#folder-list .drag-over').forEach(el => el.classList.remove('drag-over'));
+  if (draggedFolderId && !folderDropCommitted) restoreFolderOrder(folderOriginalOrder);
+  draggedFolderId = null;
+  setTimeout(() => { suppressFolderClick = false; }, 0);
+}
+
+function getFolderOrder() {
+  return Array.from(document.querySelectorAll('#folder-list .folder-item'))
+    .map(item => Number(item.dataset.folderId));
+}
+
+function restoreFolderOrder(folderIds) {
+  const list = document.getElementById('folder-list');
+  folderIds.forEach(id => {
+    const folder = document.getElementById('folder-' + id);
+    if (folder) list.appendChild(folder);
+  });
+}
+
+function saveFolderOrder() {
+  const folderIds = getFolderOrder();
+  fetch('/folder/reorder/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': '{{ csrf_token }}'
+    },
+    body: JSON.stringify({ folder_ids: folderIds })
+  })
+  .then(response => {
+    if (!response.ok) throw new Error('Unable to save folder order');
+    return response.json();
+  })
+  .then(data => {
+    if (!data.success) throw new Error('Unable to save folder order');
+  })
+  .catch(() => {
+    restoreFolderOrder(folderOriginalOrder);
+    alert('The folder order could not be saved. Please try again.');
+  });
 }
 
 function dropOnFolder(event, folderId) {

@@ -7,9 +7,10 @@ class Folder(models.Model):
     name = models.CharField(max_length=100)
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='folders')
     created_at = models.DateTimeField(auto_now_add=True)
+    sort_order = models.PositiveIntegerField(default=0)
 
     class Meta:
-        ordering = ['name']
+        ordering = ['sort_order', 'name']
 
     def __str__(self):
         return self.name
@@ -61,7 +62,7 @@ class Contract(models.Model):
         upload_to='contracts/',
         validators=[FileExtensionValidator(['pdf']), validate_pdf_signature],
     )
-    fingerprint = models.CharField(max_length=64, blank=True)
+    fingerprint = models.CharField(max_length=64, blank=True, db_index=True)
     encrypted_cf = models.TextField(blank=True)
     aes_key = models.TextField(blank=True)
     aes_iv = models.TextField(blank=True)
@@ -113,12 +114,25 @@ class AuditLog(models.Model):
     action = models.CharField(max_length=30, choices=ACTION_CHOICES)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
+    document_title = models.CharField(max_length=255, blank=True)
     note = models.CharField(max_length=255, blank=True)  # optional extra context
+
+    @property
+    def display_document_title(self):
+        if self.document_title:
+            return self.document_title
+        if self.contract:
+            return self.contract.title
+        return ''
 
     class Meta:
         ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['timestamp', 'id'], name='audit_time_id_idx'),
+            models.Index(fields=['action', 'timestamp', 'id'], name='audit_action_time_id_idx'),
+        ]
 
     def __str__(self):
         who = self.user.username if self.user else 'N/A'
-        what = self.contract.title if self.contract else '(no document)'
+        what = self.display_document_title or '(no document)'
         return f"{who} — {self.get_action_display()} — {what}"

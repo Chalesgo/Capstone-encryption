@@ -25,6 +25,7 @@ from .utils import log_activity
 from .models import Contract, AuditLog
 from django.utils import timezone
 from datetime import timedelta
+from django.core.paginator import Paginator
 
 TRASH_RETENTION_DAYS = 15
 
@@ -48,7 +49,7 @@ def _hard_delete_contract(contract, request=None, note=''):
 
     title = contract.title
     if request is not None:
-        log_activity(request, 'deleted', contract=None, note=note or f'Permanently deleted: {title}')
+        log_activity(request, 'deleted', contract=contract, note=note or f'Permanently deleted: {title}')
     contract.delete()
 
 
@@ -167,6 +168,7 @@ def encrypt_contract(request, contract_id):
     stamp_seal_on_pdf(pdf_path, final_pdf_path, stamped_seal, qr_path=qr_path, encrypted_cf=encrypted)
 
     sealed_cf = generate_canonical_fingerprint(final_pdf_path)
+    version_cf = generate_canonical_fingerprint(final_pdf_path, previous_cf=previous_cf)
     contract.fingerprint = sealed_cf
     contract.original_fingerprint = original_cf
     contract.encrypted_cf = encrypted
@@ -184,7 +186,7 @@ def encrypt_contract(request, contract_id):
         version_number=next_version_number,
         source='reencrypt',
         file=contract.file.name,
-        fingerprint=sealed_cf,
+        fingerprint=version_cf,
         previous_fingerprint=previous_cf or '',
         encrypted_cf=encrypted,
         hmac_value=hmac_value,
@@ -246,7 +248,8 @@ def add_revision(request, contract_id):
         final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
         stamp_seal_on_pdf(temp_path, final_pdf_path, stamped_seal, qr_path=qr_path, encrypted_cf=encrypted)
 
-        sealed_cf = generate_canonical_fingerprint(final_pdf_path, previous_cf=previous_cf)
+        sealed_cf = generate_canonical_fingerprint(final_pdf_path)
+        version_cf = generate_canonical_fingerprint(final_pdf_path, previous_cf=previous_cf)
 
         contract.fingerprint = sealed_cf
         contract.original_fingerprint = original_cf
@@ -267,7 +270,7 @@ def add_revision(request, contract_id):
             version_number=next_version_number,
             source='revision',
             file=contract.file.name,
-            fingerprint=sealed_cf,
+            fingerprint=version_cf,
             previous_fingerprint=previous_cf or '',
             encrypted_cf=encrypted,
             hmac_value=hmac_value,
@@ -683,22 +686,11 @@ def public_verify(request):
                 current_cf = generate_canonical_fingerprint(temp_path)
                 debug_log.append(f"🧬 Generated CF: {current_cf[:20]}...")
 
-                total_contracts = Contract.objects.exclude(fingerprint='').count()
-                debug_log.append(f"🗄️ Checking against {total_contracts} contract(s) in database")
-
-                matched_contract = None
-
-                for contract in Contract.objects.exclude(fingerprint='').filter(is_trashed=False):
-                    stored_cf = contract.fingerprint
-                    match = current_cf == stored_cf
-                    debug_log.append(
-                        f"  → Contract [{contract.id}] '{contract.title}': "
-                        f"stored CF {stored_cf[:20]}... | "
-                        f"{'✅ MATCH' if match else '❌ no match'}"
-                    )
-                    if match:
-                        matched_contract = contract
-                        break
+                debug_log.append("🗄️ Looking up the document fingerprint")
+                matched_contract = Contract.objects.filter(
+                    fingerprint=current_cf,
+                    is_trashed=False,
+                ).first()
 
                 if matched_contract:
                     debug_log.append(f"✅ Match found: Contract [{matched_contract.id}] '{matched_contract.title}'")
@@ -772,9 +764,36 @@ def tag_contract(request, pk):
 @login_required
 def create_folder(request):
     if request.method == 'POST':
-        folder = Folder.objects.create(name='Untitled Folder', owner=request.user)
+        last_order = Folder.objects.filter(owner=request.user).order_by('-sort_order').values_list('sort_order', flat=True).first()
+        folder = Folder.objects.create(
+            name='Untitled Folder',
+            owner=request.user,
+            sort_order=(last_order + 1) if last_order is not None else 0,
+        )
         return JsonResponse({'success': True, 'id': folder.id, 'name': folder.name})
     return JsonResponse({'success': False}, status=400)
+
+
+@login_required
+def reorder_folders(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False}, status=400)
+
+    import json
+    try:
+        folder_ids = [int(folder_id) for folder_id in json.loads(request.body).get('folder_ids', [])]
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return JsonResponse({'success': False, 'error': 'invalid_order'}, status=400)
+
+    existing = list(Folder.objects.filter(owner=request.user).values_list('id', flat=True))
+    if len(folder_ids) != len(set(folder_ids)) or sorted(folder_ids) != sorted(existing):
+        return JsonResponse({'success': False, 'error': 'invalid_order'}, status=400)
+
+    folders = {folder.id: folder for folder in Folder.objects.filter(owner=request.user)}
+    for position, folder_id in enumerate(folder_ids):
+        folders[folder_id].sort_order = position
+    Folder.objects.bulk_update(folders.values(), ['sort_order'])
+    return JsonResponse({'success': True})
 
 
 @login_required
@@ -885,11 +904,39 @@ def dashboard(request):
     verified_documents = Contract.objects.filter(encrypted_cf__gt='').count()
     flagged_documents = AuditLog.objects.filter(action='reported_tampering').values('contract').distinct().count()
 
-    recent_logs = AuditLog.objects.select_related('user', 'contract').order_by('-timestamp')[:20]
+    activity_filter = request.GET.get('activity', 'all')
+    if activity_filter not in {'all', 'added', 'edited', 'deleted'}:
+        activity_filter = 'all'
+
+    sort_order = request.GET.get('sort', 'newest')
+    if sort_order not in {'newest', 'oldest'}:
+        sort_order = 'newest'
+
+    recent_logs = AuditLog.objects.select_related('user', 'contract')
+    if activity_filter != 'all':
+        recent_logs = recent_logs.filter(action=activity_filter)
+    if sort_order == 'oldest':
+        recent_logs = recent_logs.order_by('timestamp', 'id')
+    else:
+        recent_logs = recent_logs.order_by('-timestamp', '-id')
+
+    try:
+        rows_per_page = int(request.GET.get('per_page', 20))
+    except (TypeError, ValueError):
+        rows_per_page = 20
+    if rows_per_page not in {10, 20, 50, 100}:
+        rows_per_page = 20
+
+    paginator = Paginator(recent_logs, rows_per_page)
+    page_obj = paginator.get_page(request.GET.get('page'))
 
     return render(request, 'dashboard.html', {
         'total_documents': total_documents,
         'verified_documents': verified_documents,
         'flagged_documents': flagged_documents,
-        'recent_logs': recent_logs,
+        'recent_logs': page_obj,
+        'page_obj': page_obj,
+        'activity_filter': activity_filter,
+        'sort_order': sort_order,
+        'rows_per_page': rows_per_page,
     })
