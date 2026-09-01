@@ -390,8 +390,9 @@
     background: rgba(0,0,0,0.35);
     z-index: 1100;
     display: none;
+    pointer-events: none;
   }
-  .pdf-overlay.open { display: block; }
+  .pdf-overlay.open { display: block; pointer-events: auto; }
 
   .pdf-panel {
     position: fixed;
@@ -404,11 +405,18 @@
     border-left: 1px solid #eef0f4;
     box-shadow: -8px 0 32px rgba(0,0,0,0.12);
     z-index: 1200;
-    transition: right 0.3s ease;
+    visibility: hidden;
+    pointer-events: none;
+    transition: right 0.3s ease, visibility 0s linear 0.3s;
     display: flex;
     flex-direction: column;
   }
-  .pdf-panel.open { right: 0; }
+  .pdf-panel.open {
+    right: 0;
+    visibility: visible;
+    pointer-events: auto;
+    transition-delay: 0s;
+  }
 
   .pdf-panel-body {
     flex: 1;
@@ -512,7 +520,19 @@
   .version-item-date { font-size: 11px; color: #889aab; margin-top: 1px; }
 
   @media (max-width: 900px) {
-    .pdf-panel { width: 100%; right: -100%; }
+    .pdf-panel {
+      width: 100%;
+      min-width: 0;
+      right: -100%;
+    }
+    .pdf-panel-body { flex-direction: column; }
+    .pdf-frame-wrap { min-height: 55vh; }
+    .pdf-sidebar {
+      width: 100%;
+      max-height: 45vh;
+      border-left: 0;
+      border-top: 1px solid #eef0f4;
+    }
   }
 </style>
 
@@ -1034,6 +1054,7 @@ function openPdfPreview(contractId, url, title) {
   document.getElementById('pdf-download-btn').download = title;
   document.getElementById('pdf-panel').classList.add('open');
   document.getElementById('pdf-overlay').classList.add('open');
+  document.getElementById('pdf-panel').setAttribute('aria-hidden', 'false');
 
   document.getElementById('pdf-meta-created').textContent = '—';
   document.getElementById('pdf-meta-encrypted').textContent = '—';
@@ -1086,8 +1107,31 @@ function viewPdfVersion(url, el, versionLabel) {
 function closePdfPreview() {
   document.getElementById('pdf-panel').classList.remove('open');
   document.getElementById('pdf-overlay').classList.remove('open');
+  document.getElementById('pdf-panel').setAttribute('aria-hidden', 'true');
   document.getElementById('pdf-frame').src = '';
 }
+
+// Prevent a stale preview/backdrop state from blocking touch input after
+// mobile navigation, history restoration, rotation, or viewport resizing.
+function syncPdfPreviewLayers() {
+  const panel = document.getElementById('pdf-panel');
+  const overlay = document.getElementById('pdf-overlay');
+  if (!panel || !overlay) return;
+
+  if (!panel.classList.contains('open')) {
+    overlay.classList.remove('open');
+    panel.setAttribute('aria-hidden', 'true');
+  } else {
+    overlay.classList.add('open');
+    panel.setAttribute('aria-hidden', 'false');
+  }
+}
+
+window.addEventListener('pageshow', syncPdfPreviewLayers);
+window.addEventListener('resize', syncPdfPreviewLayers);
+document.addEventListener('keydown', function(event) {
+  if (event.key === 'Escape') closePdfPreview();
+});
 
 function setStatusColor(select) {
   const colors = { pending: '#aab4be', sent: '#d98c1a', approved: '#1fa06b' };

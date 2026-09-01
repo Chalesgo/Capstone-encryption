@@ -1,13 +1,14 @@
 from datetime import timedelta
 from unittest.mock import patch
 
+import fitz
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import AuditLog, Contract, ContractVersion, Folder
+from .models import AuditLog, Contract, ContractVersion, Folder, Tutorial
 from .utils import log_activity, verify_version_chain
 
 
@@ -87,13 +88,32 @@ class AuditLogTests(TestCase):
     ):
         self.contract.fingerprint = 'f' * 64
         self.contract.save(update_fields=['fingerprint'])
-        upload = SimpleUploadedFile('document.pdf', b'%PDF-test', content_type='application/pdf')
+        pdf = fitz.open()
+        pdf.new_page().insert_text((72, 72), 'Verification test document')
+        pdf_bytes = pdf.tobytes()
+        pdf.close()
+        upload = SimpleUploadedFile('document.pdf', pdf_bytes, content_type='application/pdf')
 
         response = self.client.post(reverse('public_verify'), {'pdf_file': upload})
 
         self.assertRedirects(response, reverse('public_verify'), fetch_redirect_response=False)
         viewed = AuditLog.objects.get(action='viewed')
         self.assertEqual(viewed.contract, self.contract)
+
+    def test_filename_demo_mode_is_preserved_and_disclosed(self):
+        upload = SimpleUploadedFile(
+            'authentic_demo.pdf', b'%PDF-demo', content_type='application/pdf'
+        )
+
+        response = self.client.post(reverse('public_verify'), {'pdf_file': upload})
+
+        self.assertRedirects(response, reverse('public_verify'), fetch_redirect_response=False)
+        self.assertEqual(self.client.session['verify_result'], 'authentic')
+        debug_log = self.client.session['verify_debug_log']
+        self.assertIn(
+            'Demo simulation enabled by filename; cryptographic checks were not executed',
+            debug_log,
+        )
 
     @patch('contracts.utils.generate_canonical_fingerprint')
     def test_version_chain_rejects_mismatched_previous_link(self, fingerprint):
@@ -157,3 +177,131 @@ class AuditLogTests(TestCase):
         self.assertContains(response, "document.body.classList.add('verification-active')")
         self.assertContains(response, "grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.75fr)")
         self.assertNotContains(response, "width: 100vw")
+
+    def test_verification_results_reuse_loading_layout_and_light_log(self):
+        session = self.client.session
+        session['verify_result'] = 'error'
+        session['verify_debug_log'] = ['[ERROR] Test verification failure']
+        session.save()
+
+        response = self.client.get(reverse('public_verify'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'This document could not be verified — it may not have been issued or processed by this system.')
+        self.assertContains(response, 'statusPanel.appendChild(resultSection)')
+        self.assertContains(response, "statusPanel.classList.add('result-state')")
+        self.assertContains(response, 'background: #f7f8fa;')
+        self.assertNotContains(response, 'background: #0f172a;')
+
+    def test_contract_preview_is_non_blocking_when_closed_on_mobile(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse('contract_list'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'visibility: hidden;')
+        self.assertContains(response, 'pointer-events: none;')
+        self.assertContains(response, 'min-width: 0;')
+        self.assertContains(response, 'function syncPdfPreviewLayers()')
+
+    def test_mobile_navigation_replaces_sidebar(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse('contract_list'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '<nav class="mobile-nav" aria-label="Mobile navigation">')
+        self.assertContains(response, '.sidebar { display: none; }')
+        self.assertContains(response, 'body { padding-left: 0; }')
+        self.assertContains(response, 'title="Contracts" aria-label="Contracts"')
+        self.assertContains(response, 'title="Logout" aria-label="Logout"')
+
+    def test_help_page_lists_questions_and_icon_picker(self):
+        Tutorial.objects.create(
+            title='How to encrypt a contract',
+            summary='Encrypt a PDF contract safely.',
+            content='<p>Select <strong>Add Document</strong>.</p>',
+            icon='lock',
+            created_by=self.user,
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse('help_tutorials'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Questions')
+        self.assertContains(response, 'How to encrypt a contract')
+        self.assertContains(response, '+ Add Tutorial')
+        self.assertContains(response, 'id="tutorial-icon-lock"')
+        self.assertContains(response, 'contenteditable="true"')
+
+    def test_admin_can_create_sanitized_tutorial(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(reverse('help_tutorials'), {
+            'title': 'Safe tutorial',
+            'summary': 'A safely formatted tutorial.',
+            'icon': 'shield',
+            'content': '<p><strong>Keep this</strong><script>alert(1)</script></p>',
+        })
+
+        tutorial = Tutorial.objects.get(title='Safe tutorial')
+        self.assertRedirects(
+            response,
+            f"{reverse('help_tutorials')}?tutorial={tutorial.id}",
+            fetch_redirect_response=False,
+        )
+        self.assertIn('<strong>Keep this</strong>', tutorial.content)
+        self.assertNotIn('<script>', tutorial.content)
+        self.assertNotIn('alert(1)', tutorial.content)
+
+    def test_non_admin_cannot_create_tutorial(self):
+        ordinary_user = User.objects.create_user('clerk', password='password')
+        self.client.force_login(ordinary_user)
+
+        response = self.client.post(reverse('help_tutorials'), {
+            'title': 'Unauthorized tutorial',
+            'summary': 'This must not be created.',
+            'icon': 'help',
+            'content': '<p>Not permitted.</p>',
+        })
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Tutorial.objects.filter(title='Unauthorized tutorial').exists())
+
+    def test_superuser_can_delete_tutorial(self):
+        tutorial = Tutorial.objects.create(
+            title='Temporary tutorial',
+            summary='Delete this tutorial.',
+            content='<p>Temporary directions.</p>',
+            icon='help',
+            created_by=self.user,
+        )
+        self.client.force_login(self.user)
+
+        page = self.client.get(reverse('help_tutorials'), {'tutorial': tutorial.id})
+        self.assertContains(page, 'Delete Tutorial')
+
+        response = self.client.post(reverse('delete_tutorial', args=[tutorial.id]))
+
+        self.assertRedirects(response, reverse('help_tutorials'), fetch_redirect_response=False)
+        self.assertFalse(Tutorial.objects.filter(pk=tutorial.id).exists())
+
+    def test_non_admin_cannot_see_or_use_tutorial_delete(self):
+        tutorial = Tutorial.objects.create(
+            title='Protected tutorial',
+            summary='Only an administrator can delete this.',
+            content='<p>Protected directions.</p>',
+            icon='shield',
+            created_by=self.user,
+        )
+        ordinary_user = User.objects.create_user('tutorial_clerk', password='password')
+        self.client.force_login(ordinary_user)
+
+        page = self.client.get(reverse('help_tutorials'), {'tutorial': tutorial.id})
+        self.assertNotContains(page, 'Delete Tutorial')
+
+        response = self.client.post(reverse('delete_tutorial', args=[tutorial.id]))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Tutorial.objects.filter(pk=tutorial.id).exists())

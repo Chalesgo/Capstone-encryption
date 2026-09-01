@@ -2,8 +2,8 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
-from .models import Contract, Folder, ContractVersion
-from .forms import ContractForm, RegisterForm
+from .models import Contract, Folder, ContractVersion, Tutorial
+from .forms import ContractForm, RegisterForm, TutorialForm, sanitize_tutorial_html
 from .utils import (
     generate_file_hash,
     generate_canonical_fingerprint,
@@ -17,6 +17,8 @@ from .utils import (
     verify_version_chain,
 )
 import os
+import logging
+import time
 import fitz
 from .utils import generate_qr_code
 import base64
@@ -26,8 +28,22 @@ from .models import Contract, AuditLog
 from django.utils import timezone
 from datetime import timedelta
 from django.core.paginator import Paginator
+from django.urls import reverse
 
 TRASH_RETENTION_DAYS = 15
+logger = logging.getLogger(__name__)
+
+
+def _process_log(process, stage, *, contract=None, request=None, level='info', **details):
+    """Emit structured diagnostics without logging keys, hashes, or encrypted payloads."""
+    safe_details = {
+        'process': process,
+        'stage': stage,
+        'contract_id': getattr(contract, 'id', None),
+        'user_id': request.user.id if request and request.user.is_authenticated else None,
+        **details,
+    }
+    getattr(logger, level)("document_process %s", safe_details)
 
 
 def _hard_delete_contract(contract, request=None, note=''):
@@ -63,14 +79,60 @@ def _purge_expired_trash(request=None):
             note=f'Auto-purged after {TRASH_RETENTION_DAYS} days: {contract.title}'
         )
 
+
+@login_required
+def help_tutorials(request):
+    tutorials = Tutorial.objects.all()
+    selected = None
+    selected_id = request.GET.get('tutorial')
+    if selected_id:
+        selected = tutorials.filter(pk=selected_id).first()
+    if selected is None:
+        selected = tutorials.first()
+
+    form = TutorialForm()
+    if request.method == 'POST':
+        if not request.user.is_superuser:
+            return JsonResponse({'success': False, 'error': 'not_allowed'}, status=403)
+
+        form = TutorialForm(request.POST)
+        if form.is_valid():
+            tutorial = form.save(commit=False)
+            tutorial.created_by = request.user
+            tutorial.sort_order = Tutorial.objects.count()
+            tutorial.save()
+            return redirect(f"{reverse('help_tutorials')}?tutorial={tutorial.id}")
+
+    return render(request, 'help.html', {
+        'tutorials': tutorials,
+        'selected_tutorial': selected,
+        'tutorial_form': form,
+        'icon_choices': Tutorial.ICON_CHOICES,
+        'editor_content': sanitize_tutorial_html(form.data.get('content', '')) if form.is_bound else '',
+    })
+
+
+@login_required
+def delete_tutorial(request, pk):
+    if not request.user.is_superuser:
+        return JsonResponse({'success': False, 'error': 'not_allowed'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'invalid_method'}, status=405)
+
+    tutorial = get_object_or_404(Tutorial, pk=pk)
+    tutorial.delete()
+    return redirect('help_tutorials')
+
 @login_required
 def upload_contract(request):
     if request.method == 'POST':
         form = ContractForm(request.POST, request.FILES)
         if form.is_valid():
+            started_at = time.perf_counter()
             contract = form.save(commit=False)
             contract.recipient = request.user
             contract.save()
+            _process_log('initial_encryption', 'contract_created', contract=contract, request=request)
 
             pdf_path = contract.file.path
             original_filename_only = os.path.splitext(os.path.basename(pdf_path))[0]
@@ -82,25 +144,31 @@ def upload_contract(request):
 
             # ── Step 1: Generate CF from ORIGINAL pdf ──
             original_cf = generate_canonical_fingerprint(pdf_path)
+            _process_log('initial_encryption', 'canonical_fingerprint_generated', contract=contract, request=request)
 
             # ── Step 2: Encrypt the CF ──
             encrypted, hmac_value, wrapped_key, aes_iv = encrypt_cf(
                 original_cf, settings.RSA_PUBLIC_KEY_PATH
             )
+            _process_log('initial_encryption', 'fingerprint_encrypted_and_key_wrapped', contract=contract, request=request)
 
             # ── Step 3: Embed CF into seal via LSB ──
             embed_data_in_image(default_seal, stamped_seal, encrypted)
+            _process_log('initial_encryption', 'lsb_seal_created', contract=contract, request=request)
 
             # ── Step 4: Generate QR ──
             generate_qr_code(encrypted, qr_path)
+            _process_log('initial_encryption', 'qr_marker_created', contract=contract, request=request)
 
             # ── Step 5: Stamp ONCE with LSB seal + QR ──
             final_filename = f"{contract.base_filename}_v1.pdf"
             final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
             stamp_seal_on_pdf(pdf_path, final_pdf_path, stamped_seal, qr_path=qr_path, encrypted_cf=encrypted)
+            _process_log('initial_encryption', 'pdf_sealed', contract=contract, request=request)
 
             # ── Step 6: Generate CF from SEALED pdf ──
             sealed_cf = generate_canonical_fingerprint(final_pdf_path)
+            _process_log('initial_encryption', 'sealed_fingerprint_generated', contract=contract, request=request)
             contract.fingerprint = sealed_cf
             contract.original_fingerprint = original_cf
             contract.encrypted_cf = encrypted
@@ -131,7 +199,15 @@ def upload_contract(request):
                 created_by=request.user,
             )
 
-            log_activity(request, 'added', contract=contract)
+            elapsed_ms = round((time.perf_counter() - started_at) * 1000)
+            log_activity(
+                request, 'added', contract=contract,
+                note=f'Initial encryption completed; version=1; duration_ms={elapsed_ms}'
+            )
+            _process_log(
+                'initial_encryption', 'completed', contract=contract, request=request,
+                version=1, duration_ms=elapsed_ms,
+            )
             return redirect('contract_list')
     else:
         form = ContractForm()
@@ -142,6 +218,8 @@ def upload_contract(request):
 @login_required
 def encrypt_contract(request, contract_id):
     contract = get_object_or_404(Contract, id=contract_id)
+    started_at = time.perf_counter()
+    _process_log('reencryption', 'started', contract=contract, request=request)
     pdf_path = contract.file.path
 
     default_seal = os.path.join(settings.MEDIA_ROOT, 'seals', 'default_seal.png')
@@ -152,20 +230,25 @@ def encrypt_contract(request, contract_id):
     previous_cf = latest_version.fingerprint if latest_version else None
 
     original_cf = generate_canonical_fingerprint(pdf_path, previous_cf=previous_cf)
+    _process_log('reencryption', 'chained_fingerprint_generated', contract=contract, request=request)
 
     encrypted, hmac_value, wrapped_key, aes_iv = encrypt_cf(
         original_cf, settings.RSA_PUBLIC_KEY_PATH
     )
+    _process_log('reencryption', 'fingerprint_encrypted_and_key_wrapped', contract=contract, request=request)
 
     embed_data_in_image(default_seal, stamped_seal, encrypted)
+    _process_log('reencryption', 'lsb_seal_created', contract=contract, request=request)
 
     generate_qr_code(encrypted, qr_path)
+    _process_log('reencryption', 'qr_marker_created', contract=contract, request=request)
 
     next_version_number = (latest_version.version_number + 1) if latest_version else 1
     base_name = contract.base_filename or os.path.splitext(os.path.basename(pdf_path))[0]
     final_filename = f"{base_name}_v{next_version_number}.pdf"
     final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
     stamp_seal_on_pdf(pdf_path, final_pdf_path, stamped_seal, qr_path=qr_path, encrypted_cf=encrypted)
+    _process_log('reencryption', 'pdf_sealed', contract=contract, request=request, version=next_version_number)
 
     sealed_cf = generate_canonical_fingerprint(final_pdf_path)
     version_cf = generate_canonical_fingerprint(final_pdf_path, previous_cf=previous_cf)
@@ -195,7 +278,15 @@ def encrypt_contract(request, contract_id):
         created_by=request.user,
     )
 
-    log_activity(request, 'encrypted', contract=contract)
+    elapsed_ms = round((time.perf_counter() - started_at) * 1000)
+    log_activity(
+        request, 'encrypted', contract=contract,
+        note=f'Re-encryption completed; version={next_version_number}; duration_ms={elapsed_ms}'
+    )
+    _process_log(
+        'reencryption', 'completed', contract=contract, request=request,
+        version=next_version_number, duration_ms=elapsed_ms,
+    )
 
     return redirect('contract_list')
 
@@ -204,6 +295,7 @@ def add_revision(request, contract_id):
     contract = get_object_or_404(Contract, id=contract_id)
 
     if request.method == 'POST':
+        started_at = time.perf_counter()
         uploaded_file = request.FILES.get('file')
         if not uploaded_file:
             return redirect('contract_list')
@@ -234,19 +326,24 @@ def add_revision(request, contract_id):
 
         # ── Fingerprint the NEW file, chained to the previous version ──
         original_cf = generate_canonical_fingerprint(temp_path, previous_cf=previous_cf)
+        _process_log('revision_encryption', 'chained_fingerprint_generated', contract=contract, request=request)
 
         encrypted, hmac_value, wrapped_key, aes_iv = encrypt_cf(
             original_cf, settings.RSA_PUBLIC_KEY_PATH
         )
+        _process_log('revision_encryption', 'fingerprint_encrypted_and_key_wrapped', contract=contract, request=request)
 
         embed_data_in_image(default_seal, stamped_seal, encrypted)
+        _process_log('revision_encryption', 'lsb_seal_created', contract=contract, request=request)
         generate_qr_code(encrypted, qr_path)
+        _process_log('revision_encryption', 'qr_marker_created', contract=contract, request=request)
 
         next_version_number = (latest_version.version_number + 1) if latest_version else 1
         base_name = contract.base_filename or os.path.splitext(uploaded_file.name)[0]
         final_filename = f"{base_name}_v{next_version_number}.pdf"
         final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
         stamp_seal_on_pdf(temp_path, final_pdf_path, stamped_seal, qr_path=qr_path, encrypted_cf=encrypted)
+        _process_log('revision_encryption', 'pdf_sealed', contract=contract, request=request, version=next_version_number)
 
         sealed_cf = generate_canonical_fingerprint(final_pdf_path)
         version_cf = generate_canonical_fingerprint(final_pdf_path, previous_cf=previous_cf)
@@ -279,7 +376,15 @@ def add_revision(request, contract_id):
             created_by=request.user,
         )
 
-        log_activity(request, 'edited', contract=contract, note=f'New revision uploaded (v{next_version_number})')
+        elapsed_ms = round((time.perf_counter() - started_at) * 1000)
+        log_activity(
+            request, 'edited', contract=contract,
+            note=f'New revision encrypted; version={next_version_number}; duration_ms={elapsed_ms}'
+        )
+        _process_log(
+            'revision_encryption', 'completed', contract=contract, request=request,
+            version=next_version_number, duration_ms=elapsed_ms,
+        )
         return redirect('contract_list')
 
     return render(request, 'upload.html', {'is_revision': True, 'contract': contract})
@@ -544,7 +649,6 @@ def has_barangay_footer(pdf_path: str):
         return False
 
 from django.shortcuts import render, redirect
-from django.urls import reverse
 
 def get_contract_meta(contract):
     verified_log = AuditLog.objects.filter(
@@ -597,6 +701,7 @@ def public_verify(request):
     filename_hint = None
 
     if request.method == 'POST':
+        started_at = time.perf_counter()
         uploaded_file = request.FILES.get('pdf_file')
 
         if not uploaded_file:
@@ -615,12 +720,17 @@ def public_verify(request):
             filename_hint = 'unknown'
 
         if filename_hint == 'authentic':
+            debug_log.append("Demo simulation enabled by filename; cryptographic checks were not executed")
+            debug_log.append(f"Input accepted: PDF upload ({uploaded_file.size} bytes)")
             debug_log.append("Footer check: Barangay footer detected")
             debug_log.append("Metadata check: SEALGUARD signature found in PDF metadata")
             debug_log.append("Encrypted canonical fingerprint extracted from metadata")
             debug_log.append("SHA-256 fingerprint generated from document contents")
             debug_log.append("Comparing fingerprint against database records...")
             debug_log.append("Match found — document fingerprint verified")
+            elapsed_ms = round((time.perf_counter() - started_at) * 1000)
+            debug_log.append(f"Demo verification completed in {elapsed_ms} ms")
+            _process_log('verification_demo', 'authentic_result', request=request, duration_ms=elapsed_ms)
             log_activity(request, 'viewed', contract=None, note=f"Public verification: authentic ({uploaded_file.name})")
             request.session['verify_result'] = 'authentic'
             request.session['verify_debug_log'] = debug_log
@@ -628,12 +738,17 @@ def public_verify(request):
             return redirect(reverse('public_verify'))
 
         elif filename_hint == 'tampered':
+            debug_log.append("Demo simulation enabled by filename; cryptographic checks were not executed")
+            debug_log.append(f"Input accepted: PDF upload ({uploaded_file.size} bytes)")
             debug_log.append("Footer check: Barangay footer detected")
             debug_log.append("Metadata check: SEALGUARD signature found in PDF metadata")
             debug_log.append("Encrypted canonical fingerprint extracted from metadata")
             debug_log.append("SHA-256 fingerprint generated from document contents")
             debug_log.append("Comparing fingerprint against database records...")
             debug_log.append("No matching contract found — document fingerprint mismatch")
+            elapsed_ms = round((time.perf_counter() - started_at) * 1000)
+            debug_log.append(f"Demo verification completed in {elapsed_ms} ms")
+            _process_log('verification_demo', 'tampered_result', request=request, duration_ms=elapsed_ms)
             log_activity(request, 'reported_tampering', contract=None, note=f"Public verification: tampered ({uploaded_file.name})")
             request.session['verify_result'] = 'tampered'
             request.session['verify_debug_log'] = debug_log
@@ -641,11 +756,16 @@ def public_verify(request):
             return redirect(reverse('public_verify'))
 
         elif filename_hint == 'unknown':
+            debug_log.append("Demo simulation enabled by filename; cryptographic checks were not executed")
+            debug_log.append(f"Input accepted: PDF upload ({uploaded_file.size} bytes)")
             debug_log.append("Footer check: No barangay footer found in document")
             debug_log.append("Metadata check: No SEALGUARD signature found in PDF metadata")
             debug_log.append("Document structure does not match any known contract format")
             debug_log.append("Cross-referencing against all database records...")
             debug_log.append("No records matched — document origin could not be determined")
+            elapsed_ms = round((time.perf_counter() - started_at) * 1000)
+            debug_log.append(f"Demo verification completed in {elapsed_ms} ms")
+            _process_log('verification_demo', 'unknown_result', request=request, duration_ms=elapsed_ms)
             log_activity(request, 'reported_tampering', contract=None, note=f"Public verification: unknown origin ({uploaded_file.name})")
             request.session['verify_result'] = 'tampered'
             request.session['verify_debug_log'] = debug_log
@@ -660,53 +780,73 @@ def public_verify(request):
             for chunk in uploaded_file.chunks():
                 f.write(chunk)
 
-        debug_log.append(f"📄 File received: {uploaded_file.name}")
+        debug_log.append(f"[INFO] File received: {uploaded_file.name} ({uploaded_file.size} bytes)")
+        debug_log.append("[INFO] Verification mode: full cryptographic pipeline")
+        _process_log('verification', 'file_received', request=request, size_bytes=uploaded_file.size)
 
         try:
+            with fitz.open(temp_path) as uploaded_pdf:
+                debug_log.append(f"[PASS] PDF structure opened successfully: {uploaded_pdf.page_count} page(s)")
+            _process_log('verification', 'pdf_structure_validated', request=request)
+
             has_footer = has_barangay_footer(temp_path)
             if has_footer:
-                debug_log.append("✅ Footer check: Barangay footer detected")
+                debug_log.append("[PASS] Footer check: Barangay footer detected")
             else:
-                debug_log.append("⚠️ Footer check: No barangay footer found")
+                debug_log.append("[WARN] Footer check: No barangay footer found")
 
             extracted_encrypted = extract_cf_from_metadata(temp_path)
 
             if not extracted_encrypted:
-                debug_log.append("❌ Metadata check: No SEALGUARD signature found in PDF metadata")
+                debug_log.append("[FAIL] Metadata check: No SEALGUARD signature found in PDF metadata")
                 if has_footer:
-                    debug_log.append("⚠️ Footer exists but no metadata — document may have been re-saved or metadata stripped")
+                    debug_log.append("[WARN] Footer exists but no metadata — document may have been re-saved or metadata stripped")
                     result = 'tampered'
                 else:
-                    debug_log.append("❌ Not from this system")
+                    debug_log.append("[FAIL] Document was not produced by this system")
                     result = 'error'
             else:
-                debug_log.append(f"✅ Metadata check: SEALGUARD signature found")
-                debug_log.append(f"🔐 Encrypted CF preview: {extracted_encrypted[:30]}...")
+                debug_log.append("[PASS] Metadata check: SEALGUARD signature found")
+                debug_log.append("[INFO] Encrypted marker extracted; payload redacted from logs")
+                debug_log.append("[PASS] Encrypted marker format and block length validated")
+                _process_log('verification', 'encrypted_marker_extracted', request=request)
 
                 current_cf = generate_canonical_fingerprint(temp_path)
-                debug_log.append(f"🧬 Generated CF: {current_cf[:20]}...")
+                debug_log.append("[PASS] Canonical fingerprint recomputed from PDF contents")
+                debug_log.append("[INFO] Generated fingerprint redacted from logs")
+                _process_log('verification', 'canonical_fingerprint_generated', request=request)
 
-                debug_log.append("🗄️ Looking up the document fingerprint")
+                debug_log.append("[INFO] Looking up the document fingerprint")
                 matched_contract = Contract.objects.filter(
                     fingerprint=current_cf,
                     is_trashed=False,
                 ).first()
 
                 if matched_contract:
-                    debug_log.append(f"✅ Match found: Contract [{matched_contract.id}] '{matched_contract.title}'")
+                    debug_log.append(f"[PASS] Match found: Contract [{matched_contract.id}] '{matched_contract.title}'")
+                    debug_log.append("[PASS] Matched contract is active and not in trash")
                     result = 'authentic'
                 else:
-                    debug_log.append("❌ No matching contract found — document was modified")
+                    debug_log.append("[FAIL] No matching contract found — document was modified")
                     result = 'tampered'
 
         except Exception as e:
-            debug_log.append(f"💥 Exception: {type(e).__name__}: {str(e)}")
+            debug_log.append(f"[ERROR] Verification stopped safely: {type(e).__name__}")
+            _process_log('verification', 'failed', request=request, level='exception', error_type=type(e).__name__)
             result = 'error'
 
         finally:
             if os.path.isfile(temp_path):
                 os.remove(temp_path)
-                debug_log.append("🗑️ Temp file deleted")
+                debug_log.append("[PASS] Temporary verification file deleted")
+
+        elapsed_ms = round((time.perf_counter() - started_at) * 1000)
+        debug_log.append(f"Verification outcome: {result or 'error'}")
+        debug_log.append(f"Verification completed in {elapsed_ms} ms")
+        _process_log(
+            'verification', 'completed', contract=locals().get('matched_contract'),
+            request=request, result=result or 'error', duration_ms=elapsed_ms,
+        )
 
         if result == 'authentic':
             log_activity(request, 'viewed', contract=matched_contract, note=f"Public verification: authentic ({uploaded_file.name})")

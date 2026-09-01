@@ -15,6 +15,42 @@ class Folder(models.Model):
     def __str__(self):
         return self.name
 
+
+class Tutorial(models.Model):
+    ICON_CHOICES = [
+        ('help', 'Help'),
+        ('shield', 'Shield'),
+        ('file', 'Document'),
+        ('upload', 'Upload'),
+        ('lock', 'Encryption'),
+        ('search', 'Search'),
+        ('folder', 'Folder'),
+        ('dashboard', 'Dashboard'),
+        ('eye', 'View'),
+        ('download', 'Download'),
+        ('history', 'History'),
+        ('warning', 'Warning'),
+        ('check', 'Check'),
+        ('user', 'User'),
+    ]
+
+    title = models.CharField(max_length=160)
+    summary = models.CharField(max_length=280)
+    content = models.TextField()
+    icon = models.CharField(max_length=20, choices=ICON_CHOICES, default='help')
+    sort_order = models.PositiveIntegerField(default=0)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='tutorials'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['sort_order', 'title']
+
+    def __str__(self):
+        return self.title
+
 class ContractVersion(models.Model):
     SOURCE_CHOICES = [
         ('upload', 'Initial Upload'),

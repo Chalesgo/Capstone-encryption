@@ -181,8 +181,9 @@
     }
 
     .log-box {
-        background: #0f172a;
-        color: #94a3b8;
+        background: #f7f8fa;
+        color: #445566;
+        border: 1px solid #e2e6eb;
         font-family: monospace;
         font-size: 12px;
         padding: 16px;
@@ -193,6 +194,36 @@
         word-break: break-all;
         max-height: 360px;
         overflow-y: auto;
+    }
+
+    .status-panel.result-state {
+        justify-content: flex-start;
+        overflow-y: auto;
+    }
+    .status-panel.result-state #results-section {
+        display: block;
+        width: 100%;
+        max-width: none;
+        margin: 0;
+    }
+    .result-preview-placeholder {
+        width: 100%;
+        height: 100%;
+        min-height: 320px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        padding: 2rem;
+        color: #889aab;
+        text-align: center;
+        background: #fafbfc;
+    }
+    .result-preview-placeholder svg {
+        width: 42px;
+        height: 42px;
+        color: #aabbcc;
     }
 
     details > summary {
@@ -1078,14 +1109,22 @@ document.getElementById('verify-form').addEventListener('submit', function(e) {
             ];
 
             const generalMessages = [
+                "Reading uploaded file size and validating PDF structure...",
+                "Opening the PDF and counting readable pages...",
+                "Checking for the official barangay footer...",
+                "Inspecting PDF metadata for the SEALGUARD signature...",
                 "Enhancing seal image to check LSB steganography...",
                 "Extracting hidden bits from least significant pixel channels...",
+                "Validating encrypted marker format and block length...",
                 "Decrypting canonical fingerprint using AES-256-CBC...",
                 "Unwrapping AES key using RSA private key...",
                 "Verifying HMAC integrity of canonical fingerprint...",
                 "Recomputing SHA-256 hash of document contents...",
+                "Redacting cryptographic values from the verification log...",
                 "Comparing extracted fingerprint against database records...",
                 "Cross-referencing document metadata with stored signatures...",
+                "Checking that the matched contract is active and not in trash...",
+                "Removing the temporary verification file...",
                 "Finalizing authenticity determination...",
             ];
 
@@ -1140,7 +1179,36 @@ document.getElementById('verify-form').addEventListener('submit', function(e) {
 
 if (hasResult) {
     document.getElementById('upload-card').style.display = 'none';
-    document.getElementById('results-section').style.display = 'block';
+    document.getElementById('verify-page-header').style.display = 'none';
+    document.body.classList.add('verification-active');
+    document.documentElement.classList.add('verification-active');
+
+    const loadingScreen = document.getElementById('loading-screen');
+    const statusPanel = loadingScreen.querySelector('.status-panel');
+    const resultSection = document.getElementById('results-section');
+    const statusTitle = statusPanel.querySelector('.status-title');
+    const resultTitle = resultSection.querySelector('.result-title');
+
+    loadingScreen.style.display = 'block';
+    statusPanel.classList.add('result-state');
+    statusPanel.querySelector('.status-spinner-main').style.display = 'none';
+    statusPanel.querySelector('.status-steps').style.display = 'none';
+    document.getElementById('progress-bar').closest('div[style]').style.display = 'none';
+    statusTitle.textContent = resultTitle ? resultTitle.textContent.trim() : 'Verification Result';
+    statusPanel.appendChild(resultSection);
+    resultSection.style.display = 'block';
+
+    document.getElementById('doc-page-count').textContent = 'Verification complete';
+    document.querySelector('.doc-preview-body').innerHTML = `
+        <div class="result-preview-placeholder">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14,2 14,8 20,8"/>
+                <path d="m9 15 2 2 4-4"/>
+            </svg>
+            <strong style="color:#445566;">Uploaded PDF processed</strong>
+            <span>The verification result and processing log are shown alongside the document workspace.</span>
+        </div>`;
 }
 </script>
 {% endblock %}

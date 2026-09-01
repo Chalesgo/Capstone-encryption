@@ -215,11 +215,65 @@
             color: #999;
         }
 
-        @media (max-width: 600px) {
-            .sidebar { width: 56px; }
-            .topbar { left: 56px; }
-            body { padding-left: 56px; }
+        .mobile-nav,
+        .public-mobile-topbar {
+            display: none;
+        }
+
+        .mobile-nav-link {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            flex: 0 0 36px;
+            border: 0;
+            border-radius: 8px;
+            background: transparent;
+            color: #667788;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .mobile-nav-link svg {
+            width: 18px;
+            height: 18px;
+            stroke: currentColor;
+        }
+
+        .mobile-nav-link.active {
+            color: #d9822b;
+            background: rgba(244,163,77,0.13);
+        }
+
+        @media (max-width: 700px),
+               (max-width: 950px) and (pointer: coarse),
+               (orientation: portrait) and (max-width: 1024px) {
+            .sidebar { display: none; }
+            .topbar {
+                left: 0;
+                padding: 0 8px;
+                gap: 6px;
+                justify-content: space-between;
+            }
+            body { padding-left: 0; }
             .container { padding: 1rem; }
+            .mobile-nav {
+                display: flex;
+                align-items: center;
+                gap: 3px;
+                min-width: 0;
+                overflow-x: auto;
+                overscroll-behavior-x: contain;
+                scrollbar-width: none;
+            }
+            .mobile-nav::-webkit-scrollbar { display: none; }
+            .topbar > .topbar-icon-btn,
+            .topbar > .topbar-divider,
+            .topbar-user .user-text { display: none; }
+            .topbar-user { flex: 0 0 auto; }
+            .topbar-user .avatar { width: 30px; height: 30px; }
+            .public-mobile-topbar { display: flex; }
         }
         /* ── Page container ── */
         .container {
@@ -477,7 +531,7 @@
             </svg>
         </a>
 
-        <a href="#" class="sidebar-icon-link" data-tooltip="Help &amp; Tutorials">
+        <a href="{% url 'help_tutorials' %}" class="sidebar-icon-link{% if request.path == '/help/' %} active{% endif %}" data-tooltip="Help &amp; Tutorials">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"/>
                 <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/>
@@ -513,6 +567,39 @@
 
 {% if user.is_authenticated %}
 <header class="topbar">
+    <nav class="mobile-nav" aria-label="Mobile navigation">
+        <a href="/verify/" class="mobile-nav-link{% if request.path == '/verify/' %} active{% endif %}" title="Verify Document" aria-label="Verify Document">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>
+            </svg>
+        </a>
+        <a href="/contracts/" class="mobile-nav-link{% if request.path == '/contracts/' %} active{% endif %}" title="Contracts" aria-label="Contracts">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/>
+            </svg>
+        </a>
+        <a href="/dashboard/" class="mobile-nav-link{% if request.path == '/dashboard/' %} active{% endif %}" title="Dashboard" aria-label="Dashboard">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>
+            </svg>
+        </a>
+        <a href="/upload/" class="mobile-nav-link{% if request.path == '/upload/' %} active{% endif %}" title="Add Document" aria-label="Add Document">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+        </a>
+        <a href="{% url 'help_tutorials' %}" class="mobile-nav-link{% if request.path == '/help/' %} active{% endif %}" title="Help &amp; Tutorials" aria-label="Help and Tutorials">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+        </a>
+        <button type="button" class="mobile-nav-link" title="Logout" aria-label="Logout" onclick="document.getElementById('logout-form').submit()">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>
+            </svg>
+        </button>
+    </nav>
+
     <button class="topbar-icon-btn" title="Notifications">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -530,6 +617,21 @@
             <span class="user-role">{% if user.is_superuser %}Superuser{% elif user.is_staff %}Staff{% else %}User{% endif %}</span>
         </div>
     </div>
+</header>
+{% else %}
+<header class="topbar public-mobile-topbar">
+    <nav class="mobile-nav" aria-label="Mobile navigation">
+        <a href="/verify/" class="mobile-nav-link{% if request.path == '/verify/' %} active{% endif %}" title="Verify Document" aria-label="Verify Document">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>
+            </svg>
+        </a>
+        <a href="/accounts/login/" class="mobile-nav-link" title="Staff Login" aria-label="Staff Login">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/>
+            </svg>
+        </a>
+    </nav>
 </header>
 {% endif %}
 
