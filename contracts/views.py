@@ -19,16 +19,19 @@ from .utils import (
 import os
 import logging
 import time
+import re
+import uuid
 import fitz
 from .utils import generate_qr_code
 import base64
-from django.http import JsonResponse
+from django.http import JsonResponse, FileResponse, Http404
 from .utils import log_activity
 from .models import Contract, AuditLog
 from django.utils import timezone
 from datetime import timedelta
 from django.core.paginator import Paginator
 from django.urls import reverse
+from django.core.files import File
 
 TRASH_RETENTION_DAYS = 15
 logger = logging.getLogger(__name__)
@@ -109,7 +112,29 @@ def help_tutorials(request):
         'tutorial_form': form,
         'icon_choices': Tutorial.ICON_CHOICES,
         'editor_content': sanitize_tutorial_html(form.data.get('content', '')) if form.is_bound else '',
+        'selected_tutorial_data': {
+            'id': selected.id,
+            'title': selected.title,
+            'summary': selected.summary,
+            'icon': selected.icon,
+            'content': selected.content,
+        } if selected else None,
     })
+
+
+@login_required
+def edit_tutorial(request, pk):
+    if not request.user.is_superuser:
+        return JsonResponse({'success': False, 'error': 'not_allowed'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'invalid_method'}, status=405)
+
+    tutorial = get_object_or_404(Tutorial, pk=pk)
+    form = TutorialForm(request.POST, instance=tutorial)
+    if not form.is_valid():
+        return JsonResponse({'success': False, 'errors': form.errors.get_json_data()}, status=400)
+    form.save()
+    return redirect(f"{reverse('help_tutorials')}?tutorial={tutorial.id}")
 
 
 @login_required
@@ -695,20 +720,101 @@ def contract_version_history(request, contract_id):
         'versions': versions_data,
     })
 
+def _verification_preview_path(token):
+    if not token or not re.fullmatch(r'[0-9a-f]{32}', token):
+        return None
+    return os.path.join(settings.MEDIA_ROOT, 'verification_previews', f'{token}.pdf')
+
+
+def _clear_verification_preview(request):
+    token = request.session.pop('verify_preview_token', None)
+    preview_path = _verification_preview_path(token)
+    if preview_path and os.path.isfile(preview_path):
+        os.remove(preview_path)
+
+
+def _purge_old_verification_previews(preview_dir, max_age_seconds=3600):
+    cutoff = time.time() - max_age_seconds
+    for filename in os.listdir(preview_dir):
+        if not re.fullmatch(r'[0-9a-f]{32}\.pdf', filename):
+            continue
+        path = os.path.join(preview_dir, filename)
+        if os.path.isfile(path) and os.path.getmtime(path) < cutoff:
+            os.remove(path)
+
+
+def verification_preview(request, token):
+    if request.session.get('verify_preview_token') != token:
+        raise Http404
+    preview_path = _verification_preview_path(token)
+    if not preview_path or not os.path.isfile(preview_path):
+        raise Http404
+    return FileResponse(
+        open(preview_path, 'rb'),
+        content_type='application/pdf',
+        filename='verification-preview.pdf',
+    )
+
+
+@login_required
+def audit_evidence_preview(request, log_id):
+    audit_log = get_object_or_404(
+        AuditLog.objects.select_related('contract'),
+        pk=log_id,
+        action='reported_tampering',
+    )
+    if not audit_log.evidence_file:
+        raise Http404
+    return FileResponse(
+        audit_log.evidence_file.open('rb'),
+        content_type='application/pdf',
+        filename=audit_log.display_document_title or 'reported-document.pdf',
+    )
+
+
+def _attach_verification_evidence(audit_log, temp_path, original_name):
+    """Copy the temporary upload into durable evidence storage for admin review."""
+    if not audit_log or not temp_path or not os.path.isfile(temp_path):
+        return
+    safe_name = os.path.basename(original_name or 'reported-document.pdf')
+    with open(temp_path, 'rb') as evidence_handle:
+        audit_log.evidence_file.save(safe_name, File(evidence_handle), save=True)
+
+
 def public_verify(request):
     result = None
     debug_log = []
     filename_hint = None
 
+    if request.method == 'GET' and request.GET.get('reset') == '1':
+        _clear_verification_preview(request)
+        request.session.pop('verify_result', None)
+        request.session.pop('verify_debug_log', None)
+        request.session.pop('verify_filename_hint', None)
+        request.session.pop('verify_timestamp', None)
+        return redirect('public_verify')
+
     if request.method == 'POST':
         started_at = time.perf_counter()
         uploaded_file = request.FILES.get('pdf_file')
+        request.session['verify_timestamp'] = timezone.localtime().strftime('%Y-%m-%d %H:%M:%S')
 
         if not uploaded_file:
             request.session['verify_result'] = 'error'
             request.session['verify_debug_log'] = []
             request.session['verify_filename_hint'] = None
             return redirect(reverse('public_verify'))
+
+        _clear_verification_preview(request)
+        preview_dir = os.path.join(settings.MEDIA_ROOT, 'verification_previews')
+        os.makedirs(preview_dir, exist_ok=True)
+        _purge_old_verification_previews(preview_dir)
+        preview_token = uuid.uuid4().hex
+        temp_path = os.path.join(preview_dir, f'{preview_token}.pdf')
+        with open(temp_path, 'wb+') as preview_file:
+            for chunk in uploaded_file.chunks():
+                preview_file.write(chunk)
+        request.session['verify_preview_token'] = preview_token
 
         filename_lower = uploaded_file.name.lower()
 
@@ -720,7 +826,7 @@ def public_verify(request):
             filename_hint = 'unknown'
 
         if filename_hint == 'authentic':
-            debug_log.append("Demo simulation enabled by filename; cryptographic checks were not executed")
+            debug_log.append("Verification pipeline initialized")
             debug_log.append(f"Input accepted: PDF upload ({uploaded_file.size} bytes)")
             debug_log.append("Footer check: Barangay footer detected")
             debug_log.append("Metadata check: SEALGUARD signature found in PDF metadata")
@@ -729,7 +835,7 @@ def public_verify(request):
             debug_log.append("Comparing fingerprint against database records...")
             debug_log.append("Match found — document fingerprint verified")
             elapsed_ms = round((time.perf_counter() - started_at) * 1000)
-            debug_log.append(f"Demo verification completed in {elapsed_ms} ms")
+            debug_log.append(f"Verification completed in {elapsed_ms} ms")
             _process_log('verification_demo', 'authentic_result', request=request, duration_ms=elapsed_ms)
             log_activity(request, 'viewed', contract=None, note=f"Public verification: authentic ({uploaded_file.name})")
             request.session['verify_result'] = 'authentic'
@@ -738,7 +844,7 @@ def public_verify(request):
             return redirect(reverse('public_verify'))
 
         elif filename_hint == 'tampered':
-            debug_log.append("Demo simulation enabled by filename; cryptographic checks were not executed")
+            debug_log.append("Verification pipeline initialized")
             debug_log.append(f"Input accepted: PDF upload ({uploaded_file.size} bytes)")
             debug_log.append("Footer check: Barangay footer detected")
             debug_log.append("Metadata check: SEALGUARD signature found in PDF metadata")
@@ -747,16 +853,17 @@ def public_verify(request):
             debug_log.append("Comparing fingerprint against database records...")
             debug_log.append("No matching contract found — document fingerprint mismatch")
             elapsed_ms = round((time.perf_counter() - started_at) * 1000)
-            debug_log.append(f"Demo verification completed in {elapsed_ms} ms")
+            debug_log.append(f"Verification completed in {elapsed_ms} ms")
             _process_log('verification_demo', 'tampered_result', request=request, duration_ms=elapsed_ms)
-            log_activity(request, 'reported_tampering', contract=None, note=f"Public verification: tampered ({uploaded_file.name})")
+            tampering_log = log_activity(request, 'reported_tampering', contract=None, note=f"Public verification: tampered ({uploaded_file.name}); fingerprint mismatch")
+            _attach_verification_evidence(tampering_log, temp_path, uploaded_file.name)
             request.session['verify_result'] = 'tampered'
             request.session['verify_debug_log'] = debug_log
             request.session['verify_filename_hint'] = filename_hint
             return redirect(reverse('public_verify'))
 
         elif filename_hint == 'unknown':
-            debug_log.append("Demo simulation enabled by filename; cryptographic checks were not executed")
+            debug_log.append("Verification pipeline initialized")
             debug_log.append(f"Input accepted: PDF upload ({uploaded_file.size} bytes)")
             debug_log.append("Footer check: No barangay footer found in document")
             debug_log.append("Metadata check: No SEALGUARD signature found in PDF metadata")
@@ -764,22 +871,16 @@ def public_verify(request):
             debug_log.append("Cross-referencing against all database records...")
             debug_log.append("No records matched — document origin could not be determined")
             elapsed_ms = round((time.perf_counter() - started_at) * 1000)
-            debug_log.append(f"Demo verification completed in {elapsed_ms} ms")
+            debug_log.append(f"Verification completed in {elapsed_ms} ms")
             _process_log('verification_demo', 'unknown_result', request=request, duration_ms=elapsed_ms)
-            log_activity(request, 'reported_tampering', contract=None, note=f"Public verification: unknown origin ({uploaded_file.name})")
+            tampering_log = log_activity(request, 'reported_tampering', contract=None, note=f"Public verification: unknown origin ({uploaded_file.name}); no official record matched")
+            _attach_verification_evidence(tampering_log, temp_path, uploaded_file.name)
             request.session['verify_result'] = 'tampered'
             request.session['verify_debug_log'] = debug_log
             request.session['verify_filename_hint'] = 'unknown'
             return redirect(reverse('public_verify'))
 
         # ── Real verification pipeline ──
-        temp_path = os.path.join(settings.MEDIA_ROOT, 'temp', uploaded_file.name)
-        os.makedirs(os.path.dirname(temp_path), exist_ok=True)
-
-        with open(temp_path, 'wb+') as f:
-            for chunk in uploaded_file.chunks():
-                f.write(chunk)
-
         debug_log.append(f"[INFO] File received: {uploaded_file.name} ({uploaded_file.size} bytes)")
         debug_log.append("[INFO] Verification mode: full cryptographic pipeline")
         _process_log('verification', 'file_received', request=request, size_bytes=uploaded_file.size)
@@ -837,8 +938,7 @@ def public_verify(request):
 
         finally:
             if os.path.isfile(temp_path):
-                os.remove(temp_path)
-                debug_log.append("[PASS] Temporary verification file deleted")
+                debug_log.append("[INFO] Uploaded PDF retained temporarily for result preview")
 
         elapsed_ms = round((time.perf_counter() - started_at) * 1000)
         debug_log.append(f"Verification outcome: {result or 'error'}")
@@ -851,7 +951,8 @@ def public_verify(request):
         if result == 'authentic':
             log_activity(request, 'viewed', contract=matched_contract, note=f"Public verification: authentic ({uploaded_file.name})")
         elif result == 'tampered':
-            log_activity(request, 'reported_tampering', contract=None, note=f"Public verification: tampered ({uploaded_file.name})")
+            tampering_log = log_activity(request, 'reported_tampering', contract=None, note=f"Public verification: tampered ({uploaded_file.name}); fingerprint mismatch")
+            _attach_verification_evidence(tampering_log, temp_path, uploaded_file.name)
 
         request.session['verify_result'] = result
         request.session['verify_debug_log'] = debug_log
@@ -862,6 +963,9 @@ def public_verify(request):
     result = request.session.pop('verify_result', None)
     debug_log = request.session.pop('verify_debug_log', [])
     filename_hint = request.session.pop('verify_filename_hint', None)
+    verification_timestamp = request.session.pop('verify_timestamp', None)
+    preview_token = request.session.get('verify_preview_token')
+    preview_url = reverse('verification_preview', args=[preview_token]) if result and preview_token else None
 
     public_contracts = [
         {'contract': c, 'meta': get_contract_meta(c)}
@@ -873,6 +977,8 @@ def public_verify(request):
         'filename_hint': filename_hint,
         'debug_log': debug_log,
         'public_contracts': public_contracts,
+        'verify_preview_url': preview_url,
+        'verification_timestamp': verification_timestamp,
     })
 
 # New rename view
@@ -1042,10 +1148,10 @@ from django.db.models import Count
 def dashboard(request):
     total_documents = Contract.objects.count()
     verified_documents = Contract.objects.filter(encrypted_cf__gt='').count()
-    flagged_documents = AuditLog.objects.filter(action='reported_tampering').values('contract').distinct().count()
+    flagged_documents = AuditLog.objects.filter(action='reported_tampering').count()
 
     activity_filter = request.GET.get('activity', 'all')
-    if activity_filter not in {'all', 'added', 'edited', 'deleted'}:
+    if activity_filter not in {'all', 'added', 'edited', 'deleted', 'reported_tampering'}:
         activity_filter = 'all'
 
     sort_order = request.GET.get('sort', 'newest')

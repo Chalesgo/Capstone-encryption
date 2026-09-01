@@ -175,12 +175,13 @@
     {% if user.is_superuser %}
       <div class="tutorial-header-actions">
         {% if selected_tutorial %}
+          <button type="button" class="btn btn-outline" onclick="openTutorialEditor('edit')">Edit Tutorial</button>
           <form method="post" action="{% url 'delete_tutorial' selected_tutorial.id %}" onsubmit="return confirm('Delete this tutorial? This cannot be undone.');">
             {% csrf_token %}
             <button type="submit" class="btn btn-danger">Delete Tutorial</button>
           </form>
         {% endif %}
-        <button type="button" class="btn btn-primary" onclick="openTutorialEditor()">+ Add Tutorial</button>
+        <button type="button" class="btn btn-primary" onclick="openTutorialEditor('add')">+ Add Tutorial</button>
       </div>
     {% endif %}
   </header>
@@ -198,13 +199,14 @@
 </div>
 
 {% if user.is_superuser %}
+{{ selected_tutorial_data|json_script:"selected-tutorial-data" }}
 <div class="tutorial-modal{% if tutorial_form.errors %} open{% endif %}" id="tutorial-modal" role="dialog" aria-modal="true" aria-labelledby="tutorial-editor-title">
   <div class="editor-dialog">
     <h2 id="tutorial-editor-title">Add Tutorial</h2>
     {% if tutorial_form.errors %}
       <div class="editor-errors">Please correct the highlighted tutorial fields and try again.</div>
     {% endif %}
-    <form method="post" id="tutorial-form" onsubmit="return prepareTutorialContent()">
+    <form method="post" id="tutorial-form" action="{% url 'help_tutorials' %}" onsubmit="return prepareTutorialContent()">
       {% csrf_token %}
       <div class="editor-grid">
         <div class="editor-field">
@@ -252,9 +254,30 @@
 {% endif %}
 
 <script>
-function openTutorialEditor() {
+function openTutorialEditor(mode) {
   const modal = document.getElementById('tutorial-modal');
-  if (modal) modal.classList.add('open');
+  const form = document.getElementById('tutorial-form');
+  const heading = document.getElementById('tutorial-editor-title');
+  if (!modal || !form) return;
+
+  if (mode === 'edit') {
+    const data = JSON.parse(document.getElementById('selected-tutorial-data').textContent);
+    form.action = `/help/${data.id}/edit/`;
+    heading.textContent = 'Edit Tutorial';
+    document.getElementById('tutorial-title').value = data.title;
+    document.getElementById('tutorial-summary').value = data.summary;
+    document.getElementById('tutorial-editor').innerHTML = data.content;
+    const icon = form.querySelector(`input[name="icon"][value="${data.icon}"]`);
+    if (icon) icon.checked = true;
+  } else {
+    form.action = "{% url 'help_tutorials' %}";
+    heading.textContent = 'Add Tutorial';
+    form.reset();
+    document.getElementById('tutorial-editor').innerHTML = '';
+    const defaultIcon = form.querySelector('input[name="icon"][value="help"]');
+    if (defaultIcon) defaultIcon.checked = true;
+  }
+  modal.classList.add('open');
 }
 function closeTutorialEditor() {
   const modal = document.getElementById('tutorial-modal');

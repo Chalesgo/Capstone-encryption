@@ -142,6 +142,8 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .audit-title-link { color: inherit; text-decoration: none; }
+  .audit-title-link:hover { color: #3b5bdb; text-decoration: underline; }
 
   .audit-user-cell {
     display: flex;
@@ -180,6 +182,23 @@
   .action-badge.deleted   { background: #fff0f0; color: #e53e3e; }
   .action-badge.reported_tampering { background: #fff0f0; color: #dc2626; }
   .action-badge.failed_login       { background: #f3f4f6; color: #6b7280; }
+
+  .audit-pdf-overlay { position: fixed; inset: 0; z-index: 1100; display: none; background: rgba(0,0,0,.35); }
+  .audit-pdf-overlay.open { display: block; }
+  .audit-pdf-panel { position: fixed; top: 0; right: -70%; z-index: 1200; width: 68%; min-width: 620px; height: 100vh; display: flex; flex-direction: column; background: #fff; border-left: 1px solid #eef0f4; box-shadow: -8px 0 32px rgba(0,0,0,.12); visibility: hidden; pointer-events: none; transition: right .3s ease, visibility 0s linear .3s; }
+  .audit-pdf-panel.open { right: 0; visibility: visible; pointer-events: auto; transition-delay: 0s; }
+  .audit-pdf-body { flex: 1; display: flex; min-height: 0; }
+  .audit-pdf-frame-wrap { flex: 1; position: relative; display: flex; min-width: 0; }
+  .audit-pdf-frame { flex: 1; border: none; background: #fff; }
+  .audit-pdf-actions { position: absolute; top: 10px; right: 10px; z-index: 2; display: flex; gap: 4px; padding: 3px; background: rgba(255,255,255,.92); border: 1px solid #eef0f4; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+  .audit-pdf-action { width: 32px; height: 32px; border: 0; border-radius: 6px; display: grid; place-items: center; color: #667788; background: transparent; cursor: pointer; }
+  .audit-pdf-action:hover { background: #f1f3f5; color: #1a1a2e; }
+  .audit-pdf-action svg { width: 16px; height: 16px; }
+  .audit-pdf-sidebar { width: 240px; flex-shrink: 0; padding: 22px 18px; background: #fafbfc; border-left: 1px solid #eef0f4; }
+  .audit-pdf-title { margin: 0 0 22px; color: #1a1a2e; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+  .audit-pdf-label { margin: 18px 0 7px; color: #889aab; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .audit-pdf-value { margin: 0; color: #52606d; font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+  @media (max-width: 900px) { .audit-pdf-panel { width: 100%; right: -100%; min-width: 0; } .audit-pdf-sidebar { width: 210px; } }
 
   .empty-audit {
     padding: 3rem 2rem;
@@ -292,6 +311,7 @@
           <option value="added" {% if activity_filter == 'added' %}selected{% endif %}>Added documents</option>
           <option value="edited" {% if activity_filter == 'edited' %}selected{% endif %}>Edited documents</option>
           <option value="deleted" {% if activity_filter == 'deleted' %}selected{% endif %}>Deleted documents</option>
+          <option value="reported_tampering" {% if activity_filter == 'reported_tampering' %}selected{% endif %}>Reported tampering</option>
         </select>
       </div>
       <div class="audit-filter-field">
@@ -335,7 +355,12 @@
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
             </svg>
-            <span class="audit-title-text" title="{{ log.display_document_title }}">{{ log.display_document_title|default:"—" }}</span>
+            {% if log.evidence_file %}
+              <a class="audit-title-text audit-title-link" href="#" title="Open retained PDF"
+                 onclick="openAuditPdf('{% url 'audit_evidence_preview' log.id %}', '{{ log.display_document_title|default:'Reported document'|escapejs }}', '{{ log.note|default:'This document has been reported to the admin for further investigation.'|escapejs }}', '{{ log.timestamp|date:'Y-m-d H:i:s' }}'); return false;">{{ log.display_document_title|default:"—" }}</a>
+            {% else %}
+              <span class="audit-title-text" title="{{ log.display_document_title }}">{{ log.display_document_title|default:"—" }}</span>
+            {% endif %}
           </div>
         </td>
         <td style="color:#889aab;">{{ log.ip_address|default:"—" }}</td>
@@ -376,4 +401,48 @@
   </nav>
   {% endif %}
 </div>
+<div class="audit-pdf-overlay" id="audit-pdf-overlay" onclick="closeAuditPdf()"></div>
+<div class="audit-pdf-panel" id="audit-pdf-panel" aria-hidden="true">
+  <div class="audit-pdf-body">
+    <div class="audit-pdf-frame-wrap">
+      <div class="audit-pdf-actions">
+        <a class="audit-pdf-action" id="audit-pdf-download" href="#" download title="Download">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </a>
+        <button class="audit-pdf-action" type="button" onclick="closeAuditPdf()" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <iframe class="audit-pdf-frame" id="audit-pdf-frame" title="Reported document preview"></iframe>
+    </div>
+    <aside class="audit-pdf-sidebar">
+      <p class="audit-pdf-title" id="audit-pdf-title">Reported document</p>
+      <p class="audit-pdf-label">Verification result</p>
+      <p class="audit-pdf-value" style="color:#dc2626;font-weight:600;">Possible Modification</p>
+      <p class="audit-pdf-label">Reported on</p>
+      <p class="audit-pdf-value" id="audit-pdf-time">—</p>
+      <p class="audit-pdf-label">Investigation note</p>
+      <p class="audit-pdf-value" id="audit-pdf-note">This document has been reported to the admin for further investigation.</p>
+    </aside>
+  </div>
+</div>
+<script>
+function openAuditPdf(url, title, note, timestamp) {
+  document.getElementById('audit-pdf-frame').src = url;
+  document.getElementById('audit-pdf-title').textContent = title;
+  document.getElementById('audit-pdf-download').href = url;
+  document.getElementById('audit-pdf-download').download = title;
+  document.getElementById('audit-pdf-note').textContent = note;
+  document.getElementById('audit-pdf-time').textContent = timestamp;
+  document.getElementById('audit-pdf-panel').classList.add('open');
+  document.getElementById('audit-pdf-overlay').classList.add('open');
+  document.getElementById('audit-pdf-panel').setAttribute('aria-hidden', 'false');
+}
+function closeAuditPdf() {
+  document.getElementById('audit-pdf-panel').classList.remove('open');
+  document.getElementById('audit-pdf-overlay').classList.remove('open');
+  document.getElementById('audit-pdf-panel').setAttribute('aria-hidden', 'true');
+  document.getElementById('audit-pdf-frame').src = '';
+}
+</script>
 {% endblock %}

@@ -179,6 +179,18 @@
         color: #667788;
         line-height: 1.5;
     }
+    .verification-summary {
+        margin-top: 14px;
+        padding: 12px 14px;
+        border-radius: 8px;
+        background: rgba(255,255,255,.72);
+        border: 1px solid rgba(148,163,184,.22);
+        color: #52606d;
+        font-size: 12px;
+        line-height: 1.8;
+    }
+    .verification-summary strong { color: #334155; }
+    .verification-summary-note { margin-top: 8px; color: #667788; }
 
     .log-box {
         background: #f7f8fa;
@@ -201,11 +213,25 @@
         overflow-y: auto;
     }
     .status-panel.result-state #results-section {
-        display: block;
+        display: flex;
+        flex-direction: column;
         width: 100%;
         max-width: none;
+        min-height: 100%;
         margin: 0;
     }
+    .verification-footer {
+        margin-top: auto;
+        padding: 14px 16px;
+        border-radius: 9px;
+        background: #f7f8fa;
+        border: 1px solid #e2e6eb;
+        color: #52606d;
+        font-size: 12px;
+        line-height: 1.8;
+    }
+    .verification-footer strong { color: #334155; }
+    .verification-footer-note { margin-top: 8px; color: #667788; line-height: 1.5; }
     .result-preview-placeholder {
         width: 100%;
         height: 100%;
@@ -297,7 +323,7 @@
     }
     .doc-preview-panel {
         flex: 1.4;
-        background: #f4f5f7;
+        background: #fff;
         border-radius: 14px;
         border: 1px solid #eef0f4;
         overflow: hidden;
@@ -318,7 +344,7 @@
     }
     .doc-preview-body {
         flex: 1;
-        background: #e9ebef;
+        background: #fff;
         display: flex;
         min-height: 0;
     }
@@ -327,6 +353,10 @@
         height: 100%;
         border: none;
         background: white;
+        outline: none;
+        box-shadow: none;
+        border-radius: 0 0 12px 12px;
+        display: block;
     }
     .status-panel {
         flex: 1;
@@ -812,6 +842,11 @@
                     </div>
                     <p id="loading-status" style="font-size:11px; color:#aabbcc; font-family:monospace; margin-top:8px; min-height:14px;"></p>
                 </div>
+                <button type="button" id="cancel-verification-btn" class="btn btn-outline"
+                        onclick="cancelVerification()"
+                        style="width:100%;justify-content:center;margin-top:14px;">
+                    Cancel Verification
+                </button>
             </div>
 
         </div>
@@ -909,6 +944,20 @@
         </details>
         {% endif %}
 
+        <div class="verification-footer">
+            <div><strong>Source:</strong> Official Barangay Database</div>
+            <div><strong>Verification Result:</strong>
+                {% if result == "error" %}Unable to Verify{% else %}Passed{% endif %}
+            </div>
+            <div><strong>Integrity Check:</strong>
+                {% if result == "error" %}Incomplete{% else %}Complete{% endif %}
+            </div>
+            <div><strong>Verified On:</strong> {{ verification_timestamp|default:"—" }}</div>
+            {% if result == "tampered" and filename_hint != "unknown" %}
+            <div class="verification-footer-note">This Document has been reported to the admin for further investigation.</div>
+            {% endif %}
+        </div>
+
     <a href="{% url 'public_verify' %}" class="btn btn-outline"
     style="width:100%; justify-content:center; margin-top:12px; text-decoration:none;">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
@@ -984,6 +1033,25 @@ uploadArea.addEventListener('drop', function(e) {
 });
 
 const hasResult = "{{ result|default:'' }}" !== '';
+let verificationTimers = [];
+let verificationObjectUrl = null;
+let verificationCancelled = false;
+
+function scheduleVerificationTask(callback, delay) {
+    const timer = setTimeout(function() {
+        if (!verificationCancelled) callback();
+    }, delay);
+    verificationTimers.push(timer);
+    return timer;
+}
+
+function cancelVerification() {
+    verificationCancelled = true;
+    verificationTimers.forEach(clearTimeout);
+    verificationTimers = [];
+    if (verificationObjectUrl) URL.revokeObjectURL(verificationObjectUrl);
+    window.location.href = "{% url 'public_verify' %}?reset=1";
+}
 
 let currentPublicContractId = null;
 
@@ -1058,6 +1126,9 @@ function updateStatusSteps(pct) {
 
 document.getElementById('verify-form').addEventListener('submit', function(e) {
     if (!hasResult) {
+        verificationCancelled = false;
+        verificationTimers.forEach(clearTimeout);
+        verificationTimers = [];
         const demoLog = "{{ debug_log|default:'[]'|escapejs }}" !== '[]' 
             ? JSON.parse("{{ debug_log|default:'[]'|escapejs }}")
             : [];
@@ -1077,8 +1148,8 @@ document.getElementById('verify-form').addEventListener('submit', function(e) {
         document.getElementById('loading-screen').style.display = 'block';
 
         // Preview the uploaded document (the "working contract") while verification runs
-        const objectUrl = URL.createObjectURL(file);
-        document.getElementById('doc-preview-frame').src = objectUrl;
+        verificationObjectUrl = URL.createObjectURL(file);
+        document.getElementById('doc-preview-frame').src = verificationObjectUrl + '#toolbar=0&navpanes=0&scrollbar=1&view=FitH';
         document.getElementById('doc-page-count').textContent =
             estimatedPages + (estimatedPages === 1 ? ' Page' : ' Pages');
 
@@ -1090,7 +1161,7 @@ document.getElementById('verify-form').addEventListener('submit', function(e) {
             const interval = (totalTime * 0.85) / cleanedLines.length;
 
             cleanedLines.forEach(function(line, i) {
-                setTimeout(function() {
+                scheduleVerificationTask(function() {
                     document.getElementById('loading-status').textContent = line;
                     const pct = Math.min(((i + 1) / cleanedLines.length) * 95, 95);
                     document.getElementById('progress-bar').style.width = pct + '%';
@@ -1159,7 +1230,7 @@ document.getElementById('verify-form').addEventListener('submit', function(e) {
             timeline.sort((a, b) => a.time - b.time);
 
             timeline.forEach(function(step) {
-                setTimeout(function() {
+                scheduleVerificationTask(function() {
                     document.getElementById('loading-status').textContent = step.msg;
                     const pct = Math.min(((step.time / totalTime) * 100), 95);
                     document.getElementById('progress-bar').style.width = pct + '%';
@@ -1168,11 +1239,11 @@ document.getElementById('verify-form').addEventListener('submit', function(e) {
             });
         }
 
-        setTimeout(function() {
+        scheduleVerificationTask(function() {
             document.getElementById('loading-status').textContent = 'Submitting for final verification...';
             document.getElementById('progress-bar').style.width = '98%';
             updateStatusSteps(100);
-            setTimeout(function() { form.submit(); }, 500);
+            scheduleVerificationTask(function() { form.submit(); }, 500);
         }, totalTime);
     }
 });
@@ -1193,22 +1264,17 @@ if (hasResult) {
     statusPanel.classList.add('result-state');
     statusPanel.querySelector('.status-spinner-main').style.display = 'none';
     statusPanel.querySelector('.status-steps').style.display = 'none';
+    document.getElementById('cancel-verification-btn').style.display = 'none';
     document.getElementById('progress-bar').closest('div[style]').style.display = 'none';
     statusTitle.textContent = resultTitle ? resultTitle.textContent.trim() : 'Verification Result';
     statusPanel.appendChild(resultSection);
     resultSection.style.display = 'block';
 
-    document.getElementById('doc-page-count').textContent = 'Verification complete';
-    document.querySelector('.doc-preview-body').innerHTML = `
-        <div class="result-preview-placeholder">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14,2 14,8 20,8"/>
-                <path d="m9 15 2 2 4-4"/>
-            </svg>
-            <strong style="color:#445566;">Uploaded PDF processed</strong>
-            <span>The verification result and processing log are shown alongside the document workspace.</span>
-        </div>`;
+    document.getElementById('doc-page-count').textContent = 'Uploaded document';
+    const resultPreviewUrl = "{{ verify_preview_url|default:''|escapejs }}";
+    if (resultPreviewUrl) {
+        document.getElementById('doc-preview-frame').src = resultPreviewUrl + '#toolbar=0&navpanes=0&scrollbar=1&view=FitH';
+    }
 }
 </script>
 {% endblock %}

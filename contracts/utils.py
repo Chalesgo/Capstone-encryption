@@ -533,7 +533,7 @@ def get_client_ip(request):
 
 
 def log_activity(request, action, contract=None, note=''):
-    AuditLog.objects.create(
+    return AuditLog.objects.create(
         contract=contract,
         document_title=contract.title if contract else '',
         user=request.user if request.user.is_authenticated else None,

@@ -3,6 +3,8 @@ from . import views
 
 urlpatterns = [
     path('verify/', views.public_verify, name='public_verify'),
+    path('verify/preview/<str:token>/', views.verification_preview, name='verification_preview'),
+    path('dashboard/activity/<int:log_id>/preview/', views.audit_evidence_preview, name='audit_evidence_preview'),
     path('contracts/', views.contract_list, name='contract_list'),
     path('upload/', views.upload_contract, name='upload_contract'),
     path('encrypt/<int:contract_id>/', views.encrypt_contract, name='encrypt_contract'),
@@ -13,6 +15,7 @@ urlpatterns = [
     path('status/<int:pk>/',  views.update_status,   name='update_status'),
     path('dashboard/', views.dashboard, name='dashboard'),
     path('help/', views.help_tutorials, name='help_tutorials'),
+    path('help/<int:pk>/edit/', views.edit_tutorial, name='edit_tutorial'),
     path('help/<int:pk>/delete/', views.delete_tutorial, name='delete_tutorial'),
     path('tag/<int:pk>/', views.tag_contract, name='tag_contract'),
     path('folder/create/', views.create_folder, name='create_folder'),

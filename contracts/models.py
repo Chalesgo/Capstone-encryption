@@ -152,6 +152,7 @@ class AuditLog(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     document_title = models.CharField(max_length=255, blank=True)
     note = models.CharField(max_length=255, blank=True)  # optional extra context
+    evidence_file = models.FileField(upload_to='verification_evidence/', blank=True, null=True)
 
     @property
     def display_document_title(self):
