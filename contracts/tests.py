@@ -1,4 +1,5 @@
 from datetime import timedelta
+import tempfile
 from unittest.mock import patch
 
 import fitz
@@ -114,6 +115,44 @@ class AuditLogTests(TestCase):
             'Demo simulation enabled by filename; cryptographic checks were not executed',
             debug_log,
         )
+
+    def test_tampered_verification_retains_pdf_and_inspection_details(self):
+        with tempfile.TemporaryDirectory() as media_root, self.settings(MEDIA_ROOT=media_root):
+            upload = SimpleUploadedFile(
+                'tampered_contract.pdf', b'%PDF-demo', content_type='application/pdf'
+            )
+
+            response = self.client.post(reverse('public_verify'), {'pdf_file': upload})
+
+            self.assertRedirects(response, reverse('public_verify'), fetch_redirect_response=False)
+            audit_log = AuditLog.objects.get(action='reported_tampering')
+            self.assertEqual(audit_log.document_title, 'tampered_contract.pdf')
+            self.assertEqual(audit_log.verification_source, 'Official Barangay Database')
+            self.assertEqual(audit_log.verification_result, 'Possible Modification')
+            self.assertEqual(audit_log.integrity_check, 'Failed')
+            self.assertTrue(audit_log.evidence_file)
+            self.assertTrue(audit_log.evidence_file.storage.exists(audit_log.evidence_file.name))
+
+    def test_unknown_verification_logs_details_without_retaining_pdf(self):
+        with tempfile.TemporaryDirectory() as media_root, self.settings(MEDIA_ROOT=media_root):
+            upload = SimpleUploadedFile(
+                'unknown_contract.pdf', b'%PDF-demo', content_type='application/pdf'
+            )
+
+            response = self.client.post(reverse('public_verify'), {'pdf_file': upload})
+
+            self.assertRedirects(response, reverse('public_verify'), fetch_redirect_response=False)
+            audit_log = AuditLog.objects.get(action='verification')
+            self.assertEqual(self.client.session['verify_result'], 'error')
+            self.assertEqual(audit_log.document_title, 'unknown_contract.pdf')
+            self.assertEqual(audit_log.verification_result, 'Unable to Verify')
+            self.assertEqual(audit_log.integrity_check, 'Incomplete')
+            self.assertFalse(audit_log.evidence_file)
+
+            self.client.force_login(self.user)
+            dashboard = self.client.get(reverse('dashboard'))
+            self.assertContains(dashboard, 'data-result="Unable to Verify"')
+            self.assertContains(dashboard, 'Removed after verification')
 
     @patch('contracts.utils.generate_canonical_fingerprint')
     def test_version_chain_rejects_mismatched_previous_link(self, fingerprint):

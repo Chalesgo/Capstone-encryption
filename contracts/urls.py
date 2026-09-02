@@ -9,6 +9,7 @@ urlpatterns = [
     path('upload/', views.upload_contract, name='upload_contract'),
     path('encrypt/<int:contract_id>/', views.encrypt_contract, name='encrypt_contract'),
     path('delete/<int:contract_id>/', views.delete_contract, name='delete_contract'),
+    path('delete/bulk/', views.bulk_delete_contracts, name='bulk_delete_contracts'),
     path('register/', views.register, name='register'),
     path('verify/physical/', views.verify_physical, name='verify_physical'),
     path('rename/<int:pk>/', views.rename_contract, name='rename_contract'),
@@ -30,6 +31,7 @@ urlpatterns = [
     path('trash/', views.trash_list, name='trash_list'),
     path('trash/restore/<int:contract_id>/', views.restore_contract, name='restore_contract'),
     path('trash/delete-forever/<int:contract_id>/', views.permanently_delete_contract, name='permanently_delete_contract'),
+    path('trash/delete-forever/bulk/', views.bulk_permanently_delete_contracts, name='bulk_permanently_delete_contracts'),
     path('trash/empty/', views.empty_trash, name='empty_trash'),
 ]
 

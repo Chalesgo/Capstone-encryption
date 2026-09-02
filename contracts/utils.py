@@ -532,12 +532,27 @@ def get_client_ip(request):
     return request.META.get('REMOTE_ADDR')
 
 
-def log_activity(request, action, contract=None, note=''):
+def log_activity(
+    request,
+    action,
+    contract=None,
+    note='',
+    *,
+    document_title='',
+    verification_source='',
+    verification_result='',
+    integrity_check='',
+    document_size=None,
+):
     return AuditLog.objects.create(
         contract=contract,
-        document_title=contract.title if contract else '',
+        document_title=contract.title if contract else document_title,
         user=request.user if request.user.is_authenticated else None,
         action=action,
         ip_address=get_client_ip(request),
         note=note,
+        verification_source=verification_source,
+        verification_result=verification_result,
+        integrity_check=integrity_check,
+        document_size=document_size,
     )

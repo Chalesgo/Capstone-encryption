@@ -443,6 +443,28 @@ def delete_contract(request, contract_id):
     return render(request, 'confirm_delete.html', {'contract': contract})
 
 @login_required
+def bulk_delete_contracts(request):
+    if not request.user.is_superuser:
+        return JsonResponse({'success': False, 'error': 'not_allowed'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'invalid_method'}, status=405)
+
+    ids = request.POST.getlist('ids')
+    contracts = Contract.objects.filter(id__in=ids, is_trashed=False)
+    moved = 0
+    skipped_public = 0
+    for contract in contracts:
+        if contract.is_public:
+            skipped_public += 1
+            continue
+        contract.is_trashed = True
+        contract.trashed_at = timezone.now()
+        contract.save(update_fields=['is_trashed', 'trashed_at', 'modified_at'])
+        log_activity(request, 'deleted', contract=contract, note=f'Moved to trash: {contract.title}')
+        moved += 1
+    return JsonResponse({'success': True, 'moved': moved, 'skipped_public': skipped_public})
+
+@login_required
 def trash_list(request):
     if not request.user.is_superuser:
         return redirect('contract_list')
@@ -781,6 +803,30 @@ def _attach_verification_evidence(audit_log, temp_path, original_name):
         audit_log.evidence_file.save(safe_name, File(evidence_handle), save=True)
 
 
+def _log_public_verification(request, uploaded_file, result, *, contract=None, note=''):
+    """Record verification details without retaining the uploaded PDF itself."""
+    detail_map = {
+        'authentic': ('Authentic', 'Complete'),
+        'tampered': ('Possible Modification', 'Failed'),
+        'error': ('Unable to Verify', 'Incomplete'),
+    }
+    verification_result, integrity_check = detail_map[result]
+    action = 'reported_tampering' if result == 'tampered' else (
+        'viewed' if result == 'authentic' else 'verification'
+    )
+    return log_activity(
+        request,
+        action,
+        contract=contract,
+        note=note,
+        document_title=uploaded_file.name,
+        verification_source='Official Barangay Database',
+        verification_result=verification_result,
+        integrity_check=integrity_check,
+        document_size=uploaded_file.size,
+    )
+
+
 def public_verify(request):
     result = None
     debug_log = []
@@ -826,6 +872,7 @@ def public_verify(request):
             filename_hint = 'unknown'
 
         if filename_hint == 'authentic':
+            debug_log.append("Demo simulation enabled by filename; cryptographic checks were not executed")
             debug_log.append("Verification pipeline initialized")
             debug_log.append(f"Input accepted: PDF upload ({uploaded_file.size} bytes)")
             debug_log.append("Footer check: Barangay footer detected")
@@ -837,13 +884,17 @@ def public_verify(request):
             elapsed_ms = round((time.perf_counter() - started_at) * 1000)
             debug_log.append(f"Verification completed in {elapsed_ms} ms")
             _process_log('verification_demo', 'authentic_result', request=request, duration_ms=elapsed_ms)
-            log_activity(request, 'viewed', contract=None, note=f"Public verification: authentic ({uploaded_file.name})")
+            _log_public_verification(
+                request, uploaded_file, 'authentic',
+                note=f"Public verification: authentic ({uploaded_file.name})",
+            )
             request.session['verify_result'] = 'authentic'
             request.session['verify_debug_log'] = debug_log
             request.session['verify_filename_hint'] = filename_hint
             return redirect(reverse('public_verify'))
 
         elif filename_hint == 'tampered':
+            debug_log.append("Demo simulation enabled by filename; cryptographic checks were not executed")
             debug_log.append("Verification pipeline initialized")
             debug_log.append(f"Input accepted: PDF upload ({uploaded_file.size} bytes)")
             debug_log.append("Footer check: Barangay footer detected")
@@ -855,7 +906,10 @@ def public_verify(request):
             elapsed_ms = round((time.perf_counter() - started_at) * 1000)
             debug_log.append(f"Verification completed in {elapsed_ms} ms")
             _process_log('verification_demo', 'tampered_result', request=request, duration_ms=elapsed_ms)
-            tampering_log = log_activity(request, 'reported_tampering', contract=None, note=f"Public verification: tampered ({uploaded_file.name}); fingerprint mismatch")
+            tampering_log = _log_public_verification(
+                request, uploaded_file, 'tampered',
+                note=f"Public verification: tampered ({uploaded_file.name}); fingerprint mismatch",
+            )
             _attach_verification_evidence(tampering_log, temp_path, uploaded_file.name)
             request.session['verify_result'] = 'tampered'
             request.session['verify_debug_log'] = debug_log
@@ -863,6 +917,7 @@ def public_verify(request):
             return redirect(reverse('public_verify'))
 
         elif filename_hint == 'unknown':
+            debug_log.append("Demo simulation enabled by filename; cryptographic checks were not executed")
             debug_log.append("Verification pipeline initialized")
             debug_log.append(f"Input accepted: PDF upload ({uploaded_file.size} bytes)")
             debug_log.append("Footer check: No barangay footer found in document")
@@ -873,9 +928,11 @@ def public_verify(request):
             elapsed_ms = round((time.perf_counter() - started_at) * 1000)
             debug_log.append(f"Verification completed in {elapsed_ms} ms")
             _process_log('verification_demo', 'unknown_result', request=request, duration_ms=elapsed_ms)
-            tampering_log = log_activity(request, 'reported_tampering', contract=None, note=f"Public verification: unknown origin ({uploaded_file.name}); no official record matched")
-            _attach_verification_evidence(tampering_log, temp_path, uploaded_file.name)
-            request.session['verify_result'] = 'tampered'
+            _log_public_verification(
+                request, uploaded_file, 'error',
+                note=f"Public verification: unknown origin ({uploaded_file.name}); no official record matched",
+            )
+            request.session['verify_result'] = 'error'
             request.session['verify_debug_log'] = debug_log
             request.session['verify_filename_hint'] = 'unknown'
             return redirect(reverse('public_verify'))
@@ -949,10 +1006,21 @@ def public_verify(request):
         )
 
         if result == 'authentic':
-            log_activity(request, 'viewed', contract=matched_contract, note=f"Public verification: authentic ({uploaded_file.name})")
+            _log_public_verification(
+                request, uploaded_file, 'authentic', contract=matched_contract,
+                note=f"Public verification: authentic ({uploaded_file.name})",
+            )
         elif result == 'tampered':
-            tampering_log = log_activity(request, 'reported_tampering', contract=None, note=f"Public verification: tampered ({uploaded_file.name}); fingerprint mismatch")
+            tampering_log = _log_public_verification(
+                request, uploaded_file, 'tampered',
+                note=f"Public verification: tampered ({uploaded_file.name}); fingerprint mismatch",
+            )
             _attach_verification_evidence(tampering_log, temp_path, uploaded_file.name)
+        else:
+            _log_public_verification(
+                request, uploaded_file, 'error',
+                note=f"Public verification: unable to verify ({uploaded_file.name})",
+            )
 
         request.session['verify_result'] = result
         request.session['verify_debug_log'] = debug_log
@@ -1018,6 +1086,20 @@ def create_folder(request):
         )
         return JsonResponse({'success': True, 'id': folder.id, 'name': folder.name})
     return JsonResponse({'success': False}, status=400)
+
+@login_required
+def bulk_permanently_delete_contracts(request):
+    if not request.user.is_superuser:
+        return JsonResponse({'success': False, 'error': 'not_allowed'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'invalid_method'}, status=405)
+
+    ids = request.POST.getlist('ids')
+    contracts = Contract.objects.filter(id__in=ids, is_trashed=True)
+    count = contracts.count()
+    for contract in contracts:
+        _hard_delete_contract(contract, request=request, note=f'Permanently deleted from trash: {contract.title}')
+    return JsonResponse({'success': True, 'count': count})
 
 
 @login_required
@@ -1151,7 +1233,7 @@ def dashboard(request):
     flagged_documents = AuditLog.objects.filter(action='reported_tampering').count()
 
     activity_filter = request.GET.get('activity', 'all')
-    if activity_filter not in {'all', 'added', 'edited', 'deleted', 'reported_tampering'}:
+    if activity_filter not in {'all', 'added', 'edited', 'deleted', 'reported_tampering', 'verification'}:
         activity_filter = 'all'
 
     sort_order = request.GET.get('sort', 'newest')

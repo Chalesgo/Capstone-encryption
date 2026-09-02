@@ -138,6 +138,7 @@ class AuditLog(models.Model):
         ('rejected', 'Rejected Document'),
         ('deleted', 'Deleted Document'),
         ('reported_tampering', 'Reported Tampering'),
+        ('verification', 'Verification Attempt'),
         ('failed_login', 'Failed Login Attempt'),
     ]
 
@@ -153,6 +154,10 @@ class AuditLog(models.Model):
     document_title = models.CharField(max_length=255, blank=True)
     note = models.CharField(max_length=255, blank=True)  # optional extra context
     evidence_file = models.FileField(upload_to='verification_evidence/', blank=True, null=True)
+    verification_source = models.CharField(max_length=100, blank=True)
+    verification_result = models.CharField(max_length=50, blank=True)
+    integrity_check = models.CharField(max_length=30, blank=True)
+    document_size = models.PositiveBigIntegerField(null=True, blank=True)
 
     @property
     def display_document_title(self):
@@ -160,6 +165,34 @@ class AuditLog(models.Model):
             return self.document_title
         if self.contract:
             return self.contract.title
+        return ''
+
+    @property
+    def has_inspection_details(self):
+        return bool(self.verification_result or self.evidence_file)
+
+    @property
+    def inspection_source(self):
+        if self.verification_source:
+            return self.verification_source
+        if self.action == 'reported_tampering' and self.note.startswith('Public verification:'):
+            return 'Official Barangay Database'
+        return ''
+
+    @property
+    def inspection_result(self):
+        if self.verification_result:
+            return self.verification_result
+        if self.action == 'reported_tampering':
+            return 'Possible Modification'
+        return ''
+
+    @property
+    def inspection_integrity(self):
+        if self.integrity_check:
+            return self.integrity_check
+        if self.action == 'reported_tampering':
+            return 'Failed'
         return ''
 
     class Meta:

@@ -118,6 +118,17 @@
   }
   .contracts-table tr:last-child td { border-bottom: none; }
   .contracts-table tr:hover td { background: #f8fafc; }
+  .contracts-table thead .selection-toolbar { visibility:hidden; opacity:0; pointer-events:none; }
+  .contracts-table thead .selection-toolbar.is-visible { visibility:visible; opacity:1; pointer-events:auto; }
+  .selection-toolbar th { padding:10px 16px; background:transparent; border-bottom:1px solid transparent; }
+  .selection-toolbar.is-visible th { background:#fff8ef; border-bottom-color:#f7dfc3; }
+  .selection-toolbar-content { display:flex; align-items:center; justify-content:space-between; gap:12px; color:#8a5a2b; font-size:12px; font-weight:500; }
+  .selection-toolbar-actions { display:flex; align-items:center; gap:12px; }
+  .selection-clear-btn { border:0; background:none; color:#9b6b3d; cursor:pointer; font:inherit; padding:4px 6px; }
+  .selection-clear-btn:hover { color:#5f3b1a; text-decoration:underline; }
+  .selection-delete-btn { display:flex; border:0; border-radius:7px; background:#fff; color:#d95757; cursor:pointer; padding:7px 9px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .selection-delete-btn svg { width:16px; height:16px; }
+  .selection-delete-btn:hover { background:#fff0f0; color:#b63131; }
 
   .contract-name-cell {
     display: flex;
@@ -296,7 +307,24 @@
 {% if trash_items %}
 <table class="contracts-table">
   <thead>
+    <tr class="selection-toolbar" id="trash-selection-toolbar" aria-live="polite">
+      <th colspan="5">
+        <div class="selection-toolbar-content">
+          <span><strong id="trash-selected-count">0</strong> documents selected</span>
+          <div class="selection-toolbar-actions">
+            <button class="selection-clear-btn" id="trash-clear-selection" type="button">Clear selection</button>
+            <button class="selection-delete-btn" id="trash-delete-selected" type="button" title="Delete selected documents forever" aria-label="Delete selected documents forever">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                <path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </th>
+    </tr>
     <tr>
+      <th style="width:28px;"><input type="checkbox" id="trash-select-all"></th>
       <th>Document Name</th>
       <th>Trashed On</th>
       <th style="width:140px;">Expires</th>
@@ -306,6 +334,7 @@
   <tbody id="trash-tbody">
     {% for item in trash_items %}
     <tr id="trash-row-{{ item.contract.id }}">
+      <td><input type="checkbox" class="trash-row-check"></td>
       <td>
         <div class="contract-name-cell">
           {% if item.contract.seal_image %}
@@ -395,6 +424,66 @@
 
 <script>
 // @ts-nocheck
+const selectedTrashIds = new Set();
+
+function updateTrashSelectionToolbar() {
+  const toolbar = document.getElementById('trash-selection-toolbar');
+  const count = document.getElementById('trash-selected-count');
+  const checkboxes = [...document.querySelectorAll('.trash-row-check')];
+  const selectedVisible = checkboxes.filter(cb => cb.checked).length;
+  const selectAll = document.getElementById('trash-select-all');
+  toolbar.classList.toggle('is-visible', selectedTrashIds.size > 0);
+  count.textContent = selectedTrashIds.size;
+  selectAll.checked = checkboxes.length > 0 && selectedVisible === checkboxes.length;
+  selectAll.indeterminate = selectedVisible > 0 && selectedVisible < checkboxes.length;
+}
+
+document.querySelectorAll('.trash-row-check').forEach(checkbox => {
+  checkbox.addEventListener('change', function() {
+    const id = this.closest('tr').id.replace('trash-row-', '');
+    if (this.checked) selectedTrashIds.add(id);
+    else selectedTrashIds.delete(id);
+    updateTrashSelectionToolbar();
+  });
+});
+
+document.getElementById('trash-select-all').addEventListener('change', function() {
+  document.querySelectorAll('.trash-row-check').forEach(checkbox => {
+    checkbox.checked = this.checked;
+    const id = checkbox.closest('tr').id.replace('trash-row-', '');
+    if (this.checked) selectedTrashIds.add(id);
+    else selectedTrashIds.delete(id);
+  });
+  updateTrashSelectionToolbar();
+});
+
+document.getElementById('trash-clear-selection').addEventListener('click', function() {
+  selectedTrashIds.clear();
+  document.querySelectorAll('.trash-row-check').forEach(checkbox => checkbox.checked = false);
+  updateTrashSelectionToolbar();
+});
+
+document.getElementById('trash-delete-selected').addEventListener('click', async function() {
+  if (!selectedTrashIds.size) return;
+  const amount = selectedTrashIds.size;
+  if (!confirm(`Permanently delete ${amount} selected document${amount === 1 ? '' : 's'}? This cannot be undone.`)) return;
+  const body = new URLSearchParams();
+  selectedTrashIds.forEach(id => body.append('ids', id));
+  const response = await fetch('/trash/delete-forever/bulk/', {
+    method: 'POST',
+    headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+    body
+  });
+  const result = await response.json();
+  if (!response.ok || !result.success) {
+    alert('The selected documents could not be deleted.');
+    return;
+  }
+  window.location.reload();
+});
+
+updateTrashSelectionToolbar();
+
 function restoreContract(id) {
   fetch('/trash/restore/' + id + '/', {
     method: 'POST',
@@ -403,6 +492,7 @@ function restoreContract(id) {
   .then(r => r.json())
   .then(data => {
     if (data.success) {
+      selectedTrashIds.delete(String(id));
       const row = document.getElementById('trash-row-' + id);
       if (row) row.remove();
       maybeReloadIfEmpty();
@@ -429,6 +519,7 @@ document.getElementById('delete-forever-confirm').addEventListener('click', func
   .then(r => r.json())
   .then(data => {
     if (data.success) {
+      selectedTrashIds.delete(String(deleteForeverId));
       const row = document.getElementById('trash-row-' + deleteForeverId);
       if (row) row.remove();
       maybeReloadIfEmpty();

@@ -947,10 +947,14 @@
         <div class="verification-footer">
             <div><strong>Source:</strong> Official Barangay Database</div>
             <div><strong>Verification Result:</strong>
-                {% if result == "error" %}Unable to Verify{% else %}Passed{% endif %}
+                {% if result == "authentic" %}Authentic
+                {% elif result == "tampered" %}Possible Modification
+                {% else %}Unable to Verify{% endif %}
             </div>
             <div><strong>Integrity Check:</strong>
-                {% if result == "error" %}Incomplete{% else %}Complete{% endif %}
+                {% if result == "authentic" %}Complete
+                {% elif result == "tampered" %}Failed
+                {% else %}Incomplete{% endif %}
             </div>
             <div><strong>Verified On:</strong> {{ verification_timestamp|default:"—" }}</div>
             {% if result == "tampered" and filename_hint != "unknown" %}
@@ -1041,7 +1045,7 @@ function scheduleVerificationTask(callback, delay) {
     const timer = setTimeout(function() {
         if (!verificationCancelled) callback();
     }, delay);
-    verificationTimers.push(timer);
+    verificationTimers.push(timer); 
     return timer;
 }
 
