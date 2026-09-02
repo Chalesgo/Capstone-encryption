@@ -10,7 +10,6 @@ urlpatterns = [
     path('encrypt/<int:contract_id>/', views.encrypt_contract, name='encrypt_contract'),
     path('delete/<int:contract_id>/', views.delete_contract, name='delete_contract'),
     path('delete/bulk/', views.bulk_delete_contracts, name='bulk_delete_contracts'),
-    path('register/', views.register, name='register'),
     path('verify/physical/', views.verify_physical, name='verify_physical'),
     path('rename/<int:pk>/', views.rename_contract, name='rename_contract'),
     path('status/<int:pk>/',  views.update_status,   name='update_status'),

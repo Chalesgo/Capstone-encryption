@@ -1,22 +1,44 @@
 from datetime import timedelta
+import base64
 import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import fitz
+from Crypto.PublicKey import RSA
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from PIL import Image
 
 from .models import AuditLog, Contract, ContractVersion, Folder, Tutorial
-from .utils import log_activity, verify_version_chain
+from .forms import sanitize_tutorial_html
+from .utils import (
+    encrypt_cf,
+    generate_canonical_fingerprint,
+    log_activity,
+    stamp_seal_on_pdf,
+    verify_version_chain,
+)
 
 
 class AuditLogTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_superuser('admin', 'admin@example.com', 'password')
         self.contract = Contract.objects.create(title='Senior Assistance Form', file='contracts/test.pdf')
+
+    def test_admin_uses_sealguard_branding(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse('admin:index'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'SealGuard')
+        self.assertContains(response, 'Administration Portal')
+        self.assertContains(response, 'contracts/sealguard-admin.css')
+        self.assertContains(response, 'Back to SealGuard')
 
     def test_document_title_survives_permanent_deletion(self):
         request = RequestFactory().post('/')
@@ -68,7 +90,7 @@ class AuditLogTests(TestCase):
         self.assertEqual(len(response.context['page_obj']), 10)
         self.assertEqual(response.context['page_obj'].number, 2)
         self.assertEqual(response.context['page_obj'].paginator.count, 25)
-        self.assertContains(response, 'onchange="this.form.requestSubmit()"', count=3)
+        self.assertContains(response, 'onchange="this.form.requestSubmit()"', count=2)
         self.assertContains(response, 'page=3')
 
     def test_document_search_is_debounced_in_the_browser(self):
@@ -77,29 +99,16 @@ class AuditLogTests(TestCase):
         response = self.client.get(reverse('contract_list'))
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'overflow-x: hidden;')
+        self.assertContains(response, "view=FitH")
+        self.assertContains(response, 'min-width: 0;')
         self.assertContains(response, 'oninput="scheduleSearchFilter()"')
         self.assertContains(response, 'setTimeout(() =>')
         self.assertContains(response, '}, 350);')
-
-    @patch('contracts.views.generate_canonical_fingerprint', return_value='f' * 64)
-    @patch('contracts.views.extract_cf_from_metadata', return_value='encrypted-marker')
-    @patch('contracts.views.has_barangay_footer', return_value=True)
-    def test_public_verification_uses_direct_fingerprint_lookup(
-        self, _has_footer, _extract_marker, _fingerprint
-    ):
-        self.contract.fingerprint = 'f' * 64
-        self.contract.save(update_fields=['fingerprint'])
-        pdf = fitz.open()
-        pdf.new_page().insert_text((72, 72), 'Verification test document')
-        pdf_bytes = pdf.tobytes()
-        pdf.close()
-        upload = SimpleUploadedFile('document.pdf', pdf_bytes, content_type='application/pdf')
-
-        response = self.client.post(reverse('public_verify'), {'pdf_file': upload})
-
-        self.assertRedirects(response, reverse('public_verify'), fetch_redirect_response=False)
-        viewed = AuditLog.objects.get(action='viewed')
-        self.assertEqual(viewed.contract, self.contract)
+        self.assertContains(response, 'id="contracts-doc-panel"')
+        self.assertContains(response, 'id="mobile-contract-action-sheet"')
+        self.assertContains(response, 'function handleMobileContractTap(event, contractId)')
+        self.assertContains(response, 'data-file-url=')
 
     def test_filename_demo_mode_is_preserved_and_disclosed(self):
         upload = SimpleUploadedFile(
@@ -195,6 +204,59 @@ class AuditLogTests(TestCase):
         ordered_ids = list(Folder.objects.filter(owner=self.user).values_list('id', flat=True))
         self.assertEqual(ordered_ids, [third.id, first.id, second.id])
 
+    def test_staff_can_see_and_reorder_shared_folders(self):
+        staff = User.objects.create_user('folder_clerk', password='password', is_staff=True)
+        first = Folder.objects.create(name='Admin Folder', owner=self.user, sort_order=0)
+        second = Folder.objects.create(name='Shared Folder', owner=self.user, sort_order=1)
+        self.client.force_login(staff)
+
+        page = self.client.get(reverse('contract_list'))
+        self.assertContains(page, 'Admin Folder')
+        self.assertContains(page, 'Shared Folder')
+
+        response = self.client.post(
+            reverse('reorder_folders'),
+            data={'folder_ids': [second.id, first.id]},
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            list(Folder.objects.order_by('sort_order').values_list('id', flat=True)),
+            [second.id, first.id],
+        )
+
+    def test_staff_can_delete_empty_shared_folder(self):
+        staff = User.objects.create_user('empty_folder_clerk', password='password', is_staff=True)
+        folder = Folder.objects.create(name='Empty Folder', owner=self.user)
+        self.client.force_login(staff)
+
+        response = self.client.post(
+            reverse('delete_folder', args=[folder.id]),
+            data={'mode': 'unassign'},
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Folder.objects.filter(pk=folder.id).exists())
+
+    def test_staff_cannot_delete_shared_folder_with_documents(self):
+        staff = User.objects.create_user('full_folder_clerk', password='password', is_staff=True)
+        folder = Folder.objects.create(name='Full Folder', owner=self.user)
+        Contract.objects.create(
+            title='Folder document', file='contracts/test.pdf', folder=folder
+        )
+        self.client.force_login(staff)
+
+        response = self.client.post(
+            reverse('delete_folder', args=[folder.id]),
+            data={'mode': 'unassign'},
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Folder.objects.filter(pk=folder.id).exists())
+
     def test_folder_reorder_rejects_incomplete_order(self):
         first = Folder.objects.create(name='First', owner=self.user, sort_order=0)
         Folder.objects.create(name='Second', owner=self.user, sort_order=1)
@@ -212,6 +274,13 @@ class AuditLogTests(TestCase):
         response = self.client.get(reverse('public_verify'))
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'overflow-x: hidden;')
+        self.assertContains(response, 'id="public-pdf-overlay"')
+        self.assertContains(response, 'onclick="closePublicPdfPreview()"')
+        self.assertContains(response, "event.key === 'Escape'")
+        self.assertContains(response, 'id="mobile-doc-toggle"')
+        self.assertContains(response, 'id="public-doc-panel"')
+        self.assertContains(response, 'togglePublicDocsDrawer()')
         self.assertContains(response, "body.verification-active { overflow: hidden; }")
         self.assertContains(response, "document.body.classList.add('verification-active')")
         self.assertContains(response, "grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.75fr)")
@@ -253,7 +322,9 @@ class AuditLogTests(TestCase):
         self.assertContains(response, '.sidebar { display: none; }')
         self.assertContains(response, 'body { padding-left: 0; }')
         self.assertContains(response, 'title="Contracts" aria-label="Contracts"')
-        self.assertContains(response, 'title="Logout" aria-label="Logout"')
+        self.assertContains(response, 'id="contracts-doc-toggle"')
+        self.assertContains(response, 'id="profile-trigger"')
+        self.assertNotContains(response, 'title="Logout" aria-label="Logout"')
 
     def test_help_page_lists_questions_and_icon_picker(self):
         Tutorial.objects.create(
@@ -273,6 +344,19 @@ class AuditLogTests(TestCase):
         self.assertContains(response, '+ Add Tutorial')
         self.assertContains(response, 'id="tutorial-icon-lock"')
         self.assertContains(response, 'contenteditable="true"')
+
+    def test_tutorial_inline_icons_are_whitelisted_and_sanitized(self):
+        content = (
+            '<p><strong>1.</strong> '
+            '<span class="tutorial-inline-icon" data-icon="folder">'
+            '<svg><use href="#bad"></use></svg></span> Open Contracts.</p>'
+        )
+
+        sanitized = sanitize_tutorial_html(content)
+
+        self.assertIn('data-icon="folder"', sanitized)
+        self.assertIn('#tutorial-icon-folder', sanitized)
+        self.assertNotIn('#bad', sanitized)
 
     def test_admin_can_create_sanitized_tutorial(self):
         self.client.force_login(self.user)
@@ -344,3 +428,182 @@ class AuditLogTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertTrue(Tutorial.objects.filter(pk=tutorial.id).exists())
+
+
+class PublicVerificationCryptoTests(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.key_directory = tempfile.TemporaryDirectory()
+        key = RSA.generate(2048)
+        cls.private_key_path = Path(cls.key_directory.name) / 'private.pem'
+        cls.public_key_path = Path(cls.key_directory.name) / 'public.pem'
+        cls.private_key_path.write_bytes(key.export_key())
+        cls.public_key_path.write_bytes(key.publickey().export_key())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.key_directory.cleanup()
+        super().tearDownClass()
+
+    def setUp(self):
+        self.media_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.media_directory.cleanup)
+        self.settings_override = override_settings(
+            MEDIA_ROOT=self.media_directory.name,
+            RSA_PRIVATE_KEY_PATH=str(self.private_key_path),
+            RSA_PUBLIC_KEY_PATH=str(self.public_key_path),
+        )
+        self.settings_override.enable()
+        self.addCleanup(self.settings_override.disable)
+
+        media_root = Path(self.media_directory.name)
+        source_path = media_root / 'source.pdf'
+        seal_path = media_root / 'seal.png'
+        sealed_path = media_root / 'sealed.pdf'
+
+        source = fitz.open()
+        source.new_page().insert_text((72, 72), 'Official procurement agreement: PHP 10,000.00')
+        source.save(source_path)
+        source.close()
+        Image.new('RGBA', (160, 160), (30, 95, 85, 255)).save(seal_path)
+
+        self.original_fingerprint = generate_canonical_fingerprint(source_path)
+        encrypted, hmac_value, wrapped_key, aes_iv = encrypt_cf(
+            self.original_fingerprint,
+            str(self.public_key_path),
+        )
+        stamp_seal_on_pdf(
+            source_path,
+            sealed_path,
+            seal_path,
+            encrypted_cf=encrypted,
+        )
+        self.sealed_bytes = sealed_path.read_bytes()
+        self.sealed_fingerprint = generate_canonical_fingerprint(sealed_path)
+        self.encrypted_marker = encrypted
+
+        stored_path = media_root / 'contracts' / 'enrolled.pdf'
+        stored_path.parent.mkdir(parents=True, exist_ok=True)
+        stored_path.write_bytes(self.sealed_bytes)
+        self.contract = Contract.objects.create(
+            title='Cryptographic verification fixture',
+            file='contracts/enrolled.pdf',
+            fingerprint=self.sealed_fingerprint,
+            original_fingerprint=self.original_fingerprint,
+            encrypted_cf=encrypted,
+            wrapped_key=wrapped_key,
+            aes_iv=aes_iv,
+            hmac_value=hmac_value,
+            aes_key='',
+        )
+        self.version = ContractVersion.objects.create(
+            contract=self.contract,
+            version_number=1,
+            source='upload',
+            file='contracts/enrolled.pdf',
+            fingerprint=self.sealed_fingerprint,
+            previous_fingerprint='',
+            encrypted_cf=encrypted,
+            wrapped_key=wrapped_key,
+            aes_iv=aes_iv,
+            hmac_value=hmac_value,
+        )
+
+    def verify(self, pdf_bytes=None):
+        upload = SimpleUploadedFile(
+            'verification.pdf',
+            pdf_bytes if pdf_bytes is not None else self.sealed_bytes,
+            content_type='application/pdf',
+        )
+        response = self.client.post(reverse('public_verify'), {'pdf_file': upload})
+        self.assertRedirects(response, reverse('public_verify'), fetch_redirect_response=False)
+        return self.client.session['verify_result'], self.client.session['verify_debug_log']
+
+    def mutate_pdf(self, mutation):
+        document = fitz.open(stream=self.sealed_bytes, filetype='pdf')
+        mutation(document)
+        mutated = document.tobytes(garbage=4, deflate=True)
+        document.close()
+        return mutated
+
+    def test_valid_authentic_sealed_pdf(self):
+        result, debug_log = self.verify()
+
+        self.assertEqual(result, 'authentic')
+        self.assertIn('[PASS] Metadata marker belongs to the matched contract', debug_log)
+        self.assertIn('[PASS] Original fingerprint decrypted with AES-256-CBC and HMAC-SHA256 verified', debug_log)
+        self.assertIn('[PASS] Version history chain validated', debug_log)
+        self.assertEqual(AuditLog.objects.get(action='viewed').contract, self.contract)
+
+    def test_modified_text_is_rejected(self):
+        modified = self.mutate_pdf(
+            lambda document: document[0].insert_text((72, 110), 'ALTERED AMOUNT: PHP 900,000.00')
+        )
+
+        result, _debug_log = self.verify(modified)
+
+        self.assertEqual(result, 'tampered')
+
+    def test_modified_or_replaced_metadata_marker_is_rejected(self):
+        other_marker, _hmac, _wrapped, _iv = encrypt_cf(
+            'a' * 64,
+            str(self.public_key_path),
+        )
+        Contract.objects.create(
+            title='Different marker owner',
+            file='contracts/other.pdf',
+            fingerprint='b' * 64,
+            encrypted_cf=other_marker,
+        )
+
+        def replace_marker(document):
+            metadata = document.metadata
+            metadata['keywords'] = f'SEALGUARD:{other_marker}'
+            document.set_metadata(metadata)
+
+        result, _debug_log = self.verify(self.mutate_pdf(replace_marker))
+
+        self.assertEqual(result, 'tampered')
+
+    def test_invalid_hmac_is_rejected(self):
+        self.contract.hmac_value = '0' * 64
+        self.contract.save(update_fields=['hmac_value'])
+
+        result, _debug_log = self.verify()
+
+        self.assertEqual(result, 'tampered')
+
+    def test_invalid_wrapped_aes_key_is_rejected(self):
+        self.contract.wrapped_key = base64.b64encode(b'X' * 256).decode()
+        self.contract.save(update_fields=['wrapped_key'])
+
+        result, _debug_log = self.verify()
+
+        self.assertEqual(result, 'tampered')
+
+    def test_changed_sealed_pdf_fingerprint_is_rejected(self):
+        def change_non_marker_metadata(document):
+            metadata = document.metadata
+            metadata['subject'] = 'Unauthorized metadata change'
+            document.set_metadata(metadata)
+
+        result, _debug_log = self.verify(self.mutate_pdf(change_non_marker_metadata))
+
+        self.assertEqual(result, 'tampered')
+
+    def test_missing_database_record_returns_unknown_result(self):
+        self.contract.delete()
+
+        result, _debug_log = self.verify()
+
+        self.assertEqual(result, 'error')
+        self.assertEqual(self.client.session['verify_filename_hint'], 'unknown')
+
+    def test_broken_version_chain_is_rejected(self):
+        self.version.previous_fingerprint = 'broken-link'
+        self.version.save(update_fields=['previous_fingerprint'])
+
+        result, _debug_log = self.verify()
+
+        self.assertEqual(result, 'tampered')

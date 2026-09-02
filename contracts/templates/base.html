@@ -182,6 +182,106 @@
             display: flex;
             align-items: center;
             gap: 10px;
+            border: 0;
+            padding: 0;
+            background: transparent;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .topbar-user:hover .avatar {
+            filter: brightness(0.92);
+        }
+
+        #profile-modal.modal-overlay {
+            align-items: flex-start;
+            justify-content: flex-end;
+            padding: 64px 18px 18px 90px;
+            background: transparent;
+        }
+
+        #profile-modal .profile-modal-card {
+            width: min(360px, calc(100vw - 36px));
+            max-width: 360px;
+            padding: 18px;
+            border: 1px solid #e4e1dc;
+            border-radius: 20px;
+            box-shadow: 0 12px 38px rgba(31, 41, 55, 0.20);
+        }
+
+        .profile-popover-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+        }
+
+        #profile-modal .profile-popover-header h3 { margin: 0; }
+
+        .profile-popover-close {
+            width: 32px;
+            height: 32px;
+            border: 0;
+            border-radius: 50%;
+            background: transparent;
+            color: #667788;
+            cursor: pointer;
+            font-size: 22px;
+            line-height: 1;
+        }
+
+        .profile-popover-close:hover { background: #f2f0ec; }
+
+        .profile-summary {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px;
+            border-radius: 14px;
+            background: #f7f6f4;
+        }
+
+        .profile-summary-avatar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 48px;
+            height: 48px;
+            flex: 0 0 48px;
+            border-radius: 50%;
+            background: #f4a34d;
+            color: white;
+            font-weight: 700;
+        }
+
+        .profile-summary-name { color: #222; font-size: 15px; font-weight: 700; }
+        .profile-summary-role { color: #778899; font-size: 12px; margin-top: 2px; }
+
+        .profile-details {
+            margin: 10px 0;
+            padding: 4px 14px;
+        }
+
+        .profile-detail {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 0.5rem 0;
+            font-size: 13px;
+        }
+
+        .profile-detail-label { color: #8899aa; }
+        .profile-detail-value { color: #334455; font-weight: 600; text-align: right; }
+
+        .profile-modal-actions {
+            display: grid;
+            gap: 8px;
+        }
+
+        #profile-modal .profile-action {
+            width: 100%;
+            justify-content: center;
+            box-sizing: border-box;
         }
 
         .topbar-user .avatar {
@@ -246,6 +346,17 @@
             background: rgba(244,163,77,0.13);
         }
 
+        .mobile-topbar-extra {
+            display: none;
+            align-items: center;
+            gap: 3px;
+        }
+
+        .mobile-topbar-left {
+            position: absolute;
+            left: 8px;
+        }
+
         @media (max-width: 700px),
                (max-width: 950px) and (pointer: coarse),
                (orientation: portrait) and (max-width: 1024px) {
@@ -262,6 +373,7 @@
                 display: flex;
                 align-items: center;
                 gap: 3px;
+                margin-left: auto;
                 min-width: 0;
                 overflow-x: auto;
                 overscroll-behavior-x: contain;
@@ -271,9 +383,15 @@
             .topbar > .topbar-icon-btn,
             .topbar > .topbar-divider,
             .topbar-user .user-text { display: none; }
+            .mobile-topbar-extra { display: flex; }
             .topbar-user { flex: 0 0 auto; }
             .topbar-user .avatar { width: 30px; height: 30px; }
             .public-mobile-topbar { display: flex; }
+            #profile-modal.modal-overlay { padding: 64px 8px 8px; }
+            #profile-modal .profile-modal-card {
+                width: min(360px, calc(100vw - 16px));
+                max-width: none;
+            }
         }
         /* ── Page container ── */
         .container {
@@ -593,11 +711,6 @@
                 <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><line x1="12" y1="17" x2="12.01" y2="17"/>
             </svg>
         </a>
-        <button type="button" class="mobile-nav-link" title="Logout" aria-label="Logout" onclick="document.getElementById('logout-form').submit()">
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>
-            </svg>
-        </button>
     </nav>
 
     <button class="topbar-icon-btn" title="Notifications">
@@ -610,14 +723,44 @@
 
     <div class="topbar-divider"></div>
 
-    <div class="topbar-user">
+    {% block mobile_topbar_extra %}{% endblock %}
+
+    <button type="button" class="topbar-user" id="profile-trigger" aria-label="Open profile" aria-haspopup="dialog" aria-expanded="false" onclick="toggleProfilePopover()">
         <div class="avatar">{{ user.username|slice:":2"|upper }}</div>
         <div class="user-text">
             <span class="user-name">{{ user.username }}</span>
-            <span class="user-role">{% if user.is_superuser %}Superuser{% elif user.is_staff %}Staff{% else %}User{% endif %}</span>
+            <span class="user-role">{% if user.is_superuser %}Admin{% elif user.is_staff %}Staff{% else %}User{% endif %}</span>
+        </div>
+    </button>
+</header>
+
+<div class="modal-overlay" id="profile-modal" role="dialog" aria-labelledby="profile-modal-title" onclick="closeProfileModal(event)">
+    <div class="modal profile-modal-card" onclick="event.stopPropagation()">
+        <div class="profile-popover-header">
+            <h3 id="profile-modal-title">Account</h3>
+            <button type="button" class="profile-popover-close" aria-label="Close profile" onclick="closeProfileModal()">&times;</button>
+        </div>
+        <div class="profile-summary">
+            <div class="profile-summary-avatar">{{ user.username|slice:":2"|upper }}</div>
+            <div>
+                <div class="profile-summary-name">{{ user.username }}</div>
+                <div class="profile-summary-role">{% if user.is_superuser %}Admin{% elif user.is_staff %}Staff{% else %}User{% endif %}</div>
+            </div>
+        </div>
+        <div class="profile-details">
+            <div class="profile-detail">
+                <span class="profile-detail-label">Account created</span>
+                <span class="profile-detail-value">{{ user.date_joined|date:"F j, Y" }}</span>
+            </div>
+        </div>
+        <div class="profile-modal-actions">
+            {% if user.is_superuser %}
+            <a class="btn btn-primary profile-action" href="/admin/">Open Admin Portal</a>
+            {% endif %}
+            <button type="button" class="btn btn-outline profile-action" onclick="document.getElementById('logout-form').submit()">Logout</button>
         </div>
     </div>
-</header>
+</div>
 {% else %}
 <header class="topbar public-mobile-topbar">
     <nav class="mobile-nav" aria-label="Mobile navigation">
@@ -632,6 +775,7 @@
             </svg>
         </a>
     </nav>
+    {% block public_mobile_topbar_extra %}{% endblock %}
 </header>
 {% endif %}
 
@@ -680,5 +824,33 @@
 
     </div>
 </footer>
+<script>
+function toggleProfilePopover() {
+    const modal = document.getElementById('profile-modal');
+    if (!modal) return;
+    if (modal.classList.contains('active')) {
+        closeProfileModal();
+        return;
+    }
+    modal.classList.add('active');
+    const trigger = document.getElementById('profile-trigger');
+    if (trigger) trigger.setAttribute('aria-expanded', 'true');
+    const closeButton = modal.querySelector('.profile-popover-close');
+    if (closeButton) closeButton.focus();
+}
+
+function closeProfileModal(event) {
+    if (event && event.target !== event.currentTarget) return;
+    const modal = document.getElementById('profile-modal');
+    if (!modal) return;
+    modal.classList.remove('active');
+    const trigger = document.getElementById('profile-trigger');
+    if (trigger) trigger.setAttribute('aria-expanded', 'false');
+}
+
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') closeProfileModal();
+});
+</script>
 </body>
 </html>

@@ -2,8 +2,27 @@
 {% block title %}Contracts{% endblock %}
 #THIS IS THE UPLOAD PAGE FOR CONTRACTS. IT SHOWS A LIST OF CONTRACTS AND ALLOWS USERS TO UPLOAD NEW ONES, RENAME, ENCRYPT, OR DELETE THEM.
 #IDK WHY ITS NAMED LIST.HTML BUT IT IS. I GUESS IT LISTS CONTRACTS.
+{% block mobile_topbar_extra %}
+<div class="mobile-topbar-extra mobile-topbar-left">
+  <button type="button" class="mobile-nav-link" id="contracts-doc-toggle"
+          title="Documents, filters and folders" aria-label="Open documents, filters and folders"
+          aria-controls="contracts-doc-panel" aria-expanded="false"
+          onclick="toggleContractsDocPanel()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <path d="M4 5h16M4 12h16M4 19h16"/>
+    </svg>
+  </button>
+</div>
+{% endblock %}
 {% block content %}
 <style>
+  /* Keep the off-canvas PDF viewer from widening the document on mobile. */
+  html,
+  body {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
   /* Secondary panel (stacked next to main sidebar) */
   .doc-panel {
     position: fixed;
@@ -20,6 +39,7 @@
     overflow-y: auto;
     z-index: 300;
   }
+  .mobile-contract-panel-overlay { display: none; }
   .panel-heading {
     font-size: 11px;
     font-weight: 600;
@@ -97,7 +117,25 @@
   /* Push content over to make room for the panel */
   .container { margin-left: 216px; max-width: none; padding-right: 2rem; }
   @media (max-width: 900px) {
-    .doc-panel { display: none; }
+    .doc-panel {
+      display: flex;
+      top: 56px;
+      left: 0;
+      bottom: 0;
+      width: min(84vw, 320px);
+      z-index: 1250;
+      transform: translateX(-105%);
+      transition: transform 0.25s ease;
+      box-shadow: 8px 0 24px rgba(30, 40, 50, 0.16);
+    }
+    .doc-panel.open { transform: translateX(0); }
+    .mobile-contract-panel-overlay {
+      position: fixed;
+      inset: 56px 0 0;
+      z-index: 1240;
+      background: rgba(20, 27, 35, 0.35);
+    }
+    .mobile-contract-panel-overlay.open { display: block; }
     .container { margin-left: 0; }
   }
   .contracts-header {
@@ -137,17 +175,163 @@
   }
   .contracts-table tr:last-child td { border-bottom: none; }
   .contracts-table tr:hover td { background: #f8fafc; }
-  .contracts-table thead .selection-toolbar { visibility:hidden; opacity:0; pointer-events:none; }
-  .contracts-table thead .selection-toolbar.is-visible { visibility:visible; opacity:1; pointer-events:auto; }
-  .selection-toolbar th { padding: 10px 16px; background: transparent; border-bottom: 1px solid transparent; }
-  .selection-toolbar.is-visible th { background: #fff8ef; border-bottom-color: #f7dfc3; }
-  .selection-toolbar-content { display:flex; align-items:center; justify-content:space-between; gap:12px; color:#8a5a2b; font-size:12px; font-weight:500; }
-  .selection-toolbar-actions { display:flex; align-items:center; gap:12px; }
-  .selection-clear-btn { border:0; background:none; color:#9b6b3d; cursor:pointer; font:inherit; padding:4px 6px; }
-  .selection-clear-btn:hover { color:#5f3b1a; text-decoration:underline; }
-  .selection-delete-btn { display:flex; border:0; border-radius:7px; background:#fff; color:#d95757; cursor:pointer; padding:7px 9px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
-  .selection-delete-btn svg { width:16px; height:16px; }
-  .selection-delete-btn:hover { background:#fff0f0; color:#b63131; }
+  .contracts-table tbody tr[data-status] {
+    content-visibility: auto;
+    contain-intrinsic-size: 86px;
+  }
+  .list-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 14px;
+    color: #667788;
+    font-size: 13px;
+  }
+  .list-pagination a {
+    color: #2d3a47;
+    text-decoration: none;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-weight: 600;
+  }
+  .list-pagination a:hover { background: #f8fafc; }
+
+  .contracts-table td.contract-document-cell { cursor: pointer; }
+
+  .mobile-contract-sheet-overlay,
+  .mobile-contract-action-sheet { display: none; }
+
+  @media (max-width: 900px) {
+    .contracts-header { display: block; }
+    .contracts-header > div:last-child {
+      display: flex !important;
+      flex-direction: column;
+      align-items: stretch !important;
+      gap: 10px !important;
+      margin-top: 14px;
+    }
+    .contracts-header .search-wrap,
+    .contracts-header > div:last-child > .btn { width: 100%; }
+    .contracts-header > div:last-child > .btn { justify-content: center; }
+
+    .contracts-table,
+    .contracts-table tbody,
+    .contracts-table tr,
+    .contracts-table td { display: block; }
+    .contracts-table { background: transparent; box-shadow: none; overflow: visible; }
+    .contracts-table thead { display: none; }
+    .contracts-table tr[data-status] {
+      position: relative;
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      border: 1px solid #e8e6e2;
+      border-radius: 12px;
+      background: #ffffff;
+      box-shadow: 0 2px 8px rgba(30, 40, 50, 0.05);
+    }
+    .contracts-table tr:hover td { background: transparent; }
+    .contracts-table tr[data-status] > td { border: 0; padding: 5px 0; }
+    .contracts-table tr[data-status] > td:first-child,
+    .contracts-table tr[data-status] > td:last-child { display: none; }
+    .contracts-table tr[data-status] > td:nth-child(2) {
+      padding: 4px 0 9px !important;
+      border-bottom: 1px solid #eef0f4;
+    }
+    .contracts-table tr[data-status] > td:nth-child(3)::before { content: 'Recipient'; }
+    .contracts-table tr[data-status] > td:nth-child(4)::before { content: 'Created'; }
+    .contracts-table tr[data-status] > td:nth-child(5)::before { content: 'Status'; }
+    .contracts-table tr[data-status] > td:nth-child(6)::before { content: 'Modified'; }
+    .contracts-table tr[data-status] > td:nth-child(3)::before,
+    .contracts-table tr[data-status] > td:nth-child(4)::before,
+    .contracts-table tr[data-status] > td:nth-child(5)::before,
+    .contracts-table tr[data-status] > td:nth-child(6)::before {
+      display: inline-block;
+      width: 76px;
+      color: #8899aa;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .contract-title-text { display: inline-block; max-width: calc(100vw - 72px); }
+    .status-select-btn { width: auto; min-width: 100px; }
+
+    .mobile-contract-sheet-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1300;
+      background: rgba(20, 27, 35, 0.35);
+    }
+    .mobile-contract-sheet-overlay.open { display: block; }
+    .mobile-contract-action-sheet {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 1310;
+      display: block;
+      padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
+      border-radius: 18px 18px 0 0;
+      background: #ffffff;
+      box-shadow: 0 -8px 30px rgba(30, 40, 50, 0.18);
+      transform: translateY(110%);
+      transition: transform 0.25s ease;
+    }
+    .mobile-contract-action-sheet.open { transform: translateY(0); }
+    .mobile-sheet-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .mobile-sheet-title {
+      min-width: 0;
+      overflow: hidden;
+      color: #1a1a2e;
+      font-size: 14px;
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .mobile-sheet-close {
+      width: 32px;
+      height: 32px;
+      border: 0;
+      border-radius: 50%;
+      background: #f0efed;
+      color: #667788;
+      font-size: 21px;
+      line-height: 1;
+    }
+    .mobile-sheet-actions {
+      display: flex;
+      justify-content: space-around;
+      gap: 6px;
+    }
+    .mobile-sheet-action {
+      display: flex;
+      flex: 1 1 0;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+      padding: 8px 3px;
+      border: 0;
+      border-radius: 9px;
+      background: transparent;
+      color: #667788;
+      cursor: pointer;
+      font-size: 10px;
+      white-space: nowrap;
+    }
+    .mobile-sheet-action:hover { background: #f7f6f4; color: #2d3a47; }
+    .mobile-sheet-action svg { width: 20px; height: 20px; }
+    .mobile-sheet-action.danger { color: #e53e3e; }
+    .mobile-sheet-action.public-on { color: #27a875; }
+  }
 
   /* Contract name cell */
   .contract-name-cell {
@@ -433,15 +617,23 @@
     flex: 1;
     display: flex;
     min-height: 0;
+    min-width: 0;
+    width: 100%;
+    overflow: hidden;
   }
   .pdf-frame-wrap {
     flex: 1;
     position: relative;
     display: flex;
     min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
   }
   .pdf-frame {
     flex: 1;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
     border: none;
     background: #f5f6f8;
   }
@@ -463,6 +655,7 @@
   .pdf-sidebar {
     width: 240px;
     flex-shrink: 0;
+    min-width: 0;
     background: #fafbfc;
     border-left: 1px solid #eef0f4;
     display: flex;
@@ -533,25 +726,45 @@
   @media (max-width: 900px) {
     .pdf-panel {
       width: 100%;
+      max-width: 100%;
       min-width: 0;
       right: -100%;
     }
-    .pdf-panel-body { flex-direction: column; }
-    .pdf-frame-wrap { min-height: 55vh; }
-    .pdf-sidebar {
+    .pdf-panel-body {
+      flex-direction: column;
       width: 100%;
-      max-height: 45vh;
+      max-width: 100%;
+    }
+    .pdf-frame-wrap {
+      flex: 1 1 62%;
+      width: 100%;
+      min-height: 0;
+      max-height: 62vh;
+    }
+    .pdf-frame { height: 100%; }
+    .pdf-sidebar {
+      flex: 1 1 38%;
+      width: 100%;
+      max-width: 100%;
+      max-height: 38vh;
       border-left: 0;
       border-top: 1px solid #eef0f4;
+      overflow-x: hidden;
     }
+    .version-list { min-width: 0; overflow-x: hidden; }
+    .version-item { min-width: 0; }
+    .version-item > div { min-width: 0; overflow: hidden; }
+    .version-item-title,
+    .version-item-date { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   }
 </style>
 
-<aside class="doc-panel">
+<div class="mobile-contract-panel-overlay" id="mobile-contract-panel-overlay" onclick="closeContractsDocPanel()"></div>
+<aside class="doc-panel" id="contracts-doc-panel">
   <div class="panel-section">
     <p class="panel-heading">Documents</p>
     <ul class="panel-list">
-                  <li class="panel-item active" id="filter-all" onclick="currentFolderFilter=null; document.getElementById('contracts-title').textContent='Contracts'; setStatusFilter(null, this)">
+                  <li class="panel-item active" id="filter-all" onclick="currentFolderFilter=null; document.getElementById('contracts-title').textContent='Contracts'; setStatusFilter(null, this); closeContractsDocPanel()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
           <polyline points="14 2 14 8 20 8"/>
@@ -642,6 +855,51 @@
   {% endif %}
 </div>
 
+<div class="mobile-contract-sheet-overlay" id="mobile-contract-sheet-overlay"
+     onclick="closeMobileContractSheet()"></div>
+<div class="mobile-contract-action-sheet" id="mobile-contract-action-sheet"
+     role="dialog" aria-modal="true" aria-labelledby="mobile-sheet-title">
+  <div class="mobile-sheet-header">
+    <span class="mobile-sheet-title" id="mobile-sheet-title">Contract actions</span>
+    <button type="button" class="mobile-sheet-close" aria-label="Close contract actions"
+            onclick="closeMobileContractSheet()">&times;</button>
+  </div>
+  <div class="mobile-sheet-actions">
+    <button type="button" class="mobile-sheet-action" onclick="mobileSheetViewPdf()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+      </svg>
+      <span>View PDF</span>
+    </button>
+    <button type="button" class="mobile-sheet-action" onclick="mobileSheetEdit()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"/>
+      </svg>
+      <span>Edit</span>
+    </button>
+    <button type="button" class="mobile-sheet-action" id="mobile-sheet-encrypt" onclick="mobileSheetEncrypt()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
+      <span>Encrypt</span>
+    </button>
+    {% if user.is_superuser %}
+    <button type="button" class="mobile-sheet-action danger" onclick="mobileSheetDelete()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/>
+      </svg>
+      <span>Delete</span>
+    </button>
+    <button type="button" class="mobile-sheet-action" id="mobile-sheet-public" onclick="mobileSheetTogglePublic()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/>
+      </svg>
+      <span>Public</span>
+    </button>
+    {% endif %}
+  </div>
+</div>
+
 <div class="modal-overlay" id="publish-modal">
   <div class="modal">
     <h3>Show Document to Public?</h3>
@@ -699,7 +957,7 @@
         <circle cx="11" cy="11" r="8"/>
         <line x1="21" y1="21" x2="16.65" y2="16.65"/>
       </svg>
-      <input type="text" id="doc-search" class="search-input" placeholder="Search title or uploader..." oninput="scheduleSearchFilter()">
+      <input type="text" id="doc-search" class="search-input" value="{{ search_query }}" placeholder="Search title or uploader..." oninput="scheduleSearchFilter()">
     </div>
     <a href="/upload/" class="btn btn-primary">+ Upload Contract</a>
   </div>
@@ -708,24 +966,6 @@
 {% if contracts %}
 <table class="contracts-table">
   <thead>
-    <tr class="selection-toolbar" id="selection-toolbar" aria-live="polite">
-      <th colspan="7">
-        <div class="selection-toolbar-content">
-          <span><strong id="selected-count">0</strong> documents selected</span>
-          <div class="selection-toolbar-actions">
-            <button class="selection-clear-btn" id="clear-selection" type="button">Clear selection</button>
-            {% if user.is_superuser %}
-            <button class="selection-delete-btn" id="delete-selected" type="button" title="Move selected documents to Trash" aria-label="Move selected documents to Trash">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                <path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-              </svg>
-            </button>
-            {% endif %}
-          </div>
-        </div>
-      </th>
-    </tr>
     <tr>
       <th style="width:28px;"><input type="checkbox" id="select-all"></th>
       <th>Document Name</th>
@@ -740,6 +980,9 @@
     {% for contract in contracts %}
         <tr id="row-{{ contract.id }}" data-status="{{ contract.status }}" data-folder="{{ contract.folder_id|default:'' }}"
         data-public="{{ contract.is_public|yesno:'1,0' }}"
+        data-file-url="{{ contract.file.url }}"
+        data-contract-title="{{ contract.title|escapejs }}"
+        data-encrypted="{% if contract.encrypted_cf %}1{% else %}0{% endif %}"
         data-search="{{ contract.title|lower }} {{ contract.recipient.username|default:''|lower }}"
         draggable="true"
         ondragstart="dragContractStart(event, {{ contract.id }})">
@@ -748,7 +991,7 @@
       <td><input type="checkbox" class="row-check"></td>
 
       <!-- Document Name -->
-      <td>
+      <td class="contract-document-cell" onclick="handleMobileContractTap(event, {{ contract.id }})">
         <div class="contract-name-cell">
           {% if contract.seal_image %}
             <img src="{{ contract.seal_image.url }}" class="contract-seal-thumb">
@@ -906,6 +1149,17 @@
   </tbody>
 </table>
 
+{% if page_obj.paginator.count %}
+<nav class="list-pagination" aria-label="Contract pages">
+  <span>Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} contracts</span>
+  <span style="display:flex;align-items:center;gap:8px;">
+    {% if page_obj.has_previous %}<a href="?q={{ search_query|urlencode }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}<a href="?q={{ search_query|urlencode }}&amp;page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+  </span>
+</nav>
+{% endif %}
+
 {% else %}
 <div class="empty-state">
   <div class="icon">
@@ -986,6 +1240,8 @@
 let currentStatusFilter = null;
 let searchFilterTimer = null;
 let lastAppliedSearchQuery = '';
+const versionHistoryRequests = new Map();
+let activePdfContractId = null;
 
 function scheduleSearchFilter() {
   clearTimeout(searchFilterTimer);
@@ -994,11 +1250,16 @@ function scheduleSearchFilter() {
 
   searchFilterTimer = setTimeout(() => {
     lastAppliedSearchQuery = query;
-    applyFilters();
+    const url = new URL(window.location.href);
+    if (query) url.searchParams.set('q', query);
+    else url.searchParams.delete('q');
+    url.searchParams.delete('page');
+    window.location.href = url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '');
   }, 350);
 }
 
 function setStatusFilter(status, el) {
+  closeContractsDocPanel();
   document.querySelectorAll('.doc-panel .panel-item').forEach(item => item.classList.remove('active'));
   el.classList.add('active');
   currentStatusFilter = status;
@@ -1023,78 +1284,10 @@ function applyFilters() {
 }
 
 
-// Selection toolbar and bulk actions
-const selectedContractIds = new Set();
-
-function contractIdForCheckbox(checkbox) {
-  return checkbox.closest('tr').id.replace('row-', '');
-}
-
-function updateSelectionToolbar() {
-  const toolbar = document.getElementById('selection-toolbar');
-  const count = document.getElementById('selected-count');
-  const visibleCheckboxes = [...document.querySelectorAll('tr[data-status]:not([style*="display: none"]) .row-check')];
-  const visibleSelected = visibleCheckboxes.filter(cb => cb.checked).length;
-  const selectAll = document.getElementById('select-all');
-
-  toolbar.classList.toggle('is-visible', selectedContractIds.size > 0);
-  count.textContent = selectedContractIds.size;
-  selectAll.checked = visibleCheckboxes.length > 0 && visibleSelected === visibleCheckboxes.length;
-  selectAll.indeterminate = visibleSelected > 0 && visibleSelected < visibleCheckboxes.length;
-}
-
-document.querySelectorAll('.row-check').forEach(checkbox => {
-  checkbox.addEventListener('change', function() {
-    const id = contractIdForCheckbox(this);
-    if (this.checked) selectedContractIds.add(id);
-    else selectedContractIds.delete(id);
-    updateSelectionToolbar();
-  });
-});
-
+// Select all checkbox
 document.getElementById('select-all').addEventListener('change', function() {
-  document.querySelectorAll('tr[data-status]:not([style*="display: none"]) .row-check').forEach(checkbox => {
-    checkbox.checked = this.checked;
-    const id = contractIdForCheckbox(checkbox);
-    if (this.checked) selectedContractIds.add(id);
-    else selectedContractIds.delete(id);
-  });
-  updateSelectionToolbar();
+  document.querySelectorAll('.row-check').forEach(cb => cb.checked = this.checked);
 });
-
-document.getElementById('clear-selection').addEventListener('click', function() {
-  selectedContractIds.clear();
-  document.querySelectorAll('.row-check').forEach(checkbox => checkbox.checked = false);
-  updateSelectionToolbar();
-});
-
-const deleteSelectedButton = document.getElementById('delete-selected');
-if (deleteSelectedButton) {
-  deleteSelectedButton.addEventListener('click', async function() {
-    if (!selectedContractIds.size) return;
-    const amount = selectedContractIds.size;
-    if (!confirm(`Move ${amount} selected document${amount === 1 ? '' : 's'} to Trash?`)) return;
-
-    const body = new URLSearchParams();
-    selectedContractIds.forEach(id => body.append('ids', id));
-    const response = await fetch('/delete/bulk/', {
-      method: 'POST',
-      headers: { 'X-CSRFToken': '{{ csrf_token }}' },
-      body
-    });
-    const result = await response.json();
-    if (!response.ok || !result.success) {
-      alert('The selected documents could not be moved to Trash.');
-      return;
-    }
-    if (result.skipped_public) {
-      alert(`${result.skipped_public} public document${result.skipped_public === 1 ? '' : 's'} could not be moved. Unpublish them first.`);
-    }
-    window.location.reload();
-  });
-}
-
-updateSelectionToolbar();
 
 
 // Inline rename
@@ -1144,8 +1337,18 @@ function cancelRename(id) {
   }
 })();
 
+function getVersionHistory(contractId) {
+  const key = String(contractId);
+  if (!versionHistoryRequests.has(key)) {
+    versionHistoryRequests.set(key, fetch('/contract/' + contractId + '/version-history/').then(r => r.json()));
+  }
+  return versionHistoryRequests.get(key);
+}
+
 function openPdfPreview(contractId, url, title) {
-  document.getElementById('pdf-frame').src = url;
+  activePdfContractId = String(contractId);
+  const previewUrl = url + (url.includes('#') ? '&' : '#') + 'toolbar=0&navpanes=0&scrollbar=1&view=FitH';
+  document.getElementById('pdf-frame').src = previewUrl;
   document.getElementById('pdf-panel-title').textContent = title;
   document.getElementById('pdf-download-btn').href = url;
   document.getElementById('pdf-download-btn').download = title;
@@ -1159,10 +1362,9 @@ function openPdfPreview(contractId, url, title) {
   document.getElementById('pdf-meta-version').textContent = '—';
   document.getElementById('pdf-version-list').innerHTML = '<div class="version-list-loading">Loading version history…</div>';
 
-  fetch('/contract/' + contractId + '/version-history/')
-    .then(r => r.json())
+  getVersionHistory(contractId)
     .then(data => {
-      if (!data.success) return;
+      if (!data.success || activePdfContractId !== String(contractId)) return;
 
       document.getElementById('pdf-meta-created').textContent = data.created;
       document.getElementById('pdf-meta-encrypted').textContent = data.encrypted || '—';
@@ -1192,7 +1394,8 @@ function openPdfPreview(contractId, url, title) {
 }
 
 function viewPdfVersion(url, el, versionLabel) {
-  document.getElementById('pdf-frame').src = url;
+  const previewUrl = url + (url.includes('#') ? '&' : '#') + 'toolbar=0&navpanes=0&scrollbar=1&view=FitH';
+  document.getElementById('pdf-frame').src = previewUrl;
   document.querySelectorAll('.version-item').forEach(i => i.classList.remove('active'));
   el.classList.add('active');
 
@@ -1202,10 +1405,109 @@ function viewPdfVersion(url, el, versionLabel) {
 }
 
 function closePdfPreview() {
+  activePdfContractId = null;
   document.getElementById('pdf-panel').classList.remove('open');
   document.getElementById('pdf-overlay').classList.remove('open');
   document.getElementById('pdf-panel').setAttribute('aria-hidden', 'true');
   document.getElementById('pdf-frame').src = '';
+}
+
+let mobileContractActionId = null;
+
+function toggleContractsDocPanel() {
+  const panel = document.getElementById('contracts-doc-panel');
+  const overlay = document.getElementById('mobile-contract-panel-overlay');
+  const button = document.getElementById('contracts-doc-toggle');
+  if (!panel || !overlay) return;
+  const isOpen = panel.classList.toggle('open');
+  overlay.classList.toggle('open', isOpen);
+  if (button) button.setAttribute('aria-expanded', String(isOpen));
+}
+
+function closeContractsDocPanel() {
+  const panel = document.getElementById('contracts-doc-panel');
+  const overlay = document.getElementById('mobile-contract-panel-overlay');
+  const button = document.getElementById('contracts-doc-toggle');
+  if (panel) panel.classList.remove('open');
+  if (overlay) overlay.classList.remove('open');
+  if (button) button.setAttribute('aria-expanded', 'false');
+}
+
+function handleMobileContractTap(event, contractId) {
+  if (!window.matchMedia('(max-width: 900px)').matches) return;
+  if (event.target.closest('input, button, a, select')) return;
+  event.stopPropagation();
+  openMobileContractSheet(contractId);
+}
+
+function openMobileContractSheet(contractId) {
+  const row = document.getElementById('row-' + contractId);
+  const sheet = document.getElementById('mobile-contract-action-sheet');
+  const overlay = document.getElementById('mobile-contract-sheet-overlay');
+  if (!row || !sheet || !overlay) return;
+
+  mobileContractActionId = contractId;
+  document.getElementById('mobile-sheet-title').textContent = row.dataset.contractTitle || 'Contract actions';
+  const encrypt = document.getElementById('mobile-sheet-encrypt');
+  if (encrypt) encrypt.style.display = row.dataset.encrypted === '1' ? 'none' : 'flex';
+  const publicButton = document.getElementById('mobile-sheet-public');
+  if (publicButton) {
+    publicButton.classList.toggle('public-on', row.dataset.public === '1');
+    publicButton.querySelector('span').textContent = row.dataset.public === '1' ? 'Remove Public' : 'Make Public';
+  }
+  sheet.classList.add('open');
+  overlay.classList.add('open');
+}
+
+function closeMobileContractSheet() {
+  const sheet = document.getElementById('mobile-contract-action-sheet');
+  const overlay = document.getElementById('mobile-contract-sheet-overlay');
+  if (sheet) sheet.classList.remove('open');
+  if (overlay) overlay.classList.remove('open');
+  mobileContractActionId = null;
+}
+
+function mobileSheetViewPdf() {
+  const id = mobileContractActionId;
+  const row = document.getElementById('row-' + id);
+  if (!row) return;
+  closeMobileContractSheet();
+  openPdfPreview(id, row.dataset.fileUrl, row.dataset.contractTitle);
+}
+
+function mobileSheetEdit() {
+  const id = mobileContractActionId;
+  const row = document.getElementById('row-' + id);
+  if (!row) return;
+  closeMobileContractSheet();
+  const rect = row.getBoundingClientRect();
+  showContractContextMenu({
+    preventDefault() {},
+    stopPropagation() {},
+    clientX: Math.min(Math.max(12, rect.left + 12), window.innerWidth - 170),
+    clientY: Math.min(Math.max(12, rect.top + 12), window.innerHeight - 160)
+  }, id);
+}
+
+function mobileSheetEncrypt() {
+  const row = document.getElementById('row-' + mobileContractActionId);
+  const form = row && row.querySelector('form[action^="/encrypt/"]');
+  closeMobileContractSheet();
+  if (form) form.submit();
+}
+
+function mobileSheetDelete() {
+  const id = mobileContractActionId;
+  const row = document.getElementById('row-' + id);
+  if (!row) return;
+  closeMobileContractSheet();
+  openDeleteModal(id, row.dataset.contractTitle);
+}
+
+function mobileSheetTogglePublic() {
+  const id = mobileContractActionId;
+  closeMobileContractSheet();
+  if (id) toggleEyeVisibility(id);
 }
 
 // Prevent a stale preview/backdrop state from blocking touch input after
@@ -1452,6 +1754,7 @@ function assignContractToFolder(contractId, folderId) {
 }
 
 function setFolderFilter(folderId, el) {
+  closeContractsDocPanel();
   document.querySelectorAll('.doc-panel .panel-item').forEach(item => item.classList.remove('active'));
   el.classList.add('active');
   currentFolderFilter = folderId;
@@ -1487,11 +1790,6 @@ function selectStatus(id, status, label) {
   document.getElementById('status-form-' + id).submit();
 }
 
-document.addEventListener('click', function(e) {
-  if (!e.target.closest('.status-dropdown')) {
-    document.querySelectorAll('.status-dropdown-menu.open').forEach(m => m.classList.remove('open'));
-  }
-});
 // ── Drag contracts into folders ──
 let draggedContractId = null;
 let draggedFolderId = null;
@@ -1500,10 +1798,25 @@ let folderDropCommitted = false;
 let suppressFolderClick = false;
 
 function dragContractStart(event, contractId) {
+  if (window.matchMedia('(max-width: 900px)').matches) {
+    event.preventDefault();
+    return;
+  }
   draggedFolderId = null;
   draggedContractId = contractId;
   event.dataTransfer.effectAllowed = 'move';
 }
+
+function syncMobileContractDragging() {
+  const isMobile = mobileContractMedia.matches;
+  document.querySelectorAll('.contracts-table tbody tr[data-status]').forEach(function(row) {
+    row.draggable = !isMobile;
+  });
+}
+
+const mobileContractMedia = window.matchMedia('(max-width: 900px)');
+mobileContractMedia.addEventListener('change', syncMobileContractDragging);
+syncMobileContractDragging();
 
 function handleFolderClick(folderId, el) {
   if (suppressFolderClick) return;
@@ -1632,15 +1945,8 @@ function showFolderContextMenu(event, folderId) {
   event.preventDefault();
   event.stopPropagation();
   contextMenuFolderId = folderId;
-  const menu = document.getElementById('folder-context-menu');
-  menu.style.left = event.pageX + 'px';
-  menu.style.top = event.pageY + 'px';
-  menu.classList.add('active');
+  positionContextMenu(document.getElementById('folder-context-menu'), event);
 }
-
-document.addEventListener('click', () => {
-  document.getElementById('folder-context-menu').classList.remove('active');
-});
 
 function contextMenuRename() {
   const id = contextMenuFolderId;
@@ -1650,6 +1956,25 @@ function contextMenuRename() {
 
 // ── Contract edit context menu ──
 let contextMenuContractId = null;
+
+// Context menus use fixed positioning, so use viewport coordinates and clamp
+// both edges after the menu is visible. This keeps menus fully on-screen even
+// when the edit button is near the right or bottom edge of the viewport.
+function positionContextMenu(menu, event) {
+  if (!menu) return;
+  menu.classList.add('active');
+  const margin = 8;
+  const x = Math.min(
+    Math.max(event.clientX, margin),
+    Math.max(margin, window.innerWidth - menu.offsetWidth - margin)
+  );
+  const y = Math.min(
+    Math.max(event.clientY, margin),
+    Math.max(margin, window.innerHeight - menu.offsetHeight - margin)
+  );
+  menu.style.left = x + 'px';
+  menu.style.top = y + 'px';
+}
 
 function showContractContextMenu(event, contractId) {
   event.preventDefault();
@@ -1665,13 +1990,18 @@ function showContractContextMenu(event, contractId) {
       : 'Add to Public Verified Contracts';
   }
 
-  const menu = document.getElementById('contract-context-menu');
-  menu.style.left = event.pageX + 'px';
-  menu.style.top = event.pageY + 'px';
-  menu.classList.add('active');
+  positionContextMenu(document.getElementById('contract-context-menu'), event);
 }
-document.addEventListener('click', () => {
-  document.getElementById('contract-context-menu').classList.remove('active');
+document.addEventListener('click', function(event) {
+  if (!event.target.closest('.status-dropdown')) {
+    document.querySelectorAll('.status-dropdown-menu.open').forEach(menu => menu.classList.remove('open'));
+  }
+  if (!event.target.closest('#folder-context-menu')) {
+    document.getElementById('folder-context-menu').classList.remove('active');
+  }
+  if (!event.target.closest('#contract-context-menu')) {
+    document.getElementById('contract-context-menu').classList.remove('active');
+  }
 });
 
 function contractContextMenuRename() {

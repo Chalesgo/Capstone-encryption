@@ -3,7 +3,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from .models import Contract, Folder, ContractVersion, Tutorial
-from .forms import ContractForm, RegisterForm, TutorialForm, sanitize_tutorial_html
+from .forms import ContractForm, TutorialForm, sanitize_tutorial_html
 from .utils import (
     generate_file_hash,
     generate_canonical_fingerprint,
@@ -24,6 +24,7 @@ import uuid
 import fitz
 from .utils import generate_qr_code
 import base64
+from hmac import compare_digest
 from django.http import JsonResponse, FileResponse, Http404
 from .utils import log_activity
 from .models import Contract, AuditLog
@@ -186,7 +187,9 @@ def upload_contract(request):
             _process_log('initial_encryption', 'qr_marker_created', contract=contract, request=request)
 
             # ── Step 5: Stamp ONCE with LSB seal + QR ──
-            final_filename = f"{contract.base_filename}_v1.pdf"
+            # The database ID is unique, so generated files cannot collide
+            # when two users upload PDFs with the same original filename.
+            final_filename = f"contract_{contract.id}_v1.pdf"
             final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
             stamp_seal_on_pdf(pdf_path, final_pdf_path, stamped_seal, qr_path=qr_path, encrypted_cf=encrypted)
             _process_log('initial_encryption', 'pdf_sealed', contract=contract, request=request)
@@ -199,7 +202,7 @@ def upload_contract(request):
             contract.encrypted_cf = encrypted
             contract.hmac_value = hmac_value
             contract.wrapped_key = wrapped_key
-            contract.aes_key = aes_iv
+            contract.aes_key = ''
             contract.aes_iv = aes_iv
 
             # ── Step 7: Clean up original ──
@@ -254,8 +257,8 @@ def encrypt_contract(request, contract_id):
     latest_version = contract.versions.order_by('-version_number').first()
     previous_cf = latest_version.fingerprint if latest_version else None
 
-    original_cf = generate_canonical_fingerprint(pdf_path, previous_cf=previous_cf)
-    _process_log('reencryption', 'chained_fingerprint_generated', contract=contract, request=request)
+    original_cf = generate_canonical_fingerprint(pdf_path)
+    _process_log('reencryption', 'source_fingerprint_generated', contract=contract, request=request)
 
     encrypted, hmac_value, wrapped_key, aes_iv = encrypt_cf(
         original_cf, settings.RSA_PUBLIC_KEY_PATH
@@ -269,8 +272,7 @@ def encrypt_contract(request, contract_id):
     _process_log('reencryption', 'qr_marker_created', contract=contract, request=request)
 
     next_version_number = (latest_version.version_number + 1) if latest_version else 1
-    base_name = contract.base_filename or os.path.splitext(os.path.basename(pdf_path))[0]
-    final_filename = f"{base_name}_v{next_version_number}.pdf"
+    final_filename = f"contract_{contract.id}_v{next_version_number}.pdf"
     final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
     stamp_seal_on_pdf(pdf_path, final_pdf_path, stamped_seal, qr_path=qr_path, encrypted_cf=encrypted)
     _process_log('reencryption', 'pdf_sealed', contract=contract, request=request, version=next_version_number)
@@ -282,7 +284,7 @@ def encrypt_contract(request, contract_id):
     contract.encrypted_cf = encrypted
     contract.hmac_value = hmac_value
     contract.wrapped_key = wrapped_key
-    contract.aes_key = aes_iv
+    contract.aes_key = ''
     contract.aes_iv = aes_iv
 
     contract.file = f'contracts/{final_filename}'
@@ -349,9 +351,10 @@ def add_revision(request, contract_id):
         latest_version = contract.versions.order_by('-version_number').first()
         previous_cf = latest_version.fingerprint if latest_version else None
 
-        # ── Fingerprint the NEW file, chained to the previous version ──
-        original_cf = generate_canonical_fingerprint(temp_path, previous_cf=previous_cf)
-        _process_log('revision_encryption', 'chained_fingerprint_generated', contract=contract, request=request)
+        # Fingerprint the unstamped revision directly. Version chaining is
+        # applied separately to the final sealed ContractVersion below.
+        original_cf = generate_canonical_fingerprint(temp_path)
+        _process_log('revision_encryption', 'source_fingerprint_generated', contract=contract, request=request)
 
         encrypted, hmac_value, wrapped_key, aes_iv = encrypt_cf(
             original_cf, settings.RSA_PUBLIC_KEY_PATH
@@ -364,8 +367,7 @@ def add_revision(request, contract_id):
         _process_log('revision_encryption', 'qr_marker_created', contract=contract, request=request)
 
         next_version_number = (latest_version.version_number + 1) if latest_version else 1
-        base_name = contract.base_filename or os.path.splitext(uploaded_file.name)[0]
-        final_filename = f"{base_name}_v{next_version_number}.pdf"
+        final_filename = f"contract_{contract.id}_v{next_version_number}.pdf"
         final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
         stamp_seal_on_pdf(temp_path, final_pdf_path, stamped_seal, qr_path=qr_path, encrypted_cf=encrypted)
         _process_log('revision_encryption', 'pdf_sealed', contract=contract, request=request, version=next_version_number)
@@ -378,7 +380,7 @@ def add_revision(request, contract_id):
         contract.encrypted_cf = encrypted
         contract.hmac_value = hmac_value
         contract.wrapped_key = wrapped_key
-        contract.aes_key = aes_iv
+        contract.aes_key = ''
         contract.aes_iv = aes_iv
         contract.file = f'contracts/{final_filename}'
         contract.seal_image = f'seals/seal_{contract.id}.png'
@@ -417,9 +419,24 @@ def add_revision(request, contract_id):
 
 @login_required
 def contract_list(request):
-    contracts = Contract.objects.filter(is_trashed=False)
-    folders = Folder.objects.filter(owner=request.user)
-    return render(request, 'list.html', {'contracts': contracts, 'folders': folders})
+    contracts = Contract.objects.filter(is_trashed=False).order_by('-modified_at', '-id')
+    search_query = request.GET.get('q', '').strip()
+    if search_query:
+        contracts = contracts.filter(
+            Q(title__icontains=search_query)
+            | Q(recipient__username__icontains=search_query)
+            | Q(tags__icontains=search_query)
+        )
+    page_obj = Paginator(contracts, 25).get_page(request.GET.get('page'))
+    # Folders are shared across the staff workspace.  Folder deletion and
+    # document removal are still enforced by delete_folder below.
+    folders = Folder.objects.all()
+    return render(request, 'list.html', {
+        'contracts': page_obj.object_list,
+        'page_obj': page_obj,
+        'search_query': search_query,
+        'folders': folders,
+    })
 
 @login_required
 def delete_contract(request, contract_id):
@@ -526,16 +543,6 @@ def empty_trash(request):
             _hard_delete_contract(contract, request=request, note=f'Trash emptied: {contract.title}')
         return JsonResponse({'success': True, 'count': count})
     return JsonResponse({'success': False}, status=400)
-
-def register(request):
-    if request.method == 'POST':
-        form = RegisterForm(request.POST)
-        if form.is_valid():
-            form.save()
-            return redirect('/accounts/login/')
-    else:
-        form = RegisterForm()
-    return render(request, 'registration/register.html', {'form': form})
 
 def verify_physical(request):
 
@@ -697,12 +704,12 @@ def has_barangay_footer(pdf_path: str):
 
 from django.shortcuts import render, redirect
 
-def get_contract_meta(contract):
+def get_contract_meta(contract, include_chain=True):
     verified_log = AuditLog.objects.filter(
         contract=contract, action='viewed'
     ).order_by('-timestamp').first()
     latest_version = contract.versions.order_by('-version_number').first()
-    chain = verify_version_chain(contract)
+    chain = verify_version_chain(contract) if include_chain else []
 
     return {
         'created': contract.uploaded_at,
@@ -942,6 +949,8 @@ def public_verify(request):
         debug_log.append("[INFO] Verification mode: full cryptographic pipeline")
         _process_log('verification', 'file_received', request=request, size_bytes=uploaded_file.size)
 
+        matched_contract = None
+        failure_reason = ''
         try:
             with fitz.open(temp_path) as uploaded_pdf:
                 debug_log.append(f"[PASS] PDF structure opened successfully: {uploaded_pdf.page_count} page(s)")
@@ -953,40 +962,100 @@ def public_verify(request):
             else:
                 debug_log.append("[WARN] Footer check: No barangay footer found")
 
+            current_cf = generate_canonical_fingerprint(temp_path)
+            debug_log.append("[PASS] Sealed PDF fingerprint recomputed")
+            _process_log('verification', 'sealed_fingerprint_generated', request=request)
+
+            matched_contract = Contract.objects.filter(
+                fingerprint=current_cf,
+                is_trashed=False,
+            ).first()
+            debug_log.append("[INFO] Active contract fingerprint lookup completed")
+
             extracted_encrypted = extract_cf_from_metadata(temp_path)
 
-            if not extracted_encrypted:
-                debug_log.append("[FAIL] Metadata check: No SEALGUARD signature found in PDF metadata")
-                if has_footer:
-                    debug_log.append("[WARN] Footer exists but no metadata — document may have been re-saved or metadata stripped")
+            if not matched_contract:
+                marker_owner_exists = bool(
+                    extracted_encrypted
+                    and Contract.objects.filter(
+                        encrypted_cf=extracted_encrypted,
+                        is_trashed=False,
+                    ).exists()
+                )
+                if marker_owner_exists:
+                    debug_log.append("[FAIL] Sealed PDF fingerprint does not match the contract identified by its marker")
+                    failure_reason = 'sealed fingerprint mismatch'
                     result = 'tampered'
                 else:
-                    debug_log.append("[FAIL] Document was not produced by this system")
+                    debug_log.append("[FAIL] No active contract matches the sealed fingerprint or encrypted marker")
+                    failure_reason = 'no active database record matched'
+                    filename_hint = 'unknown'
                     result = 'error'
+            elif not extracted_encrypted:
+                debug_log.append("[FAIL] Metadata marker is missing from the matched sealed document")
+                failure_reason = 'metadata marker missing'
+                result = 'tampered'
+            elif not is_valid_encrypted_cf(extracted_encrypted):
+                debug_log.append("[FAIL] Metadata marker has an invalid encrypted payload format")
+                failure_reason = 'metadata marker malformed'
+                result = 'tampered'
+            elif not compare_digest(extracted_encrypted, matched_contract.encrypted_cf):
+                debug_log.append("[FAIL] Metadata marker does not belong to the matched contract")
+                failure_reason = 'metadata marker ownership mismatch'
+                result = 'tampered'
+            elif not all([
+                matched_contract.wrapped_key,
+                matched_contract.aes_iv,
+                matched_contract.hmac_value,
+                matched_contract.original_fingerprint,
+            ]):
+                debug_log.append("[ERROR] Matched contract is missing required cryptographic enrollment data")
+                failure_reason = 'incomplete cryptographic enrollment data'
+                result = 'error'
             else:
-                debug_log.append("[PASS] Metadata check: SEALGUARD signature found")
-                debug_log.append("[INFO] Encrypted marker extracted; payload redacted from logs")
-                debug_log.append("[PASS] Encrypted marker format and block length validated")
-                _process_log('verification', 'encrypted_marker_extracted', request=request)
+                debug_log.append(f"[PASS] Sealed fingerprint matched active contract [{matched_contract.id}]")
+                debug_log.append("[PASS] Metadata marker belongs to the matched contract")
+                _process_log('verification', 'marker_ownership_validated', contract=matched_contract, request=request)
 
-                current_cf = generate_canonical_fingerprint(temp_path)
-                debug_log.append("[PASS] Canonical fingerprint recomputed from PDF contents")
-                debug_log.append("[INFO] Generated fingerprint redacted from logs")
-                _process_log('verification', 'canonical_fingerprint_generated', request=request)
-
-                debug_log.append("[INFO] Looking up the document fingerprint")
-                matched_contract = Contract.objects.filter(
-                    fingerprint=current_cf,
-                    is_trashed=False,
-                ).first()
-
-                if matched_contract:
-                    debug_log.append(f"[PASS] Match found: Contract [{matched_contract.id}] '{matched_contract.title}'")
-                    debug_log.append("[PASS] Matched contract is active and not in trash")
-                    result = 'authentic'
-                else:
-                    debug_log.append("[FAIL] No matching contract found — document was modified")
+                try:
+                    decrypted_original_cf = decrypt_cf(
+                        extracted_encrypted,
+                        matched_contract.wrapped_key,
+                        matched_contract.aes_iv,
+                        matched_contract.hmac_value,
+                        settings.RSA_PRIVATE_KEY_PATH,
+                    )
+                except (FileNotFoundError, PermissionError, OSError):
+                    raise
+                except Exception as crypto_error:
+                    debug_log.append("[FAIL] RSA/AES recovery or HMAC integrity validation failed")
+                    _process_log(
+                        'verification', 'cryptographic_validation_failed',
+                        contract=matched_contract, request=request,
+                        error_type=type(crypto_error).__name__,
+                    )
+                    failure_reason = 'cryptographic integrity validation failed'
                     result = 'tampered'
+                else:
+                    debug_log.append("[PASS] AES key recovered with RSA-OAEP")
+                    debug_log.append("[PASS] Original fingerprint decrypted with AES-256-CBC and HMAC-SHA256 verified")
+
+                    if not compare_digest(decrypted_original_cf, matched_contract.original_fingerprint):
+                        debug_log.append("[FAIL] Decrypted source fingerprint does not match the contract enrollment record")
+                        failure_reason = 'original fingerprint mismatch'
+                        result = 'tampered'
+                    else:
+                        debug_log.append("[PASS] Decrypted fingerprint matches the source PDF fingerprint")
+                        debug_log.append("[INFO] Recomputing the matched contract's version chain")
+                        matched_chain = verify_version_chain(matched_contract)
+                        chain_valid = bool(matched_chain) and all(link['valid'] for link in matched_chain)
+                        if chain_valid:
+                            debug_log.append("[PASS] Version history chain validated")
+                            result = 'authentic'
+                        else:
+                            debug_log.append("[FAIL] Version history chain validation failed")
+                            failure_reason = 'version chain validation failed'
+                            result = 'tampered'
 
         except Exception as e:
             debug_log.append(f"[ERROR] Verification stopped safely: {type(e).__name__}")
@@ -1012,14 +1081,14 @@ def public_verify(request):
             )
         elif result == 'tampered':
             tampering_log = _log_public_verification(
-                request, uploaded_file, 'tampered',
-                note=f"Public verification: tampered ({uploaded_file.name}); fingerprint mismatch",
+                request, uploaded_file, 'tampered', contract=matched_contract,
+                note=f"Public verification: tampered ({uploaded_file.name}); {failure_reason or 'integrity check failed'}",
             )
             _attach_verification_evidence(tampering_log, temp_path, uploaded_file.name)
         else:
             _log_public_verification(
                 request, uploaded_file, 'error',
-                note=f"Public verification: unable to verify ({uploaded_file.name})",
+                note=f"Public verification: unable to verify ({uploaded_file.name}); {failure_reason or 'operational error'}",
             )
 
         request.session['verify_result'] = result
@@ -1035,9 +1104,14 @@ def public_verify(request):
     preview_token = request.session.get('verify_preview_token')
     preview_url = reverse('verification_preview', args=[preview_token]) if result and preview_token else None
 
+    public_contract_queryset = Contract.objects.filter(is_public=True).order_by('-uploaded_at', '-id')
+    public_page_obj = Paginator(public_contract_queryset, 20).get_page(request.GET.get('page'))
     public_contracts = [
-        {'contract': c, 'meta': get_contract_meta(c)}
-        for c in Contract.objects.filter(is_public=True).order_by('-uploaded_at')
+        # The public browser only needs display metadata. Full chain
+        # verification is deferred until a document is actually verified or
+        # its version history is requested.
+        {'contract': c, 'meta': get_contract_meta(c, include_chain=False)}
+        for c in public_page_obj.object_list
     ]
 
     return render(request, 'verify.html', {
@@ -1045,6 +1119,7 @@ def public_verify(request):
         'filename_hint': filename_hint,
         'debug_log': debug_log,
         'public_contracts': public_contracts,
+        'public_page_obj': public_page_obj,
         'verify_preview_url': preview_url,
         'verification_timestamp': verification_timestamp,
     })
@@ -1078,7 +1153,7 @@ def tag_contract(request, pk):
 @login_required
 def create_folder(request):
     if request.method == 'POST':
-        last_order = Folder.objects.filter(owner=request.user).order_by('-sort_order').values_list('sort_order', flat=True).first()
+        last_order = Folder.objects.order_by('-sort_order').values_list('sort_order', flat=True).first()
         folder = Folder.objects.create(
             name='Untitled Folder',
             owner=request.user,
@@ -1113,11 +1188,11 @@ def reorder_folders(request):
     except (TypeError, ValueError, json.JSONDecodeError):
         return JsonResponse({'success': False, 'error': 'invalid_order'}, status=400)
 
-    existing = list(Folder.objects.filter(owner=request.user).values_list('id', flat=True))
+    existing = list(Folder.objects.values_list('id', flat=True))
     if len(folder_ids) != len(set(folder_ids)) or sorted(folder_ids) != sorted(existing):
         return JsonResponse({'success': False, 'error': 'invalid_order'}, status=400)
 
-    folders = {folder.id: folder for folder in Folder.objects.filter(owner=request.user)}
+    folders = {folder.id: folder for folder in Folder.objects.all()}
     for position, folder_id in enumerate(folder_ids):
         folders[folder_id].sort_order = position
     Folder.objects.bulk_update(folders.values(), ['sort_order'])
@@ -1128,7 +1203,7 @@ def reorder_folders(request):
 def rename_folder(request, pk):
     if request.method == 'POST':
         import json
-        folder = get_object_or_404(Folder, pk=pk, owner=request.user)
+        folder = get_object_or_404(Folder, pk=pk)
         data = json.loads(request.body)
         new_name = data.get('name', '').strip()
         if new_name:
@@ -1146,7 +1221,7 @@ def assign_folder(request, contract_id):
         data = json.loads(request.body)
         folder_id = data.get('folder_id')
         if folder_id:
-            folder = get_object_or_404(Folder, pk=folder_id, owner=request.user)
+            folder = get_object_or_404(Folder, pk=folder_id)
             contract.folder = folder
         else:
             contract.folder = None
@@ -1158,7 +1233,7 @@ def assign_folder(request, contract_id):
 def delete_folder(request, pk):
     if request.method == 'POST':
         import json
-        folder = get_object_or_404(Folder, pk=pk, owner=request.user)
+        folder = get_object_or_404(Folder, pk=pk)
         data = json.loads(request.body)
         mode = data.get('mode', 'unassign')  # 'unassign' or 'delete_items'
         has_items = folder.contracts.exists()
@@ -1224,7 +1299,7 @@ def publish_contract(request, pk):
         )
         return JsonResponse({'success': True, 'is_public': contract.is_public})
     return JsonResponse({'success': False}, status=400)
-from django.db.models import Count
+from django.db.models import Count, Q
 
 @login_required
 def dashboard(request):
@@ -1233,7 +1308,7 @@ def dashboard(request):
     flagged_documents = AuditLog.objects.filter(action='reported_tampering').count()
 
     activity_filter = request.GET.get('activity', 'all')
-    if activity_filter not in {'all', 'added', 'edited', 'deleted', 'reported_tampering', 'verification'}:
+    if activity_filter not in {'all', 'viewed', 'added', 'encrypted', 'edited', 'approved', 'rejected', 'deleted', 'reported_tampering', 'verification', 'failed_login'}:
         activity_filter = 'all'
 
     sort_order = request.GET.get('sort', 'newest')

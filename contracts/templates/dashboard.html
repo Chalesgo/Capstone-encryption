@@ -99,6 +99,63 @@
     color: #1f2937;
     font-size: 14px;
   }
+  .activity-filter-control { position: relative; min-width: 180px; }
+  .activity-filter-native {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .activity-filter-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    min-height: 42px;
+    padding: 6px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #fff;
+    color: #1f2937;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+  }
+  .activity-filter-trigger:focus-visible { outline: 2px solid #3b5bdb; outline-offset: 2px; }
+  .activity-filter-trigger .action-badge { white-space: nowrap; }
+  .activity-filter-chevron { color: #667788; font-size: 16px; line-height: 1; transition: transform .15s ease; }
+  .activity-filter-control.open .activity-filter-chevron { transform: rotate(180deg); }
+  .activity-filter-menu {
+    position: absolute;
+    top: calc(100% + 5px);
+    left: 0;
+    z-index: 20;
+    display: none;
+    width: 100%;
+    padding: 5px;
+    border: 1px solid #dbe2ea;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 8px 20px rgba(30, 40, 50, .12);
+  }
+  .activity-filter-control.open .activity-filter-menu { display: grid; gap: 2px; }
+  .activity-filter-option {
+    display: flex;
+    width: 100%;
+    padding: 5px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+  }
+  .activity-filter-option:hover,
+  .activity-filter-option[aria-selected="true"] { background: #f8fafc; }
+  .action-badge.all { background: #f3f4f6; color: #667085; }
   .audit-filter-status {
     align-self: center;
     margin-left: auto;
@@ -132,6 +189,10 @@
   .audit-table tr:hover td { background: #f8fafc; }
   .audit-table tr.inspectable { cursor: pointer; }
   .audit-table tr.inspectable:focus { outline: 2px solid #3b5bdb; outline-offset: -2px; }
+  .audit-table tbody tr {
+    content-visibility: auto;
+    contain-intrinsic-size: 52px;
+  }
 
   .audit-title-cell {
     display: flex;
@@ -175,6 +236,7 @@
     padding: 3px 10px;
     border-radius: 99px;
   }
+  .action-badge-icon { width: 13px; height: 13px; flex-shrink: 0; stroke-width: 2; }
   .action-badge.viewed    { background: #eef2ff; color: #3b5bdb; }
   .action-badge.added     { background: #e8f5ef; color: #1a9e6a; }
   .action-badge.encrypted { background: #f3ecfd; color: #7c3aed; }
@@ -257,11 +319,53 @@
   }
   @media (max-width: 760px) {
     .stat-cards { grid-template-columns: 1fr; }
-    .audit-panel { overflow-x: auto; }
+    .audit-panel { overflow: hidden; }
     .audit-filter-field, .audit-filter-field select { width: 100%; }
     .audit-filter-status { width: 100%; margin-left: 0; }
-    .audit-table { min-width: 760px; }
-    .audit-pagination { min-width: 760px; }
+    .audit-table,
+    .audit-table tbody,
+    .audit-table tr,
+    .audit-table td { display: block; }
+    .audit-table { min-width: 0; }
+    .audit-table thead { display: none; }
+    .audit-table tr {
+      margin: 0 12px 12px;
+      padding: 10px 12px;
+      border: 1px solid #eef0f4;
+      border-radius: 10px;
+      background: #fff;
+    }
+    .audit-table tr:last-child { margin-bottom: 0; }
+    .audit-table tr:hover td { background: transparent; }
+    .audit-table td {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      padding: 6px 0;
+      border: 0;
+    }
+    .audit-table td::before {
+      flex: 0 0 76px;
+      color: #889aab;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    .audit-table td:nth-child(1)::before { content: 'Title'; }
+    .audit-table td:nth-child(2)::before { content: 'IP'; }
+    .audit-table td:nth-child(3)::before { content: 'User'; }
+    .audit-table td:nth-child(4)::before { content: 'Time'; }
+    .audit-table td:nth-child(5)::before { content: 'Action'; }
+    .audit-title-cell,
+    .audit-user-cell { min-width: 0; max-width: none; }
+    .audit-title-text { min-width: 0; }
+    .audit-pagination {
+      flex-wrap: wrap;
+      padding: 14px 12px;
+    }
+    .pagination-links { margin-left: auto; }
   }
 </style>
 
@@ -318,14 +422,33 @@
     <form class="audit-filters" id="audit-filters" method="get">
       <div class="audit-filter-field">
         <label for="activity-filter">Show activity</label>
-        <select id="activity-filter" name="activity" onchange="this.form.requestSubmit()">
+        <div class="activity-filter-control" data-activity-dropdown>
+          <select id="activity-filter" name="activity" class="activity-filter-native">
           <option value="all" {% if activity_filter == 'all' %}selected{% endif %}>All activity</option>
-          <option value="added" {% if activity_filter == 'added' %}selected{% endif %}>Added documents</option>
-          <option value="edited" {% if activity_filter == 'edited' %}selected{% endif %}>Edited documents</option>
-          <option value="deleted" {% if activity_filter == 'deleted' %}selected{% endif %}>Deleted documents</option>
-          <option value="reported_tampering" {% if activity_filter == 'reported_tampering' %}selected{% endif %}>Reported tampering</option>
-          <option value="verification" {% if activity_filter == 'verification' %}selected{% endif %}>Verification attempts</option>
-        </select>
+          <option value="added" {% if activity_filter == 'added' %}selected{% endif %}>Added Document</option>
+          <option value="edited" {% if activity_filter == 'edited' %}selected{% endif %}>Edited Document</option>
+          <option value="deleted" {% if activity_filter == 'deleted' %}selected{% endif %}>Deleted Document</option>
+          <option value="reported_tampering" {% if activity_filter == 'reported_tampering' %}selected{% endif %}>Reported Tampering</option>
+          <option value="verification" {% if activity_filter == 'verification' %}selected{% endif %}>Verification Attempt</option>
+          </select>
+          <button class="activity-filter-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+            <span class="action-badge all" data-activity-filter-label>All activity</span>
+            <span class="activity-filter-chevron" aria-hidden="true">⌄</span>
+          </button>
+          <div class="activity-filter-menu" role="listbox" aria-label="Activity types">
+            <button class="activity-filter-option" type="button" role="option" data-value="all" aria-selected="false"><span class="action-badge all"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>All activity</span></button>
+            <button class="activity-filter-option" type="button" role="option" data-value="viewed" aria-selected="false"><span class="action-badge viewed"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.5"/></svg>Viewed Document</span></button>
+            <button class="activity-filter-option" type="button" role="option" data-value="added" aria-selected="false"><span class="action-badge added"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Added Document</span></button>
+            <button class="activity-filter-option" type="button" role="option" data-value="encrypted" aria-selected="false"><span class="action-badge encrypted"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Encrypted Document</span></button>
+            <button class="activity-filter-option" type="button" role="option" data-value="edited" aria-selected="false"><span class="action-badge edited"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 16-.8 4.8L8 20l11.5-11.5a2.1 2.1 0 0 0-3-3L5 17zM14.5 7.5l2 2"/></svg>Edited Document</span></button>
+            <button class="activity-filter-option" type="button" role="option" data-value="approved" aria-selected="false"><span class="action-badge approved"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>Approved Document</span></button>
+            <button class="activity-filter-option" type="button" role="option" data-value="rejected" aria-selected="false"><span class="action-badge rejected"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>Rejected Document</span></button>
+            <button class="activity-filter-option" type="button" role="option" data-value="deleted" aria-selected="false"><span class="action-badge deleted"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Deleted Document</span></button>
+            <button class="activity-filter-option" type="button" role="option" data-value="reported_tampering" aria-selected="false"><span class="action-badge reported_tampering"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 9 17H3L12 3zM12 9v4M12 17h.01"/></svg>Reported Tampering</span></button>
+            <button class="activity-filter-option" type="button" role="option" data-value="verification" aria-selected="false"><span class="action-badge verification"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3zM9 12l2 2 4-4"/></svg>Verification Attempt</span></button>
+            <button class="activity-filter-option" type="button" role="option" data-value="failed_login" aria-selected="false"><span class="action-badge failed_login"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M9 14l6 4M15 14l-6 4"/></svg>Failed Login Attempt</span></button>
+          </div>
+        </div>
       </div>
       <div class="audit-filter-field">
         <label for="sort-order">Sort by date</label>
@@ -359,7 +482,7 @@
         <th>Action</th>
       </tr>
     </thead>
-    <tbody>
+    <tbody id="audit-table-body">
       {% for log in recent_logs %}
       <tr{% if log.has_inspection_details %} class="inspectable" tabindex="0" role="button"
           aria-label="Inspect verification details for {{ log.display_document_title|default:'reported document' }}"
@@ -393,7 +516,19 @@
         </td>
         <td style="color:#889aab; white-space:nowrap;">{{ log.timestamp|date:"Y-m-d H:i:s" }}</td>
         <td>
-          <span class="action-badge {{ log.action }}">{{ log.get_action_display }}</span>
+          <span class="action-badge {{ log.action }}">
+            {% if log.action == 'viewed' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.5"/></svg>
+            {% elif log.action == 'added' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            {% elif log.action == 'encrypted' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+            {% elif log.action == 'edited' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 16-.8 4.8L8 20l11.5-11.5a2.1 2.1 0 0 0-3-3L5 17zM14.5 7.5l2 2"/></svg>
+            {% elif log.action == 'approved' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+            {% elif log.action == 'rejected' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+            {% elif log.action == 'deleted' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
+            {% elif log.action == 'reported_tampering' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 9 17H3L12 3zM12 9v4M12 17h.01"/></svg>
+            {% elif log.action == 'verification' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3zM9 12l2 2 4-4"/></svg>
+            {% elif log.action == 'failed_login' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M9 14l6 4M15 14l-6 4"/></svg>{% endif %}
+            {{ log.get_action_display }}
+          </span>
         </td>
       </tr>
       {% endfor %}
@@ -404,17 +539,17 @@
   {% endif %}
 
   {% if page_obj.paginator.count %}
-  <nav class="audit-pagination" aria-label="Document activity pages">
+  <nav class="audit-pagination" id="audit-pagination" aria-label="Document activity pages">
     <div class="pagination-summary">
       Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} records
     </div>
     <div class="pagination-links">
       {% if page_obj.has_previous %}
-        <a class="pagination-link" href="?activity={{ activity_filter }}&amp;sort={{ sort_order }}&amp;per_page={{ rows_per_page }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>
+        <a class="pagination-link dashboard-page-link" href="?activity={{ activity_filter }}&amp;sort={{ sort_order }}&amp;per_page={{ rows_per_page }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>
       {% endif %}
       <span class="pagination-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
       {% if page_obj.has_next %}
-        <a class="pagination-link" href="?activity={{ activity_filter }}&amp;sort={{ sort_order }}&amp;per_page={{ rows_per_page }}&amp;page={{ page_obj.next_page_number }}">Next</a>
+        <a class="pagination-link dashboard-page-link" href="?activity={{ activity_filter }}&amp;sort={{ sort_order }}&amp;per_page={{ rows_per_page }}&amp;page={{ page_obj.next_page_number }}">Next</a>
       {% endif %}
     </div>
   </nav>
@@ -495,8 +630,76 @@ function closeAuditPdf() {
   document.getElementById('audit-pdf-panel').setAttribute('aria-hidden', 'true');
   document.getElementById('audit-pdf-frame').src = '';
 }
+(function() {
+  const control = document.querySelector('[data-activity-dropdown]');
+  if (!control) return;
+  const select = control.querySelector('#activity-filter');
+  const trigger = control.querySelector('.activity-filter-trigger');
+  const label = control.querySelector('[data-activity-filter-label]');
+  const options = control.querySelectorAll('.activity-filter-option');
+
+  function syncActivityFilter() {
+    const selected = select.value;
+    const option = select.options[select.selectedIndex];
+    const selectedBadge = control.querySelector('[data-value="' + selected + '"] .action-badge');
+    label.innerHTML = selectedBadge ? selectedBadge.innerHTML : option.textContent;
+    label.className = 'action-badge ' + (selected === 'all' ? 'all' : selected);
+    options.forEach(function(item) {
+      item.setAttribute('aria-selected', item.dataset.value === selected ? 'true' : 'false');
+    });
+  }
+
+  trigger.addEventListener('click', function() {
+    const isOpen = control.classList.toggle('open');
+    trigger.setAttribute('aria-expanded', String(isOpen));
+  });
+  options.forEach(function(option) {
+    option.addEventListener('click', function() {
+      select.value = option.dataset.value;
+      syncActivityFilter();
+      control.classList.remove('open');
+      trigger.setAttribute('aria-expanded', 'false');
+      select.form.requestSubmit();
+    });
+  });
+  document.addEventListener('click', function(event) {
+    if (!control.contains(event.target)) {
+      control.classList.remove('open');
+      trigger.setAttribute('aria-expanded', 'false');
+    }
+  });
+  syncActivityFilter();
+})();
 document.addEventListener('keydown', function(event) {
   if (event.key === 'Escape') closeAuditPdf();
+});
+
+document.addEventListener('click', function(event) {
+  const link = event.target.closest('.dashboard-page-link');
+  if (!link) return;
+  event.preventDefault();
+
+  link.setAttribute('aria-busy', 'true');
+  fetch(link.href + (link.href.includes('?') ? '&' : '?') + 'fragment=1')
+    .then(function(response) {
+      if (!response.ok) throw new Error('Unable to load activity page');
+      return response.text();
+    })
+    .then(function(html) {
+      const documentFragment = new DOMParser().parseFromString(html, 'text/html');
+      const nextBody = documentFragment.getElementById('audit-table-body');
+      const nextPagination = documentFragment.getElementById('audit-pagination');
+      const currentBody = document.getElementById('audit-table-body');
+      const currentPagination = document.getElementById('audit-pagination');
+      if (!nextBody || !currentBody) throw new Error('Activity table was not returned');
+
+      currentBody.innerHTML = nextBody.innerHTML;
+      if (currentPagination && nextPagination) currentPagination.replaceWith(nextPagination);
+      history.pushState({}, '', link.href);
+    })
+  .catch(function() {
+    window.location.href = link.href;
+  });
 });
 </script>
 {% endblock %}

@@ -1,6 +1,19 @@
 {% extends 'base.html' %}
 {% block title %}Trash{% endblock %}
 
+{% block mobile_topbar_extra %}
+<div class="mobile-topbar-extra mobile-topbar-left">
+  <button type="button" class="mobile-nav-link" id="trash-doc-toggle"
+          title="Documents, filters and folders" aria-label="Open documents, filters and folders"
+          aria-controls="trash-doc-panel" aria-expanded="false"
+          onclick="toggleTrashDocPanel()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <path d="M4 5h16M4 12h16M4 19h16"/>
+    </svg>
+  </button>
+</div>
+{% endblock %}
+
 {% block content %}
 <style>
   /* Secondary panel — identical layout to list.html's doc-panel */
@@ -57,8 +70,27 @@
   .panel-add-btn svg { width: 13px; height: 13px; }
 
   .container { margin-left: 216px; max-width: none; padding-right: 2rem; }
+  .mobile-contract-panel-overlay { display: none; }
   @media (max-width: 900px) {
-    .doc-panel { display: none; }
+    .doc-panel {
+      display: flex;
+      top: 56px;
+      left: 0;
+      bottom: 0;
+      width: min(84vw, 320px);
+      z-index: 1250;
+      transform: translateX(-105%);
+      transition: transform 0.25s ease;
+      box-shadow: 8px 0 24px rgba(30, 40, 50, 0.16);
+    }
+    .doc-panel.open { transform: translateX(0); }
+    .mobile-contract-panel-overlay {
+      position: fixed;
+      inset: 56px 0 0;
+      z-index: 1240;
+      background: rgba(20, 27, 35, 0.35);
+    }
+    .mobile-contract-panel-overlay.open { display: block; }
     .container { margin-left: 0; }
   }
 
@@ -230,7 +262,9 @@
   }
 </style>
 
-<aside class="doc-panel">
+<div class="mobile-contract-panel-overlay" id="mobile-contract-panel-overlay"
+     onclick="closeTrashDocPanel()"></div>
+<aside class="doc-panel" id="trash-doc-panel">
   <div class="panel-section">
     <p class="panel-heading">Documents</p>
     <ul class="panel-list">
@@ -562,5 +596,28 @@ function createFolderFromTrash() {
     }
   });
 }
+
+function toggleTrashDocPanel() {
+  const panel = document.getElementById('trash-doc-panel');
+  const overlay = document.getElementById('mobile-contract-panel-overlay');
+  const button = document.getElementById('trash-doc-toggle');
+  if (!panel || !overlay) return;
+  const isOpen = panel.classList.toggle('open');
+  overlay.classList.toggle('open', isOpen);
+  if (button) button.setAttribute('aria-expanded', String(isOpen));
+}
+
+function closeTrashDocPanel() {
+  const panel = document.getElementById('trash-doc-panel');
+  const overlay = document.getElementById('mobile-contract-panel-overlay');
+  const button = document.getElementById('trash-doc-toggle');
+  if (panel) panel.classList.remove('open');
+  if (overlay) overlay.classList.remove('open');
+  if (button) button.setAttribute('aria-expanded', 'false');
+}
+
+document.addEventListener('keydown', function(event) {
+  if (event.key === 'Escape') closeTrashDocPanel();
+});
 </script>
 {% endblock %}
