@@ -17,6 +17,17 @@ class AuditLogTests(TestCase):
         self.user = User.objects.create_superuser('admin', 'admin@example.com', 'password')
         self.contract = Contract.objects.create(title='Senior Assistance Form', file='contracts/test.pdf')
 
+    def test_admin_uses_sealguard_branding(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse('admin:index'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'SealGuard')
+        self.assertContains(response, 'Administration Portal')
+        self.assertContains(response, 'contracts/sealguard-admin.css')
+        self.assertContains(response, 'Back to SealGuard')
+
     def test_document_title_survives_permanent_deletion(self):
         request = RequestFactory().post('/')
         request.user = self.user
@@ -76,9 +87,16 @@ class AuditLogTests(TestCase):
         response = self.client.get(reverse('contract_list'))
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'overflow-x: hidden;')
+        self.assertContains(response, "view=FitH")
+        self.assertContains(response, 'min-width: 0;')
         self.assertContains(response, 'oninput="scheduleSearchFilter()"')
         self.assertContains(response, 'setTimeout(() =>')
         self.assertContains(response, '}, 350);')
+        self.assertContains(response, 'id="contracts-doc-panel"')
+        self.assertContains(response, 'id="mobile-contract-action-sheet"')
+        self.assertContains(response, 'function handleMobileContractTap(event, contractId)')
+        self.assertContains(response, 'data-file-url=')
 
     @patch('contracts.views.generate_canonical_fingerprint', return_value='f' * 64)
     @patch('contracts.views.extract_cf_from_metadata', return_value='encrypted-marker')
@@ -156,6 +174,59 @@ class AuditLogTests(TestCase):
         ordered_ids = list(Folder.objects.filter(owner=self.user).values_list('id', flat=True))
         self.assertEqual(ordered_ids, [third.id, first.id, second.id])
 
+    def test_staff_can_see_and_reorder_shared_folders(self):
+        staff = User.objects.create_user('folder_clerk', password='password', is_staff=True)
+        first = Folder.objects.create(name='Admin Folder', owner=self.user, sort_order=0)
+        second = Folder.objects.create(name='Shared Folder', owner=self.user, sort_order=1)
+        self.client.force_login(staff)
+
+        page = self.client.get(reverse('contract_list'))
+        self.assertContains(page, 'Admin Folder')
+        self.assertContains(page, 'Shared Folder')
+
+        response = self.client.post(
+            reverse('reorder_folders'),
+            data={'folder_ids': [second.id, first.id]},
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            list(Folder.objects.order_by('sort_order').values_list('id', flat=True)),
+            [second.id, first.id],
+        )
+
+    def test_staff_can_delete_empty_shared_folder(self):
+        staff = User.objects.create_user('empty_folder_clerk', password='password', is_staff=True)
+        folder = Folder.objects.create(name='Empty Folder', owner=self.user)
+        self.client.force_login(staff)
+
+        response = self.client.post(
+            reverse('delete_folder', args=[folder.id]),
+            data={'mode': 'unassign'},
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Folder.objects.filter(pk=folder.id).exists())
+
+    def test_staff_cannot_delete_shared_folder_with_documents(self):
+        staff = User.objects.create_user('full_folder_clerk', password='password', is_staff=True)
+        folder = Folder.objects.create(name='Full Folder', owner=self.user)
+        Contract.objects.create(
+            title='Folder document', file='contracts/test.pdf', folder=folder
+        )
+        self.client.force_login(staff)
+
+        response = self.client.post(
+            reverse('delete_folder', args=[folder.id]),
+            data={'mode': 'unassign'},
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Folder.objects.filter(pk=folder.id).exists())
+
     def test_folder_reorder_rejects_incomplete_order(self):
         first = Folder.objects.create(name='First', owner=self.user, sort_order=0)
         Folder.objects.create(name='Second', owner=self.user, sort_order=1)
@@ -173,6 +244,13 @@ class AuditLogTests(TestCase):
         response = self.client.get(reverse('public_verify'))
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'overflow-x: hidden;')
+        self.assertContains(response, 'id="public-pdf-overlay"')
+        self.assertContains(response, 'onclick="closePublicPdfPreview()"')
+        self.assertContains(response, "event.key === 'Escape'")
+        self.assertContains(response, 'id="mobile-doc-toggle"')
+        self.assertContains(response, 'id="public-doc-panel"')
+        self.assertContains(response, 'togglePublicDocsDrawer()')
         self.assertContains(response, "body.verification-active { overflow: hidden; }")
         self.assertContains(response, "document.body.classList.add('verification-active')")
         self.assertContains(response, "grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.75fr)")
@@ -214,7 +292,9 @@ class AuditLogTests(TestCase):
         self.assertContains(response, '.sidebar { display: none; }')
         self.assertContains(response, 'body { padding-left: 0; }')
         self.assertContains(response, 'title="Contracts" aria-label="Contracts"')
-        self.assertContains(response, 'title="Logout" aria-label="Logout"')
+        self.assertContains(response, 'id="contracts-doc-toggle"')
+        self.assertContains(response, 'id="profile-trigger"')
+        self.assertNotContains(response, 'title="Logout" aria-label="Logout"')
 
     def test_help_page_lists_questions_and_icon_picker(self):
         Tutorial.objects.create(

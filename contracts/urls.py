@@ -9,7 +9,6 @@ urlpatterns = [
     path('upload/', views.upload_contract, name='upload_contract'),
     path('encrypt/<int:contract_id>/', views.encrypt_contract, name='encrypt_contract'),
     path('delete/<int:contract_id>/', views.delete_contract, name='delete_contract'),
-    path('register/', views.register, name='register'),
     path('verify/physical/', views.verify_physical, name='verify_physical'),
     path('rename/<int:pk>/', views.rename_contract, name='rename_contract'),
     path('status/<int:pk>/',  views.update_status,   name='update_status'),

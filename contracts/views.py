@@ -3,7 +3,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from .models import Contract, Folder, ContractVersion, Tutorial
-from .forms import ContractForm, RegisterForm, TutorialForm, sanitize_tutorial_html
+from .forms import ContractForm, TutorialForm, sanitize_tutorial_html
 from .utils import (
     generate_file_hash,
     generate_canonical_fingerprint,
@@ -418,7 +418,9 @@ def add_revision(request, contract_id):
 @login_required
 def contract_list(request):
     contracts = Contract.objects.filter(is_trashed=False)
-    folders = Folder.objects.filter(owner=request.user)
+    # Folders are shared across the staff workspace.  Folder deletion and
+    # document removal are still enforced by delete_folder below.
+    folders = Folder.objects.all()
     return render(request, 'list.html', {'contracts': contracts, 'folders': folders})
 
 @login_required
@@ -504,16 +506,6 @@ def empty_trash(request):
             _hard_delete_contract(contract, request=request, note=f'Trash emptied: {contract.title}')
         return JsonResponse({'success': True, 'count': count})
     return JsonResponse({'success': False}, status=400)
-
-def register(request):
-    if request.method == 'POST':
-        form = RegisterForm(request.POST)
-        if form.is_valid():
-            form.save()
-            return redirect('/accounts/login/')
-    else:
-        form = RegisterForm()
-    return render(request, 'registration/register.html', {'form': form})
 
 def verify_physical(request):
 
@@ -1010,7 +1002,7 @@ def tag_contract(request, pk):
 @login_required
 def create_folder(request):
     if request.method == 'POST':
-        last_order = Folder.objects.filter(owner=request.user).order_by('-sort_order').values_list('sort_order', flat=True).first()
+        last_order = Folder.objects.order_by('-sort_order').values_list('sort_order', flat=True).first()
         folder = Folder.objects.create(
             name='Untitled Folder',
             owner=request.user,
@@ -1031,11 +1023,11 @@ def reorder_folders(request):
     except (TypeError, ValueError, json.JSONDecodeError):
         return JsonResponse({'success': False, 'error': 'invalid_order'}, status=400)
 
-    existing = list(Folder.objects.filter(owner=request.user).values_list('id', flat=True))
+    existing = list(Folder.objects.values_list('id', flat=True))
     if len(folder_ids) != len(set(folder_ids)) or sorted(folder_ids) != sorted(existing):
         return JsonResponse({'success': False, 'error': 'invalid_order'}, status=400)
 
-    folders = {folder.id: folder for folder in Folder.objects.filter(owner=request.user)}
+    folders = {folder.id: folder for folder in Folder.objects.all()}
     for position, folder_id in enumerate(folder_ids):
         folders[folder_id].sort_order = position
     Folder.objects.bulk_update(folders.values(), ['sort_order'])
@@ -1046,7 +1038,7 @@ def reorder_folders(request):
 def rename_folder(request, pk):
     if request.method == 'POST':
         import json
-        folder = get_object_or_404(Folder, pk=pk, owner=request.user)
+        folder = get_object_or_404(Folder, pk=pk)
         data = json.loads(request.body)
         new_name = data.get('name', '').strip()
         if new_name:
@@ -1064,7 +1056,7 @@ def assign_folder(request, contract_id):
         data = json.loads(request.body)
         folder_id = data.get('folder_id')
         if folder_id:
-            folder = get_object_or_404(Folder, pk=folder_id, owner=request.user)
+            folder = get_object_or_404(Folder, pk=folder_id)
             contract.folder = folder
         else:
             contract.folder = None
@@ -1076,7 +1068,7 @@ def assign_folder(request, contract_id):
 def delete_folder(request, pk):
     if request.method == 'POST':
         import json
-        folder = get_object_or_404(Folder, pk=pk, owner=request.user)
+        folder = get_object_or_404(Folder, pk=pk)
         data = json.loads(request.body)
         mode = data.get('mode', 'unassign')  # 'unassign' or 'delete_items'
         has_items = folder.contracts.exists()

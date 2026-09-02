@@ -1,8 +1,43 @@
 {% extends 'base.html' %}
 {% block title %}Verify Document{% endblock %}
 
+{% block mobile_topbar_extra %}
+<div class="mobile-topbar-extra mobile-topbar-left">
+<button type="button" class="mobile-nav-link mobile-doc-toggle" id="mobile-doc-toggle"
+        aria-label="Open verified documents" aria-controls="public-doc-panel"
+        aria-expanded="false" onclick="togglePublicDocsDrawer()">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <line x1="4" y1="6" x2="20" y2="6"/>
+    <line x1="4" y1="12" x2="20" y2="12"/>
+    <line x1="4" y1="18" x2="20" y2="18"/>
+  </svg>
+</button>
+</div>
+{% endblock %}
+
+{% block public_mobile_topbar_extra %}
+<div class="mobile-topbar-extra mobile-topbar-left">
+<button type="button" class="mobile-nav-link mobile-doc-toggle" id="mobile-doc-toggle"
+        aria-label="Open verified documents" aria-controls="public-doc-panel"
+        aria-expanded="false" onclick="togglePublicDocsDrawer()">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <line x1="4" y1="6" x2="20" y2="6"/>
+    <line x1="4" y1="12" x2="20" y2="12"/>
+    <line x1="4" y1="18" x2="20" y2="18"/>
+  </svg>
+</button>
+</div>
+{% endblock %}
+
 {% block content %}
 <style>
+    /* Off-canvas document and PDF panels must not widen the page on mobile. */
+    html,
+    body {
+        max-width: 100%;
+        overflow-x: hidden;
+    }
+
     .upload-area {
         border: 2px dashed #dde1e8;
         border-radius: 12px;
@@ -462,6 +497,11 @@
   }
   .doc-panel-empty { font-size: 12.5px; color: #aabbcc; padding: 8px 10px; }
 
+  .mobile-doc-toggle,
+  .mobile-doc-overlay {
+    display: none;
+  }
+
   .verify-page-wrap { margin-left: 240px; min-width: 0; }
   .verify-page-header,
   #upload-card,
@@ -475,7 +515,33 @@
     }
   }
   @media (max-width: 900px) {
-    .doc-panel { display: none; }
+    .mobile-doc-toggle {
+      display: inline-flex;
+      position: static;
+    }
+
+    .mobile-doc-overlay {
+      position: fixed;
+      inset: 56px 0 0;
+      z-index: 1240;
+      background: rgba(20, 27, 35, 0.35);
+    }
+
+    .mobile-doc-overlay.open { display: block; }
+
+    .doc-panel {
+      display: flex;
+      top: 56px;
+      left: 0;
+      bottom: 0;
+      width: min(84vw, 320px);
+      z-index: 1250;
+      transform: translateX(-105%);
+      transition: transform 0.25s ease;
+      box-shadow: 8px 0 24px rgba(30, 40, 50, 0.16);
+    }
+
+    .doc-panel.open { transform: translateX(0); }
     .verify-page-wrap { margin-left: 0; }
     body.verification-active .container {
       height: calc(100dvh - 56px);
@@ -491,10 +557,10 @@
   body.verification-active .verify-page-wrap,
   body.verification-active #loading-screen { height: 100%; min-height: 0; }
 
-  /* Hide the public sidebar + any open PDF panel while verifying, and reclaim its space */
+  /* Hide the public document browser while verification is running. */
   body.verification-active .doc-panel { display: none; }
-  body.verification-active .pdf-panel,
-  body.verification-active .pdf-overlay { display: none !important; }
+  body.verification-active .mobile-doc-toggle,
+  body.verification-active .mobile-doc-overlay { display: none !important; }
   body.verification-active .verify-page-wrap { margin-left: 0; }
 
   /* Belt-and-suspenders scroll lock — some browsers scroll <html> even when body is hidden */
@@ -629,7 +695,9 @@
   }
 </style>
 
-<aside class="doc-panel">
+<div class="mobile-doc-overlay" id="mobile-doc-overlay" aria-hidden="true" onclick="closePublicDocsDrawer()"></div>
+
+<aside class="doc-panel" id="public-doc-panel">
   <p class="panel-heading">Verified Contracts</p>
   <ul class="panel-list">
     {% for item in public_contracts %}
@@ -654,6 +722,7 @@
 </aside>
 
 <!-- PDF Preview Panel (public browse) -->
+<div class="pdf-overlay" id="public-pdf-overlay" aria-hidden="true" onclick="closePublicPdfPreview()"></div>
 <div class="pdf-panel" id="public-pdf-panel">
   <div class="pdf-panel-body">
     <div class="pdf-frame-wrap">
@@ -665,7 +734,7 @@
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
         </a>
-        <button class="icon-btn" onclick="closePublicPdfPreview()" title="Close">
+        <button class="icon-btn" onclick="closePublicPdfPreview()" title="Close" aria-label="Close PDF preview">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/>
             <line x1="6" y1="6" x2="18" y2="18"/>
@@ -1056,6 +1125,7 @@ function cancelVerification() {
 let currentPublicContractId = null;
 
 function openPublicPdfPreview(el) {
+  closePublicDocsDrawer();
   currentPublicContractId = el.dataset.contractId;
   document.getElementById('public-pdf-frame').src = el.dataset.url;
   document.getElementById('public-pdf-title').textContent = el.dataset.title;
@@ -1067,13 +1137,49 @@ function openPublicPdfPreview(el) {
   document.getElementById('public-pdf-version').textContent = el.dataset.version;
   document.getElementById('public-pdf-panel').classList.add('open');
   document.getElementById('public-pdf-overlay').classList.add('open');
+  document.getElementById('public-pdf-overlay').setAttribute('aria-hidden', 'false');
 }
 
 function closePublicPdfPreview() {
   document.getElementById('public-pdf-panel').classList.remove('open');
   document.getElementById('public-pdf-overlay').classList.remove('open');
+  document.getElementById('public-pdf-overlay').setAttribute('aria-hidden', 'true');
   document.getElementById('public-pdf-frame').src = '';
   currentPublicContractId = null;
+}
+
+document.addEventListener('keydown', function(event) {
+  if (event.key !== 'Escape') return;
+  if (currentPublicContractId) {
+    closePublicPdfPreview();
+  } else {
+    closePublicDocsDrawer();
+  }
+});
+
+function togglePublicDocsDrawer() {
+  const panel = document.getElementById('public-doc-panel');
+  if (!panel) return;
+  if (panel.classList.contains('open')) {
+    closePublicDocsDrawer();
+  } else {
+    panel.classList.add('open');
+    document.getElementById('mobile-doc-overlay').classList.add('open');
+    document.getElementById('mobile-doc-overlay').setAttribute('aria-hidden', 'false');
+    document.getElementById('mobile-doc-toggle').setAttribute('aria-expanded', 'true');
+  }
+}
+
+function closePublicDocsDrawer() {
+  const panel = document.getElementById('public-doc-panel');
+  const overlay = document.getElementById('mobile-doc-overlay');
+  const toggle = document.getElementById('mobile-doc-toggle');
+  if (panel) panel.classList.remove('open');
+  if (overlay) {
+    overlay.classList.remove('open');
+    overlay.setAttribute('aria-hidden', 'true');
+  }
+  if (toggle) toggle.setAttribute('aria-expanded', 'false');
 }
 
 function removeFromPublicVerify() {

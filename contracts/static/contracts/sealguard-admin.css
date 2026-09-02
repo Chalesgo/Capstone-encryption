@@ -1,0 +1,385 @@
+:root,
+html[data-theme="light"],
+html[data-theme="dark"] {
+    --primary: #3a3a3a;
+    --secondary: #4e4e4e;
+    --accent: #f4a34d;
+    --primary-fg: #ffffff;
+    --body-fg: #334455;
+    --body-bg: #f0efed;
+    --body-quiet-color: #778899;
+    --body-loud-color: #1a1a2e;
+    --header-color: #ffffff;
+    --header-branding-color: #ffffff;
+    --header-bg: #3a3a3a;
+    --header-link-color: #ffffff;
+    --breadcrumbs-fg: #667788;
+    --breadcrumbs-link-fg: #445566;
+    --breadcrumbs-bg: #f7f6f4;
+    --link-fg: #c87525;
+    --link-hover-color: #a95d18;
+    --link-selected-fg: #8a4b13;
+    --hairline-color: #e8e6e2;
+    --border-color: #dedbd6;
+    --error-fg: #b91c1c;
+    --message-success-bg: #e7f6ee;
+    --message-warning-bg: #fff4df;
+    --message-error-bg: #fdecec;
+    --darkened-bg: #f7f6f4;
+    --selected-bg: #fff4e8;
+    --selected-row: #fff8f0;
+    --button-fg: #ffffff;
+    --button-bg: #f4a34d;
+    --button-hover-bg: #e09038;
+    --default-button-bg: #f4a34d;
+    --default-button-hover-bg: #e09038;
+    --close-button-bg: #667788;
+    --close-button-hover-bg: #526476;
+    color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--body-bg);
+}
+
+#header {
+    min-height: 64px;
+    padding: 8px 24px;
+    background: #3a3a3a;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
+}
+
+#branding { flex: 1 1 auto; }
+
+.sealguard-admin-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 11px;
+    color: white !important;
+    text-decoration: none;
+}
+
+.sealguard-admin-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    color: #f4a34d;
+    background: rgba(244, 163, 77, 0.13);
+}
+
+.sealguard-admin-mark svg { width: 23px; height: 23px; }
+
+.sealguard-admin-brand strong {
+    display: block;
+    font-size: 18px;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+}
+
+.sealguard-admin-brand small {
+    display: block;
+    margin-top: 3px;
+    color: #bfc5ca;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+#user-tools {
+    font-size: 12px;
+    letter-spacing: 0;
+}
+
+#user-tools a { border-bottom: 0; }
+#user-tools a:hover { color: #f4a34d; }
+
+.sealguard-back-link {
+    flex: 0 0 auto;
+    margin-left: 16px;
+    padding: 8px 13px;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 8px;
+    color: white !important;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.sealguard-back-link:hover {
+    border-color: #f4a34d;
+    background: rgba(244, 163, 77, 0.13);
+}
+
+div.breadcrumbs {
+    padding: 13px 24px;
+    border-bottom: 1px solid #e8e6e2;
+    background: #f7f6f4;
+    color: #778899;
+}
+
+div.breadcrumbs a { color: #445566; }
+
+#content {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 28px 30px 40px;
+}
+
+#content h1 {
+    margin-bottom: 22px;
+    color: #1a1a2e;
+    font-size: 25px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+#content h2 { color: #334455; }
+
+.module,
+.inline-group,
+#changelist .actions,
+#changelist-filter,
+.submit-row,
+.login .form-row {
+    border: 1px solid #e8e6e2;
+    border-radius: 12px;
+    background: #ffffff;
+    box-shadow: 0 2px 8px rgba(30, 40, 50, 0.05);
+    overflow: hidden;
+}
+
+.module h2,
+.module caption,
+.inline-group h2 {
+    padding: 12px 16px;
+    background: #3a3a3a;
+    color: white;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+
+.module caption a { color: white; }
+
+#content-main .module table { border-collapse: collapse; }
+#content-main .module tr { border-bottom: 1px solid #eef0f2; }
+#content-main .module tr:last-child { border-bottom: 0; }
+#content-main .module th,
+#content-main .module td { padding: 12px 14px; }
+
+#nav-sidebar {
+    border-right: 1px solid #dedbd6;
+    background: #ffffff;
+}
+
+#nav-sidebar .module caption,
+#nav-sidebar .module caption a {
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#nav-sidebar .module caption a {
+    display: block;
+    color: #ffffff !important;
+    font-size: 12px;
+}
+
+#nav-sidebar .current-app .section,
+#nav-sidebar .current-model { background: #fff4e8; }
+
+#nav-filter {
+    display: block;
+    width: calc(100% - 24px);
+    min-width: 0;
+    margin: 12px;
+    padding: 9px 11px;
+    border: 1px solid #dedbd6;
+    border-radius: 8px;
+    color: #334455 !important;
+    background: #ffffff !important;
+}
+
+#nav-filter::placeholder {
+    color: #8899aa;
+    opacity: 1;
+}
+
+.toggle-nav-sidebar {
+    border-right-color: #dedbd6;
+    background: #f7f6f4;
+    color: #667788;
+}
+
+#changelist #toolbar {
+    width: 100%;
+    margin-bottom: 14px;
+    padding: 14px;
+    border: 1px solid #e8e6e2;
+    border-radius: 12px;
+    background: #ffffff;
+    box-shadow: 0 2px 8px rgba(30, 40, 50, 0.05);
+}
+
+#changelist-search,
+#changelist-search > div {
+    width: 100%;
+    max-width: 100%;
+}
+
+#changelist-search > div {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#changelist-search #searchbar {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+    color: #334455 !important;
+    background: #ffffff !important;
+}
+
+#changelist-search input[type="submit"] {
+    flex: 0 0 auto;
+}
+
+#changelist-filter,
+#changelist-filter a,
+#changelist-filter summary,
+#changelist-filter h3 {
+    color: #334455;
+}
+
+#changelist-filter select,
+#changelist-filter input {
+    color: #334455 !important;
+    background: #ffffff !important;
+}
+
+input,
+textarea,
+select,
+.vTextField {
+    border: 1px solid #d8d5d0 !important;
+    border-radius: 8px !important;
+    background: white !important;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    border-color: #f4a34d !important;
+    outline: 3px solid rgba(244, 163, 77, 0.14) !important;
+}
+
+.button,
+input[type="submit"],
+input[type="button"],
+.submit-row input,
+a.button {
+    min-height: 36px;
+    padding: 9px 16px;
+    border: 0;
+    border-radius: 8px;
+    background: #f4a34d !important;
+    color: #ffffff !important;
+    font-weight: 600;
+}
+
+.button:hover,
+input[type="submit"]:hover,
+input[type="button"]:hover,
+.submit-row input:hover,
+a.button:hover {
+    background: #e09038 !important;
+    color: #ffffff !important;
+}
+
+.submit-row a.deletelink {
+    border-radius: 8px;
+    background: #dc2626 !important;
+    color: #ffffff !important;
+}
+
+.submit-row a.deletelink:hover { background: #b91c1c !important; }
+
+.object-tools a {
+    border-radius: 8px;
+    background: #f4a34d;
+    font-weight: 600;
+}
+
+.object-tools a:hover { background: #e09038; }
+
+#changelist .actions {
+    margin-bottom: 14px;
+    padding: 12px 14px;
+}
+
+#changelist-filter {
+    padding-bottom: 12px;
+}
+
+#changelist-filter h2 { border-radius: 11px 11px 0 0; }
+
+#changelist-filter h3,
+#changelist-filter li { padding-left: 16px; padding-right: 16px; }
+
+.paginator {
+    margin-top: 14px !important;
+    border-radius: 10px;
+    background: white;
+}
+
+.submit-row {
+    padding: 14px;
+}
+
+.messagelist li {
+    margin-bottom: 10px;
+    border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(30, 40, 50, 0.04);
+}
+
+.login { background: #f0efed; }
+
+.login #container {
+    width: min(430px, calc(100vw - 32px));
+    margin-top: 8vh;
+    border: 1px solid #e8e6e2;
+    border-radius: 16px;
+    background: white;
+    box-shadow: 0 18px 50px rgba(30, 40, 50, 0.14);
+    overflow: hidden;
+}
+
+.login #header {
+    height: auto;
+    min-height: 80px;
+    padding: 14px 22px;
+}
+
+.login #content { padding: 28px; }
+.login .form-row { padding: 0; border: 0; box-shadow: none; }
+.login .submit-row { padding: 16px 0 0; border: 0; box-shadow: none; }
+
+@media (max-width: 767px) {
+    #header {
+        align-items: center;
+        padding: 8px 12px;
+    }
+
+    .sealguard-admin-brand small,
+    .sealguard-back-link { display: none; }
+
+    #content { padding: 20px 14px 32px; }
+    div.breadcrumbs { padding: 11px 14px; }
+}
