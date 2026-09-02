@@ -1,5 +1,6 @@
 from datetime import timedelta
 import base64
+import json
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -13,10 +14,17 @@ from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
 
-from .models import AuditLog, Contract, ContractVersion, Folder, Tutorial
+from .models import (
+    AuditLog, Contract, ContractVersion, Folder, PhysicalVerificationManifest, Tutorial,
+)
+from .physical_verification import (
+    build_manifest, canonical_json, encode_page_token, sign_manifest,
+    verify_manifest_signature,
+)
 from .forms import sanitize_tutorial_html
 from .utils import (
     encrypt_cf,
+    embed_data_in_image,
     generate_canonical_fingerprint,
     log_activity,
     stamp_seal_on_pdf,
@@ -459,6 +467,7 @@ class PublicVerificationCryptoTests(TestCase):
 
         media_root = Path(self.media_directory.name)
         source_path = media_root / 'source.pdf'
+        default_seal_path = media_root / 'default-seal.png'
         seal_path = media_root / 'seal.png'
         sealed_path = media_root / 'sealed.pdf'
 
@@ -466,13 +475,14 @@ class PublicVerificationCryptoTests(TestCase):
         source.new_page().insert_text((72, 72), 'Official procurement agreement: PHP 10,000.00')
         source.save(source_path)
         source.close()
-        Image.new('RGBA', (160, 160), (30, 95, 85, 255)).save(seal_path)
+        Image.new('RGBA', (160, 160), (30, 95, 85, 255)).save(default_seal_path)
 
         self.original_fingerprint = generate_canonical_fingerprint(source_path)
         encrypted, hmac_value, wrapped_key, aes_iv = encrypt_cf(
             self.original_fingerprint,
             str(self.public_key_path),
         )
+        embed_data_in_image(default_seal_path, seal_path, encrypted)
         stamp_seal_on_pdf(
             source_path,
             sealed_path,
@@ -582,6 +592,11 @@ class PublicVerificationCryptoTests(TestCase):
 
         self.assertEqual(result, 'tampered')
 
+    @patch('contracts.views.extract_lsb_marker_from_pdf', return_value=None)
+    def test_missing_or_changed_lsb_marker_is_rejected(self, _extract_marker):
+        result, _debug_log = self.verify()
+        self.assertEqual(result, 'tampered')
+
     def test_changed_sealed_pdf_fingerprint_is_rejected(self):
         def change_non_marker_metadata(document):
             metadata = document.metadata
@@ -597,7 +612,7 @@ class PublicVerificationCryptoTests(TestCase):
 
         result, _debug_log = self.verify()
 
-        self.assertEqual(result, 'error')
+        self.assertEqual(result, 'not_found')
         self.assertEqual(self.client.session['verify_filename_hint'], 'unknown')
 
     def test_broken_version_chain_is_rejected(self):
@@ -607,3 +622,204 @@ class PublicVerificationCryptoTests(TestCase):
         result, _debug_log = self.verify()
 
         self.assertEqual(result, 'tampered')
+
+
+class PhysicalVerificationTests(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.key_directory = tempfile.TemporaryDirectory()
+        key = RSA.generate(2048)
+        cls.private_key_path = Path(cls.key_directory.name) / 'private.pem'
+        cls.public_key_path = Path(cls.key_directory.name) / 'public.pem'
+        cls.private_key_path.write_bytes(key.export_key())
+        cls.public_key_path.write_bytes(key.publickey().export_key())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.key_directory.cleanup()
+        super().tearDownClass()
+
+    def setUp(self):
+        self.media_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.media_directory.cleanup)
+        self.settings_override = override_settings(
+            MEDIA_ROOT=self.media_directory.name,
+            RSA_PRIVATE_KEY_PATH=str(self.private_key_path),
+            RSA_PUBLIC_KEY_PATH=str(self.public_key_path),
+        )
+        self.settings_override.enable()
+        self.addCleanup(self.settings_override.disable)
+        seal_directory = Path(self.media_directory.name) / 'seals'
+        seal_directory.mkdir(parents=True, exist_ok=True)
+        Image.new('RGBA', (240, 240), (35, 105, 90, 255)).save(
+            seal_directory / 'default_seal.png'
+        )
+        self.user = User.objects.create_user('physical_staff', password='password')
+        self.contract, self.version, self.tokens, self.pdf_bytes = self.issue_document(
+            'Contract A', ['Page one amount PHP 3,000', 'Page two terms and signature', 'Page three approval']
+        )
+
+    def issue_document(self, title, page_texts, contract=None, version_number=1):
+        media_root = Path(self.media_directory.name)
+        document = fitz.open()
+        for text in page_texts:
+            page = document.new_page()
+            page.insert_text((72, 90), text, fontsize=16)
+        filename = f'{title.replace(" ", "_")}_v{version_number}_{Contract.objects.count()}.pdf'
+        path = media_root / 'contracts' / filename
+        path.parent.mkdir(parents=True, exist_ok=True)
+        document.save(path)
+        document.close()
+        fingerprint = generate_canonical_fingerprint(path)
+        contract = contract or Contract.objects.create(
+            title=title, file=f'contracts/{filename}', fingerprint=fingerprint,
+            original_fingerprint=fingerprint,
+        )
+        version = ContractVersion.objects.create(
+            contract=contract, version_number=version_number, source='upload',
+            file=f'contracts/{filename}', fingerprint=fingerprint,
+        )
+        manifest, tokens = build_manifest(
+            contract.id, version_number, path, fingerprint, timezone.now()
+        )
+        PhysicalVerificationManifest.objects.create(
+            version=version, manifest_id=manifest['manifest_id'], manifest=manifest,
+            signature=sign_manifest(manifest, self.private_key_path),
+        )
+        return contract, version, tokens, path.read_bytes()
+
+    def verify(self, tokens=None, pdf_bytes=None):
+        upload = SimpleUploadedFile(
+            'physical.pdf', pdf_bytes or self.pdf_bytes, content_type='application/pdf'
+        )
+        return self.client.post(reverse('verify_physical'), {
+            'physical_file': upload,
+            'page_tokens': json.dumps(tokens or self.tokens),
+        })
+
+    def mutate_pdf(self, callback):
+        document = fitz.open(stream=self.pdf_bytes, filetype='pdf')
+        callback(document)
+        data = document.tobytes(garbage=4, deflate=True)
+        document.close()
+        return data
+
+    def test_all_pages_from_correct_contract_are_verified_in_order(self):
+        response = self.verify()
+        self.assertEqual(response.context['result'], 'verified')
+
+    def test_page_from_another_contract_is_invalid(self):
+        _contract, _version, other_tokens, _data = self.issue_document(
+            'Contract B', ['Other one', 'Other two', 'Other three']
+        )
+        response = self.verify([self.tokens[0], other_tokens[1], self.tokens[2]])
+        self.assertEqual(response.context['result'], 'invalid')
+
+    def test_page_from_another_version_is_invalid(self):
+        _contract, _version, newer_tokens, _data = self.issue_document(
+            'Contract A v2', ['New one', 'New two', 'New three'], self.contract, 2
+        )
+        response = self.verify([self.tokens[0], newer_tokens[1], self.tokens[2]])
+        self.assertEqual(response.context['result'], 'invalid')
+
+    def test_reordered_pages_are_invalid(self):
+        response = self.verify([self.tokens[0], self.tokens[2], self.tokens[1]])
+        self.assertEqual(response.context['result'], 'invalid')
+        self.assertEqual(response.context['details']['submitted_order'], [1, 3, 2])
+
+    def test_missing_page_is_reported(self):
+        response = self.verify(self.tokens[:2])
+        self.assertEqual(response.context['result'], 'invalid')
+        self.assertEqual(response.context['details']['missing_pages'], [3])
+
+    def test_duplicate_page_and_missing_page_are_reported(self):
+        response = self.verify([self.tokens[0], self.tokens[1], self.tokens[1]])
+        self.assertEqual(response.context['result'], 'invalid')
+        self.assertEqual(response.context['details']['duplicate_pages'], [2])
+        self.assertEqual(response.context['details']['missing_pages'], [3])
+
+    def test_incorrect_total_page_information_is_invalid(self):
+        payload = json.loads(base64.urlsafe_b64decode(
+            self.tokens[0][5:] + '=' * (-len(self.tokens[0][5:]) % 4)
+        ))
+        payload['n'] = 99
+        encoded = base64.urlsafe_b64encode(canonical_json(payload).encode()).rstrip(b'=').decode()
+        response = self.verify(['SGP1.' + encoded, *self.tokens[1:]])
+        self.assertEqual(response.context['result'], 'invalid')
+
+    def test_modified_page_token_is_invalid(self):
+        response = self.verify([self.tokens[0][:-1] + 'A', *self.tokens[1:]])
+        self.assertEqual(response.context['result'], 'invalid')
+
+    def test_invalid_manifest_signature_is_invalid(self):
+        manifest = self.version.physical_manifest
+        manifest.signature = base64.b64encode(b'not a signature').decode()
+        manifest.save(update_fields=['signature'])
+        response = self.verify()
+        self.assertEqual(response.context['result'], 'invalid')
+
+    def test_copied_valid_qr_on_altered_page_detects_differences(self):
+        def alter(document):
+            page = document[0]
+            page.add_redact_annot(page.rect, fill=(1, 1, 1))
+            page.apply_redactions()
+            page.insert_text((72, 90), 'FORGED PAGE amount PHP 1,500', fontsize=16)
+        response = self.verify(pdf_bytes=self.mutate_pdf(alter))
+        self.assertEqual(response.context['result'], 'differences')
+
+    def test_authorized_staff_can_open_difference_comparison(self):
+        self.client.force_login(self.user)
+        def alter(document):
+            document[0].insert_text((72, 140), 'UNAUTHORIZED CLAUSE ' * 12, fontsize=14)
+        response = self.verify(pdf_bytes=self.mutate_pdf(alter))
+        review_url = response.context['details']['review_url']
+        review = self.client.get(review_url)
+        self.assertEqual(review.status_code, 200)
+        self.assertContains(review, 'Submitted scan')
+        self.assertContains(review, 'Registered official version')
+
+    def test_slight_visual_degradation_with_same_text_is_accepted(self):
+        degraded = self.mutate_pdf(
+            lambda document: document[0].draw_rect(
+                fitz.Rect(5, 5, 15, 15), color=(0.9, 0.9, 0.9), fill=(0.9, 0.9, 0.9)
+            )
+        )
+        response = self.verify(pdf_bytes=degraded)
+        self.assertEqual(response.context['result'], 'verified')
+
+    def test_image_only_poor_scan_requires_manual_review(self):
+        document = fitz.open()
+        for _index in range(3):
+            document.new_page()
+        poor_scan = document.tobytes()
+        document.close()
+        response = self.verify(pdf_bytes=poor_scan)
+        self.assertEqual(response.context['result'], 'manual_review')
+
+    def test_initial_enrollment_creates_signed_manifest_and_page_tokens(self):
+        self.client.force_login(self.user)
+        upload = SimpleUploadedFile('issued.pdf', self.pdf_bytes, content_type='application/pdf')
+        response = self.client.post(reverse('upload_contract'), {'title': 'Issued', 'file': upload})
+        self.assertEqual(response.status_code, 302)
+        issued = Contract.objects.get(title='Issued')
+        manifest = issued.versions.get(version_number=1).physical_manifest
+        self.assertTrue(verify_manifest_signature(
+            manifest.manifest, manifest.signature, self.public_key_path
+        ))
+        self.assertEqual(manifest.manifest['total_pages'], 3)
+
+    def test_signed_scan_gets_new_manifest_and_new_encryption(self):
+        self.client.force_login(self.user)
+        old_manifest_id = self.version.physical_manifest.manifest_id
+        upload = SimpleUploadedFile('signed.pdf', self.pdf_bytes, content_type='application/pdf')
+        response = self.client.post(
+            reverse('upload_signed_scan', args=[self.contract.id]), {'scanned_file': upload}
+        )
+        self.assertEqual(response.status_code, 302)
+        new_version = self.contract.versions.get(version_number=2)
+        self.contract.refresh_from_db()
+        self.assertEqual(new_version.source, 'physical_scan')
+        self.assertNotEqual(new_version.physical_manifest.manifest_id, old_manifest_id)
+        self.assertTrue(new_version.encrypted_cf)
+        self.assertEqual(self.contract.file.name, new_version.file.name)

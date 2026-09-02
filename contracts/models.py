@@ -82,6 +82,19 @@ class ContractVersion(models.Model):
     def __str__(self):
         return f"{self.contract.title} — v{self.version_number} ({self.get_source_display()})"
 
+class PhysicalVerificationManifest(models.Model):
+    version = models.OneToOneField(
+        ContractVersion, on_delete=models.CASCADE, related_name='physical_manifest'
+    )
+    manifest_id = models.CharField(max_length=64, unique=True, db_index=True)
+    manifest = models.JSONField()
+    signature = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Physical manifest {self.manifest_id[:12]} for {self.version}"
+
+
 def validate_pdf_signature(file):
     """Model-level check — catches uploads made outside ContractForm (e.g. via /admin/)."""
     try:

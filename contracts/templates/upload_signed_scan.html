@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}Register Signed Scan{% endblock %}
+{% block content %}
+<div style="max-width:620px;margin:0 auto">
+  <h1 style="font-size:26px;color:#1a1a2e">Register Signed Scan</h1>
+  <p style="color:#667788">{{ contract.title }}</p>
+  <form method="post" enctype="multipart/form-data" class="card" style="display:flex;flex-direction:column;gap:14px">
+    {% csrf_token %}
+    <label for="scanned-file">Signed contract PDF</label>
+    <input id="scanned-file" name="scanned_file" type="file" accept="application/pdf" required>
+    <button class="btn btn-primary" type="submit">Register signed version</button>
+  </form>
+</div>
+{% endblock %}

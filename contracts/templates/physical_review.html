@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}Physical Verification Review{% endblock %}
+{% block content %}
+<div class="review-shell">
+  <header><h1>Physical Verification Review</h1><p>{{ audit_log.contract.title }} | Version {{ version.version_number }}</p></header>
+  <div class="review-grid">
+    <section><h2>Submitted scan</h2><iframe src="{{ submitted_url }}" title="Submitted scan"></iframe></section>
+    <section><h2>Registered official version</h2><iframe src="{{ version.file.url }}" title="Registered official version"></iframe></section>
+  </div>
+</div>
+<style>
+.review-shell{max-width:1400px;margin:0 auto}.review-shell h1{font-size:24px}.review-shell h2{font-size:16px}.review-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.review-grid section{min-width:0}.review-grid iframe{width:100%;height:72vh;border:1px solid #cbd2d9;background:#fff}@media(max-width:800px){.review-grid{grid-template-columns:1fr}.review-grid iframe{height:60vh}}
+</style>
+{% endblock %}

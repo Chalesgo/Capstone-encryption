@@ -11,6 +11,7 @@ urlpatterns = [
     path('delete/<int:contract_id>/', views.delete_contract, name='delete_contract'),
     path('delete/bulk/', views.bulk_delete_contracts, name='bulk_delete_contracts'),
     path('verify/physical/', views.verify_physical, name='verify_physical'),
+    path('verify/physical/review/<int:log_id>/<int:version_id>/', views.physical_verification_review, name='physical_verification_review'),
     path('rename/<int:pk>/', views.rename_contract, name='rename_contract'),
     path('status/<int:pk>/',  views.update_status,   name='update_status'),
     path('dashboard/', views.dashboard, name='dashboard'),

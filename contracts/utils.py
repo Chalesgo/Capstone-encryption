@@ -3,6 +3,7 @@ import hmac as hmac_lib
 import fitz
 import base64
 import os
+from io import BytesIO
 from PIL import Image
 from Crypto.Cipher import AES, PKCS1_OAEP
 from Crypto.PublicKey import RSA
@@ -19,8 +20,11 @@ def generate_file_hash(file):
 # ─── Canonical Fingerprint ─────────────────────────────────
 def generate_canonical_fingerprint(pdf_path, previous_cf=None):
     """
-    Generates CF by hashing text, images, and metadata from the PDF.
-    h_text + h_images + h_vectors all combined into one SHA-256 hash.
+    Generates CF by hashing extracted text, embedded images, and metadata.
+
+    Vector drawing commands are intentionally excluded: PyMuPDF's interpreted
+    drawing output is not stable enough across PDF producers and library versions
+    to serve as a long-lived canonical identifier.
 
     If previous_cf is provided, it is folded into the hash as well,
     chaining this version's fingerprint to the prior version's fingerprint
@@ -229,7 +233,38 @@ def extract_data_from_image(image_path: str):
     result = ''.join(chars)
     return result.replace("||END||", "")
 
-def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None, encrypted_cf=None):
+
+def extract_lsb_marker_from_pdf(pdf_path: str, expected_marker: str):
+    """Return the expected LSB marker if it survives as an embedded PDF image."""
+    try:
+        with fitz.open(pdf_path) as document:
+            seen = set()
+            for page in document:
+                for image_info in page.get_images(full=True):
+                    xref = image_info[0]
+                    if xref in seen:
+                        continue
+                    seen.add(xref)
+                    image_bytes = document.extract_image(xref)['image']
+                    image = Image.open(BytesIO(image_bytes)).convert('RGBA')
+                    bits = []
+                    chars = []
+                    for red, green, blue, _alpha in image.getdata():
+                        bits.extend((str(red & 1), str(green & 1), str(blue & 1)))
+                        while len(bits) >= 8:
+                            chars.append(chr(int(''.join(bits[:8]), 2)))
+                            del bits[:8]
+                            if ''.join(chars[-7:]) == '||END||':
+                                value = ''.join(chars[:-7])
+                                if hmac_lib.compare_digest(value, expected_marker):
+                                    return value
+                                break
+    except Exception:
+        return None
+    return None
+
+def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None, encrypted_cf=None,
+                      qr_paths=None):
     """
     Creates a new PDF with extended page size to fit an authentication
     strip below content. Stores encrypted CF in PDF metadata for
@@ -317,7 +352,8 @@ def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None, encrypted_
         )
 
         # ── QR box (right), only if provided ──
-        if qr_path:
+        page_qr_path = qr_paths[src_page.number] if qr_paths else qr_path
+        if page_qr_path:
             qr_box_x = page_width - qr_box_size - padding
             qr_box_y = strip_y + (strip_height - qr_box_size) / 2 - 6
             qr_box_rect = fitz.Rect(qr_box_x, qr_box_y, qr_box_x + qr_box_size, qr_box_y + qr_box_size)
@@ -325,7 +361,7 @@ def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None, encrypted_
             new_page.draw_rect(qr_box_rect, color=border_color, fill=(1, 1, 1), width=1)
             new_page.insert_image(
                 fitz.Rect(qr_box_x + 6, qr_box_y + 6, qr_box_x + qr_box_size - 6, qr_box_y + qr_box_size - 6),
-                filename=qr_path,
+                filename=page_qr_path,
                 overlay=True,
             )
             new_page.insert_textbox(

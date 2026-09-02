@@ -2,7 +2,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
-from .models import Contract, Folder, ContractVersion, Tutorial
+from .models import Contract, Folder, ContractVersion, PhysicalVerificationManifest, Tutorial
 from .forms import ContractForm, TutorialForm, sanitize_tutorial_html
 from .utils import (
     generate_file_hash,
@@ -11,6 +11,7 @@ from .utils import (
     decrypt_cf,
     embed_data_in_image,
     extract_data_from_image,
+    extract_lsb_marker_from_pdf,
     extract_cf_from_metadata,
     stamp_seal_on_pdf,
     generate_qr_code,
@@ -24,6 +25,8 @@ import uuid
 import fitz
 from .utils import generate_qr_code
 import base64
+import json
+from PIL import Image
 from hmac import compare_digest
 from django.http import JsonResponse, FileResponse, Http404
 from .utils import log_activity
@@ -33,6 +36,10 @@ from datetime import timedelta
 from django.core.paginator import Paginator
 from django.urls import reverse
 from django.core.files import File
+from .physical_verification import (
+    build_manifest, compare_page, decode_page_token, sign_manifest,
+    validate_token_membership, verify_manifest_signature,
+)
 
 TRASH_RETENTION_DAYS = 15
 logger = logging.getLogger(__name__)
@@ -48,6 +55,30 @@ def _process_log(process, stage, *, contract=None, request=None, level='info', *
         **details,
     }
     getattr(logger, level)("document_process %s", safe_details)
+
+
+def _prepare_physical_manifest(contract, version_number, source_pdf, source_fingerprint):
+    manifest, tokens = build_manifest(
+        contract.id, version_number, source_pdf, source_fingerprint, timezone.now()
+    )
+    signature = sign_manifest(manifest, settings.RSA_PRIVATE_KEY_PATH)
+    qr_directory = os.path.join(
+        settings.MEDIA_ROOT, 'seals', 'physical', f'contract_{contract.id}_v{version_number}'
+    )
+    os.makedirs(qr_directory, exist_ok=True)
+    qr_paths = []
+    for page_number, token in enumerate(tokens, start=1):
+        path = os.path.join(qr_directory, f'page_{page_number}.png')
+        generate_qr_code(token, path)
+        qr_paths.append(path)
+    return manifest, signature, qr_paths
+
+
+def _save_physical_manifest(version, manifest, signature):
+    return PhysicalVerificationManifest.objects.create(
+        version=version, manifest_id=manifest['manifest_id'],
+        manifest=manifest, signature=signature,
+    )
 
 
 def _hard_delete_contract(contract, request=None, note=''):
@@ -183,6 +214,9 @@ def upload_contract(request):
             _process_log('initial_encryption', 'lsb_seal_created', contract=contract, request=request)
 
             # ── Step 4: Generate QR ──
+            manifest, manifest_signature, qr_paths = _prepare_physical_manifest(
+                contract, 1, pdf_path, original_cf
+            )
             generate_qr_code(encrypted, qr_path)
             _process_log('initial_encryption', 'qr_marker_created', contract=contract, request=request)
 
@@ -191,7 +225,10 @@ def upload_contract(request):
             # when two users upload PDFs with the same original filename.
             final_filename = f"contract_{contract.id}_v1.pdf"
             final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
-            stamp_seal_on_pdf(pdf_path, final_pdf_path, stamped_seal, qr_path=qr_path, encrypted_cf=encrypted)
+            stamp_seal_on_pdf(
+                pdf_path, final_pdf_path, stamped_seal, qr_path=qr_path,
+                encrypted_cf=encrypted, qr_paths=qr_paths,
+            )
             _process_log('initial_encryption', 'pdf_sealed', contract=contract, request=request)
 
             # ── Step 6: Generate CF from SEALED pdf ──
@@ -213,7 +250,7 @@ def upload_contract(request):
             contract.seal_image = f'seals/seal_{contract.id}.png'
             contract.save()
 
-            ContractVersion.objects.create(
+            version = ContractVersion.objects.create(
                 contract=contract,
                 version_number=1,
                 source='upload',
@@ -232,6 +269,7 @@ def upload_contract(request):
                 request, 'added', contract=contract,
                 note=f'Initial encryption completed; version=1; duration_ms={elapsed_ms}'
             )
+            _save_physical_manifest(version, manifest, manifest_signature)
             _process_log(
                 'initial_encryption', 'completed', contract=contract, request=request,
                 version=1, duration_ms=elapsed_ms,
@@ -272,9 +310,15 @@ def encrypt_contract(request, contract_id):
     _process_log('reencryption', 'qr_marker_created', contract=contract, request=request)
 
     next_version_number = (latest_version.version_number + 1) if latest_version else 1
+    manifest, manifest_signature, qr_paths = _prepare_physical_manifest(
+        contract, next_version_number, pdf_path, original_cf
+    )
     final_filename = f"contract_{contract.id}_v{next_version_number}.pdf"
     final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
-    stamp_seal_on_pdf(pdf_path, final_pdf_path, stamped_seal, qr_path=qr_path, encrypted_cf=encrypted)
+    stamp_seal_on_pdf(
+        pdf_path, final_pdf_path, stamped_seal, qr_path=qr_path,
+        encrypted_cf=encrypted, qr_paths=qr_paths,
+    )
     _process_log('reencryption', 'pdf_sealed', contract=contract, request=request, version=next_version_number)
 
     sealed_cf = generate_canonical_fingerprint(final_pdf_path)
@@ -291,7 +335,7 @@ def encrypt_contract(request, contract_id):
     contract.seal_image = f'seals/seal_{contract.id}.png'
     contract.save()
 
-    ContractVersion.objects.create(
+    version = ContractVersion.objects.create(
         contract=contract,
         version_number=next_version_number,
         source='reencrypt',
@@ -310,6 +354,7 @@ def encrypt_contract(request, contract_id):
         request, 'encrypted', contract=contract,
         note=f'Re-encryption completed; version={next_version_number}; duration_ms={elapsed_ms}'
     )
+    _save_physical_manifest(version, manifest, manifest_signature)
     _process_log(
         'reencryption', 'completed', contract=contract, request=request,
         version=next_version_number, duration_ms=elapsed_ms,
@@ -367,9 +412,15 @@ def add_revision(request, contract_id):
         _process_log('revision_encryption', 'qr_marker_created', contract=contract, request=request)
 
         next_version_number = (latest_version.version_number + 1) if latest_version else 1
+        manifest, manifest_signature, qr_paths = _prepare_physical_manifest(
+            contract, next_version_number, temp_path, original_cf
+        )
         final_filename = f"contract_{contract.id}_v{next_version_number}.pdf"
         final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
-        stamp_seal_on_pdf(temp_path, final_pdf_path, stamped_seal, qr_path=qr_path, encrypted_cf=encrypted)
+        stamp_seal_on_pdf(
+            temp_path, final_pdf_path, stamped_seal, qr_path=qr_path,
+            encrypted_cf=encrypted, qr_paths=qr_paths,
+        )
         _process_log('revision_encryption', 'pdf_sealed', contract=contract, request=request, version=next_version_number)
 
         sealed_cf = generate_canonical_fingerprint(final_pdf_path)
@@ -389,7 +440,7 @@ def add_revision(request, contract_id):
         if os.path.isfile(temp_path):
             os.remove(temp_path)
 
-        ContractVersion.objects.create(
+        version = ContractVersion.objects.create(
             contract=contract,
             version_number=next_version_number,
             source='revision',
@@ -408,6 +459,7 @@ def add_revision(request, contract_id):
             request, 'edited', contract=contract,
             note=f'New revision encrypted; version={next_version_number}; duration_ms={elapsed_ms}'
         )
+        _save_physical_manifest(version, manifest, manifest_signature)
         _process_log(
             'revision_encryption', 'completed', contract=contract, request=request,
             version=next_version_number, duration_ms=elapsed_ms,
@@ -545,37 +597,145 @@ def empty_trash(request):
     return JsonResponse({'success': False}, status=400)
 
 def verify_physical(request):
-
     result = None
-    
+    details = {}
     if request.method == 'POST':
-        qr_data = request.POST.get('qr_data', '').strip()
-        
-        if qr_data:
-            try:
-                matched_contract = None
-                
-                for contract in Contract.objects.exclude(encrypted_cf='').filter(is_trashed=False):
-                    try:
-                        if qr_data == contract.encrypted_cf:
-                            matched_contract = contract
-                            break
-                    except Exception:
-                        continue
-                
-                if matched_contract:
-                    result = 'authentic'
-                    log_activity(request, 'viewed', contract=matched_contract, note='Verification: authentic')
-                else:
-                    result = 'tampered'
-                    log_activity(request, 'reported_tampering', contract=None, note=f"QR verification failed for data: {qr_data[:50]}")
-                    
-            except Exception:
-                result = 'error'
-        else:
+        uploaded_files = request.FILES.getlist('physical_file')
+        uploaded_file = uploaded_files[0] if uploaded_files else None
+        raw_tokens = request.POST.get('page_tokens', '').strip()
+        temp_path = None
+        try:
+            tokens = json.loads(raw_tokens)
+            if not uploaded_file or not isinstance(tokens, list) or not tokens:
+                raise ValueError('A scan and all page QR tokens are required.')
+            temp_directory = os.path.join(settings.MEDIA_ROOT, 'temp', 'physical')
+            os.makedirs(temp_directory, exist_ok=True)
+            temp_path = os.path.join(temp_directory, f'{uuid.uuid4().hex}.pdf')
+            uploaded_file.seek(0)
+            if len(uploaded_files) == 1 and uploaded_file.read(5) == b'%PDF-':
+                uploaded_file.seek(0)
+                with open(temp_path, 'wb') as destination:
+                    for chunk in uploaded_file.chunks():
+                        destination.write(chunk)
+            else:
+                images = []
+                for page_file in uploaded_files:
+                    page_file.seek(0)
+                    images.append(Image.open(page_file).convert('RGB'))
+                if not images:
+                    raise ValueError('Upload a scanned PDF or page photographs.')
+                images[0].save(temp_path, 'PDF', save_all=True, append_images=images[1:])
+
+            payloads = [decode_page_token(token) for token in tokens]
+            manifest_record = PhysicalVerificationManifest.objects.select_related(
+                'version__contract'
+            ).filter(manifest_id=payloads[0]['m']).first()
+            if not manifest_record:
+                result = 'invalid'
+                details['message'] = 'No SealGuard physical manifest was found for these pages.'
+            elif not verify_manifest_signature(
+                manifest_record.manifest, manifest_record.signature, settings.RSA_PUBLIC_KEY_PATH
+            ):
+                result = 'invalid'
+                details['message'] = 'The registered manifest signature is invalid.'
+            else:
+                manifest = manifest_record.manifest
+                contract = manifest_record.version.contract
+                token_membership_valid = all(
+                    validate_token_membership(payload, manifest) for payload in payloads
+                )
+                page_numbers = [int(payload['p']) for payload in payloads]
+                expected_numbers = list(range(1, manifest['total_pages'] + 1))
+                duplicates = sorted({number for number in page_numbers if page_numbers.count(number) > 1})
+                missing = sorted(set(expected_numbers) - set(page_numbers))
+                mixed = any(payload['m'] != manifest['manifest_id'] for payload in payloads)
+                details.update({
+                    'contract': contract,
+                    'version': manifest['version_number'],
+                    'missing_pages': missing,
+                    'duplicate_pages': duplicates,
+                    'submitted_order': page_numbers,
+                    'expected_order': expected_numbers,
+                })
+
+                with fitz.open(temp_path) as scan_document:
+                    page_count_matches = scan_document.page_count == manifest['total_pages']
+                    token_count_matches = len(payloads) == scan_document.page_count
+                    structure_valid = (
+                        token_membership_valid and not mixed and not duplicates and not missing
+                        and page_numbers == expected_numbers and page_count_matches and token_count_matches
+                    )
+                    if not structure_valid:
+                        result = 'invalid'
+                        details['message'] = 'The submitted pages do not match the registered document structure.'
+                    else:
+                        comparisons = []
+                        with fitz.open(manifest_record.version.file.path) as official_document:
+                            for index, payload in enumerate(payloads):
+                                page_number = int(payload['p'])
+                                comparison = compare_page(
+                                    scan_document[index], official_document[page_number - 1],
+                                    official_document[page_number - 1].get_text('text'),
+                                )
+                                comparison['page_number'] = page_number
+                                comparisons.append(comparison)
+                        details['comparisons'] = comparisons
+                        states = {comparison['state'] for comparison in comparisons}
+                        if 'differences' in states:
+                            result = 'differences'
+                            details['message'] = 'Valid page identities were found, but content differences were detected.'
+                        elif 'manual_review' in states:
+                            result = 'manual_review'
+                            details['message'] = 'Page identity is valid, but scan quality requires staff review.'
+                        else:
+                            result = 'verified'
+                            details['message'] = 'Every page and its registered content passed verification.'
+
+                action = (
+                    'viewed' if result == 'verified'
+                    else 'reported_tampering' if result == 'differences'
+                    else 'verification'
+                )
+                verification_log = log_activity(
+                    request, action, contract=contract,
+                    note=f'Physical verification: {result}; version={manifest["version_number"]}',
+                )
+                if result in {'differences', 'manual_review'}:
+                    _attach_verification_evidence(verification_log, temp_path, uploaded_file.name)
+                    if request.user.is_authenticated:
+                        details['review_url'] = reverse(
+                            'physical_verification_review',
+                            args=[verification_log.id, manifest_record.version.id],
+                        )
+        except (ValueError, TypeError, json.JSONDecodeError) as error:
+            result = 'invalid'
+            details['message'] = str(error)
+        except Exception as error:
+            logger.exception('Physical verification failed')
             result = 'error'
-    return render(request, 'verify_physical.html', {
-        'result': result
+            details['message'] = 'Verification could not be completed safely.'
+        finally:
+            if temp_path and os.path.isfile(temp_path):
+                os.remove(temp_path)
+
+    return render(request, 'verify_physical.html', {'result': result, 'details': details})
+
+
+@login_required
+def physical_verification_review(request, log_id, version_id):
+    audit_log = get_object_or_404(
+        AuditLog.objects.select_related('contract'), pk=log_id,
+        contract__isnull=False,
+    )
+    version = get_object_or_404(
+        ContractVersion, pk=version_id, contract=audit_log.contract
+    )
+    if not audit_log.evidence_file:
+        raise Http404
+    return render(request, 'physical_review.html', {
+        'audit_log': audit_log,
+        'version': version,
+        'submitted_url': reverse('audit_evidence_preview', args=[audit_log.id]),
     })
 
 @login_required
@@ -599,44 +759,55 @@ def upload_signed_scan(request, contract_id):
                 f.write(chunk)
 
         try:
-            extracted_encrypted = extract_cf_from_metadata(temp_path)
-            # Metadata typically won't survive a real scan — this check
-            # exists for completeness. In practice, QR-based matching
-            # (see the earlier discussion) is what should identify the
-            # contract for a genuinely scanned document.
-            matches_contract = (extracted_encrypted == contract.encrypted_cf) if extracted_encrypted else False
-
-            if not matches_contract:
-                log_activity(request, 'reported_tampering', contract=contract,
-                             note='Signed scan upload failed identity match')
-                if os.path.isfile(temp_path):
-                    os.remove(temp_path)
-                return redirect('contract_list')
-
             latest_version = contract.versions.order_by('-version_number').first()
             previous_cf = latest_version.fingerprint if latest_version else None
             next_version_number = (latest_version.version_number + 1) if latest_version else 1
-
-            scan_cf = generate_canonical_fingerprint(temp_path, previous_cf=previous_cf)
-
+            source_cf = generate_canonical_fingerprint(temp_path)
+            encrypted, hmac_value, wrapped_key, aes_iv = encrypt_cf(
+                source_cf, settings.RSA_PUBLIC_KEY_PATH
+            )
+            default_seal = os.path.join(settings.MEDIA_ROOT, 'seals', 'default_seal.png')
+            stamped_seal = os.path.join(settings.MEDIA_ROOT, 'seals', f'seal_{contract.id}.png')
+            embed_data_in_image(default_seal, stamped_seal, encrypted)
+            manifest, manifest_signature, qr_paths = _prepare_physical_manifest(
+                contract, next_version_number, temp_path, source_cf
+            )
             final_filename = f"contract_{contract.id}_signed_v{next_version_number}.pdf"
-            final_path = os.path.join(settings.MEDIA_ROOT, 'contract_versions', final_filename)
-            os.makedirs(os.path.dirname(final_path), exist_ok=True)
-            os.replace(temp_path, final_path)
-
-            ContractVersion.objects.create(
+            final_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
+            stamp_seal_on_pdf(
+                temp_path, final_path, stamped_seal, encrypted_cf=encrypted, qr_paths=qr_paths
+            )
+            sealed_cf = generate_canonical_fingerprint(final_path)
+            version_cf = generate_canonical_fingerprint(final_path, previous_cf=previous_cf)
+            version = ContractVersion.objects.create(
                 contract=contract,
                 version_number=next_version_number,
                 source='physical_scan',
-                file=f'contract_versions/{final_filename}',
-                fingerprint=scan_cf,
+                file=f'contracts/{final_filename}',
+                fingerprint=version_cf,
                 previous_fingerprint=previous_cf or '',
+                encrypted_cf=encrypted,
+                hmac_value=hmac_value,
+                wrapped_key=wrapped_key,
+                aes_iv=aes_iv,
                 created_by=request.user,
             )
-
+            _save_physical_manifest(version, manifest, manifest_signature)
             contract.status = 'approved'
+            contract.file = f'contracts/{final_filename}'
+            contract.fingerprint = sealed_cf
+            contract.original_fingerprint = source_cf
+            contract.encrypted_cf = encrypted
+            contract.hmac_value = hmac_value
+            contract.wrapped_key = wrapped_key
+            contract.aes_iv = aes_iv
+            contract.aes_key = ''
+            contract.seal_image = f'seals/seal_{contract.id}.png'
             contract.save()
-            log_activity(request, 'approved', contract=contract, note='Signed scan uploaded and chained')
+            log_activity(
+                request, 'approved', contract=contract,
+                note=f'Signed scan registered, sealed, and chained as version {next_version_number}',
+            )
 
         finally:
             if os.path.isfile(temp_path):
@@ -790,7 +961,6 @@ def audit_evidence_preview(request, log_id):
     audit_log = get_object_or_404(
         AuditLog.objects.select_related('contract'),
         pk=log_id,
-        action='reported_tampering',
     )
     if not audit_log.evidence_file:
         raise Http404
@@ -815,6 +985,7 @@ def _log_public_verification(request, uploaded_file, result, *, contract=None, n
     detail_map = {
         'authentic': ('Authentic', 'Complete'),
         'tampered': ('Possible Modification', 'Failed'),
+        'not_found': ('Not Found', 'No Record'),
         'error': ('Unable to Verify', 'Incomplete'),
     }
     verification_result, integrity_check = detail_map[result]
@@ -990,7 +1161,7 @@ def public_verify(request):
                     debug_log.append("[FAIL] No active contract matches the sealed fingerprint or encrypted marker")
                     failure_reason = 'no active database record matched'
                     filename_hint = 'unknown'
-                    result = 'error'
+                    result = 'not_found'
             elif not extracted_encrypted:
                 debug_log.append("[FAIL] Metadata marker is missing from the matched sealed document")
                 failure_reason = 'metadata marker missing'
@@ -1002,6 +1173,10 @@ def public_verify(request):
             elif not compare_digest(extracted_encrypted, matched_contract.encrypted_cf):
                 debug_log.append("[FAIL] Metadata marker does not belong to the matched contract")
                 failure_reason = 'metadata marker ownership mismatch'
+                result = 'tampered'
+            elif not extract_lsb_marker_from_pdf(temp_path, matched_contract.encrypted_cf):
+                debug_log.append("[FAIL] Digital seal LSB marker is missing or inconsistent")
+                failure_reason = 'digital seal LSB marker mismatch'
                 result = 'tampered'
             elif not all([
                 matched_contract.wrapped_key,
@@ -1085,6 +1260,11 @@ def public_verify(request):
                 note=f"Public verification: tampered ({uploaded_file.name}); {failure_reason or 'integrity check failed'}",
             )
             _attach_verification_evidence(tampering_log, temp_path, uploaded_file.name)
+        elif result == 'not_found':
+            _log_public_verification(
+                request, uploaded_file, 'not_found',
+                note=f"Public verification: no SealGuard record ({uploaded_file.name})",
+            )
         else:
             _log_public_verification(
                 request, uploaded_file, 'error',

@@ -993,6 +993,14 @@
             </div>
         </div>
 
+        {% elif result == "not_found" %}
+        <div class="result-card error">
+            <div class="result-icon error">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </div>
+            <div><div class="result-title">Not Found</div><div class="result-desc">No SealGuard-issued record could be located for this document.</div></div>
+        </div>
+
         {% elif result == "error" %}
         <div class="result-card error">
             <div class="result-icon error">
@@ -1039,11 +1047,13 @@
             <div><strong>Verification Result:</strong>
                 {% if result == "authentic" %}Authentic
                 {% elif result == "tampered" %}Possible Modification
+                {% elif result == "not_found" %}Not Found
                 {% else %}Unable to Verify{% endif %}
             </div>
             <div><strong>Integrity Check:</strong>
                 {% if result == "authentic" %}Complete
                 {% elif result == "tampered" %}Failed
+                {% elif result == "not_found" %}No Record
                 {% else %}Incomplete{% endif %}
             </div>
             <div><strong>Verified On:</strong> {{ verification_timestamp|default:"—" }}</div>
