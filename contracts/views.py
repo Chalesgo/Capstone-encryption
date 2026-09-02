@@ -186,7 +186,9 @@ def upload_contract(request):
             _process_log('initial_encryption', 'qr_marker_created', contract=contract, request=request)
 
             # ── Step 5: Stamp ONCE with LSB seal + QR ──
-            final_filename = f"{contract.base_filename}_v1.pdf"
+            # The database ID is unique, so generated files cannot collide
+            # when two users upload PDFs with the same original filename.
+            final_filename = f"contract_{contract.id}_v1.pdf"
             final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
             stamp_seal_on_pdf(pdf_path, final_pdf_path, stamped_seal, qr_path=qr_path, encrypted_cf=encrypted)
             _process_log('initial_encryption', 'pdf_sealed', contract=contract, request=request)
@@ -269,8 +271,7 @@ def encrypt_contract(request, contract_id):
     _process_log('reencryption', 'qr_marker_created', contract=contract, request=request)
 
     next_version_number = (latest_version.version_number + 1) if latest_version else 1
-    base_name = contract.base_filename or os.path.splitext(os.path.basename(pdf_path))[0]
-    final_filename = f"{base_name}_v{next_version_number}.pdf"
+    final_filename = f"contract_{contract.id}_v{next_version_number}.pdf"
     final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
     stamp_seal_on_pdf(pdf_path, final_pdf_path, stamped_seal, qr_path=qr_path, encrypted_cf=encrypted)
     _process_log('reencryption', 'pdf_sealed', contract=contract, request=request, version=next_version_number)
@@ -364,8 +365,7 @@ def add_revision(request, contract_id):
         _process_log('revision_encryption', 'qr_marker_created', contract=contract, request=request)
 
         next_version_number = (latest_version.version_number + 1) if latest_version else 1
-        base_name = contract.base_filename or os.path.splitext(uploaded_file.name)[0]
-        final_filename = f"{base_name}_v{next_version_number}.pdf"
+        final_filename = f"contract_{contract.id}_v{next_version_number}.pdf"
         final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
         stamp_seal_on_pdf(temp_path, final_pdf_path, stamped_seal, qr_path=qr_path, encrypted_cf=encrypted)
         _process_log('revision_encryption', 'pdf_sealed', contract=contract, request=request, version=next_version_number)
