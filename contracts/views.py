@@ -417,11 +417,24 @@ def add_revision(request, contract_id):
 
 @login_required
 def contract_list(request):
-    contracts = Contract.objects.filter(is_trashed=False)
+    contracts = Contract.objects.filter(is_trashed=False).order_by('-modified_at', '-id')
+    search_query = request.GET.get('q', '').strip()
+    if search_query:
+        contracts = contracts.filter(
+            Q(title__icontains=search_query)
+            | Q(recipient__username__icontains=search_query)
+            | Q(tags__icontains=search_query)
+        )
+    page_obj = Paginator(contracts, 25).get_page(request.GET.get('page'))
     # Folders are shared across the staff workspace.  Folder deletion and
     # document removal are still enforced by delete_folder below.
     folders = Folder.objects.all()
-    return render(request, 'list.html', {'contracts': contracts, 'folders': folders})
+    return render(request, 'list.html', {
+        'contracts': page_obj.object_list,
+        'page_obj': page_obj,
+        'search_query': search_query,
+        'folders': folders,
+    })
 
 @login_required
 def delete_contract(request, contract_id):
@@ -667,12 +680,12 @@ def has_barangay_footer(pdf_path: str):
 
 from django.shortcuts import render, redirect
 
-def get_contract_meta(contract):
+def get_contract_meta(contract, include_chain=True):
     verified_log = AuditLog.objects.filter(
         contract=contract, action='viewed'
     ).order_by('-timestamp').first()
     latest_version = contract.versions.order_by('-version_number').first()
-    chain = verify_version_chain(contract)
+    chain = verify_version_chain(contract) if include_chain else []
 
     return {
         'created': contract.uploaded_at,
@@ -918,7 +931,15 @@ def public_verify(request):
                 if matched_contract:
                     debug_log.append(f"[PASS] Match found: Contract [{matched_contract.id}] '{matched_contract.title}'")
                     debug_log.append("[PASS] Matched contract is active and not in trash")
-                    result = 'authentic'
+                    debug_log.append("[INFO] Recomputing the matched contract's version chain")
+                    matched_chain = verify_version_chain(matched_contract)
+                    chain_valid = not matched_chain or all(link['valid'] for link in matched_chain)
+                    if chain_valid:
+                        debug_log.append("[PASS] Version history chain validated")
+                        result = 'authentic'
+                    else:
+                        debug_log.append("[FAIL] Version history chain validation failed")
+                        result = 'tampered'
                 else:
                     debug_log.append("[FAIL] No matching contract found — document was modified")
                     result = 'tampered'
@@ -959,9 +980,14 @@ def public_verify(request):
     preview_token = request.session.get('verify_preview_token')
     preview_url = reverse('verification_preview', args=[preview_token]) if result and preview_token else None
 
+    public_contract_queryset = Contract.objects.filter(is_public=True).order_by('-uploaded_at', '-id')
+    public_page_obj = Paginator(public_contract_queryset, 20).get_page(request.GET.get('page'))
     public_contracts = [
-        {'contract': c, 'meta': get_contract_meta(c)}
-        for c in Contract.objects.filter(is_public=True).order_by('-uploaded_at')
+        # The public browser only needs display metadata. Full chain
+        # verification is deferred until a document is actually verified or
+        # its version history is requested.
+        {'contract': c, 'meta': get_contract_meta(c, include_chain=False)}
+        for c in public_page_obj.object_list
     ]
 
     return render(request, 'verify.html', {
@@ -969,6 +995,7 @@ def public_verify(request):
         'filename_hint': filename_hint,
         'debug_log': debug_log,
         'public_contracts': public_contracts,
+        'public_page_obj': public_page_obj,
         'verify_preview_url': preview_url,
         'verification_timestamp': verification_timestamp,
     })
@@ -1134,7 +1161,7 @@ def publish_contract(request, pk):
         )
         return JsonResponse({'success': True, 'is_public': contract.is_public})
     return JsonResponse({'success': False}, status=400)
-from django.db.models import Count
+from django.db.models import Count, Q
 
 @login_required
 def dashboard(request):

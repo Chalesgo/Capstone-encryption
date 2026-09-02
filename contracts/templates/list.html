@@ -175,6 +175,28 @@
   }
   .contracts-table tr:last-child td { border-bottom: none; }
   .contracts-table tr:hover td { background: #f8fafc; }
+  .contracts-table tbody tr[data-status] {
+    content-visibility: auto;
+    contain-intrinsic-size: 86px;
+  }
+  .list-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 14px;
+    color: #667788;
+    font-size: 13px;
+  }
+  .list-pagination a {
+    color: #2d3a47;
+    text-decoration: none;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-weight: 600;
+  }
+  .list-pagination a:hover { background: #f8fafc; }
 
   .contracts-table td.contract-document-cell { cursor: pointer; }
 
@@ -935,7 +957,7 @@
         <circle cx="11" cy="11" r="8"/>
         <line x1="21" y1="21" x2="16.65" y2="16.65"/>
       </svg>
-      <input type="text" id="doc-search" class="search-input" placeholder="Search title or uploader..." oninput="scheduleSearchFilter()">
+      <input type="text" id="doc-search" class="search-input" value="{{ search_query }}" placeholder="Search title or uploader..." oninput="scheduleSearchFilter()">
     </div>
     <a href="/upload/" class="btn btn-primary">+ Upload Contract</a>
   </div>
@@ -1127,6 +1149,17 @@
   </tbody>
 </table>
 
+{% if page_obj.paginator.count %}
+<nav class="list-pagination" aria-label="Contract pages">
+  <span>Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} contracts</span>
+  <span style="display:flex;align-items:center;gap:8px;">
+    {% if page_obj.has_previous %}<a href="?q={{ search_query|urlencode }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}<a href="?q={{ search_query|urlencode }}&amp;page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+  </span>
+</nav>
+{% endif %}
+
 {% else %}
 <div class="empty-state">
   <div class="icon">
@@ -1207,6 +1240,8 @@
 let currentStatusFilter = null;
 let searchFilterTimer = null;
 let lastAppliedSearchQuery = '';
+const versionHistoryRequests = new Map();
+let activePdfContractId = null;
 
 function scheduleSearchFilter() {
   clearTimeout(searchFilterTimer);
@@ -1215,7 +1250,11 @@ function scheduleSearchFilter() {
 
   searchFilterTimer = setTimeout(() => {
     lastAppliedSearchQuery = query;
-    applyFilters();
+    const url = new URL(window.location.href);
+    if (query) url.searchParams.set('q', query);
+    else url.searchParams.delete('q');
+    url.searchParams.delete('page');
+    window.location.href = url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '');
   }, 350);
 }
 
@@ -1298,7 +1337,16 @@ function cancelRename(id) {
   }
 })();
 
+function getVersionHistory(contractId) {
+  const key = String(contractId);
+  if (!versionHistoryRequests.has(key)) {
+    versionHistoryRequests.set(key, fetch('/contract/' + contractId + '/version-history/').then(r => r.json()));
+  }
+  return versionHistoryRequests.get(key);
+}
+
 function openPdfPreview(contractId, url, title) {
+  activePdfContractId = String(contractId);
   const previewUrl = url + (url.includes('#') ? '&' : '#') + 'toolbar=0&navpanes=0&scrollbar=1&view=FitH';
   document.getElementById('pdf-frame').src = previewUrl;
   document.getElementById('pdf-panel-title').textContent = title;
@@ -1314,10 +1362,9 @@ function openPdfPreview(contractId, url, title) {
   document.getElementById('pdf-meta-version').textContent = '—';
   document.getElementById('pdf-version-list').innerHTML = '<div class="version-list-loading">Loading version history…</div>';
 
-  fetch('/contract/' + contractId + '/version-history/')
-    .then(r => r.json())
+  getVersionHistory(contractId)
     .then(data => {
-      if (!data.success) return;
+      if (!data.success || activePdfContractId !== String(contractId)) return;
 
       document.getElementById('pdf-meta-created').textContent = data.created;
       document.getElementById('pdf-meta-encrypted').textContent = data.encrypted || '—';
@@ -1358,6 +1405,7 @@ function viewPdfVersion(url, el, versionLabel) {
 }
 
 function closePdfPreview() {
+  activePdfContractId = null;
   document.getElementById('pdf-panel').classList.remove('open');
   document.getElementById('pdf-overlay').classList.remove('open');
   document.getElementById('pdf-panel').setAttribute('aria-hidden', 'true');
@@ -1742,11 +1790,6 @@ function selectStatus(id, status, label) {
   document.getElementById('status-form-' + id).submit();
 }
 
-document.addEventListener('click', function(e) {
-  if (!e.target.closest('.status-dropdown')) {
-    document.querySelectorAll('.status-dropdown-menu.open').forEach(m => m.classList.remove('open'));
-  }
-});
 // ── Drag contracts into folders ──
 let draggedContractId = null;
 let draggedFolderId = null;
@@ -1765,14 +1808,15 @@ function dragContractStart(event, contractId) {
 }
 
 function syncMobileContractDragging() {
-  const isMobile = window.matchMedia('(max-width: 900px)').matches;
+  const isMobile = mobileContractMedia.matches;
   document.querySelectorAll('.contracts-table tbody tr[data-status]').forEach(function(row) {
     row.draggable = !isMobile;
   });
 }
 
-document.addEventListener('DOMContentLoaded', syncMobileContractDragging);
-window.addEventListener('resize', syncMobileContractDragging);
+const mobileContractMedia = window.matchMedia('(max-width: 900px)');
+mobileContractMedia.addEventListener('change', syncMobileContractDragging);
+syncMobileContractDragging();
 
 function handleFolderClick(folderId, el) {
   if (suppressFolderClick) return;
@@ -1904,10 +1948,6 @@ function showFolderContextMenu(event, folderId) {
   positionContextMenu(document.getElementById('folder-context-menu'), event);
 }
 
-document.addEventListener('click', () => {
-  document.getElementById('folder-context-menu').classList.remove('active');
-});
-
 function contextMenuRename() {
   const id = contextMenuFolderId;
   document.getElementById('folder-context-menu').classList.remove('active');
@@ -1952,8 +1992,16 @@ function showContractContextMenu(event, contractId) {
 
   positionContextMenu(document.getElementById('contract-context-menu'), event);
 }
-document.addEventListener('click', () => {
-  document.getElementById('contract-context-menu').classList.remove('active');
+document.addEventListener('click', function(event) {
+  if (!event.target.closest('.status-dropdown')) {
+    document.querySelectorAll('.status-dropdown-menu.open').forEach(menu => menu.classList.remove('open'));
+  }
+  if (!event.target.closest('#folder-context-menu')) {
+    document.getElementById('folder-context-menu').classList.remove('active');
+  }
+  if (!event.target.closest('#contract-context-menu')) {
+    document.getElementById('contract-context-menu').classList.remove('active');
+  }
 });
 
 function contractContextMenuRename() {

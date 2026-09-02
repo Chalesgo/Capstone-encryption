@@ -130,6 +130,10 @@
   }
   .audit-table tr:last-child td { border-bottom: none; }
   .audit-table tr:hover td { background: #f8fafc; }
+  .audit-table tbody tr {
+    content-visibility: auto;
+    contain-intrinsic-size: 52px;
+  }
 
   .audit-title-cell {
     display: flex;
@@ -245,11 +249,53 @@
   }
   @media (max-width: 760px) {
     .stat-cards { grid-template-columns: 1fr; }
-    .audit-panel { overflow-x: auto; }
+    .audit-panel { overflow: hidden; }
     .audit-filter-field, .audit-filter-field select { width: 100%; }
     .audit-filter-status { width: 100%; margin-left: 0; }
-    .audit-table { min-width: 760px; }
-    .audit-pagination { min-width: 760px; }
+    .audit-table,
+    .audit-table tbody,
+    .audit-table tr,
+    .audit-table td { display: block; }
+    .audit-table { min-width: 0; }
+    .audit-table thead { display: none; }
+    .audit-table tr {
+      margin: 0 12px 12px;
+      padding: 10px 12px;
+      border: 1px solid #eef0f4;
+      border-radius: 10px;
+      background: #fff;
+    }
+    .audit-table tr:last-child { margin-bottom: 0; }
+    .audit-table tr:hover td { background: transparent; }
+    .audit-table td {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      padding: 6px 0;
+      border: 0;
+    }
+    .audit-table td::before {
+      flex: 0 0 76px;
+      color: #889aab;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    .audit-table td:nth-child(1)::before { content: 'Title'; }
+    .audit-table td:nth-child(2)::before { content: 'IP'; }
+    .audit-table td:nth-child(3)::before { content: 'User'; }
+    .audit-table td:nth-child(4)::before { content: 'Time'; }
+    .audit-table td:nth-child(5)::before { content: 'Action'; }
+    .audit-title-cell,
+    .audit-user-cell { min-width: 0; max-width: none; }
+    .audit-title-text { min-width: 0; }
+    .audit-pagination {
+      flex-wrap: wrap;
+      padding: 14px 12px;
+    }
+    .pagination-links { margin-left: auto; }
   }
 </style>
 
@@ -346,7 +392,7 @@
         <th>Action</th>
       </tr>
     </thead>
-    <tbody>
+    <tbody id="audit-table-body">
       {% for log in recent_logs %}
       <tr>
         <td>
@@ -385,17 +431,17 @@
   {% endif %}
 
   {% if page_obj.paginator.count %}
-  <nav class="audit-pagination" aria-label="Document activity pages">
+  <nav class="audit-pagination" id="audit-pagination" aria-label="Document activity pages">
     <div class="pagination-summary">
       Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} records
     </div>
     <div class="pagination-links">
       {% if page_obj.has_previous %}
-        <a class="pagination-link" href="?activity={{ activity_filter }}&amp;sort={{ sort_order }}&amp;per_page={{ rows_per_page }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>
+        <a class="pagination-link dashboard-page-link" href="?activity={{ activity_filter }}&amp;sort={{ sort_order }}&amp;per_page={{ rows_per_page }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>
       {% endif %}
       <span class="pagination-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
       {% if page_obj.has_next %}
-        <a class="pagination-link" href="?activity={{ activity_filter }}&amp;sort={{ sort_order }}&amp;per_page={{ rows_per_page }}&amp;page={{ page_obj.next_page_number }}">Next</a>
+        <a class="pagination-link dashboard-page-link" href="?activity={{ activity_filter }}&amp;sort={{ sort_order }}&amp;per_page={{ rows_per_page }}&amp;page={{ page_obj.next_page_number }}">Next</a>
       {% endif %}
     </div>
   </nav>
@@ -444,5 +490,33 @@ function closeAuditPdf() {
   document.getElementById('audit-pdf-panel').setAttribute('aria-hidden', 'true');
   document.getElementById('audit-pdf-frame').src = '';
 }
+
+document.addEventListener('click', function(event) {
+  const link = event.target.closest('.dashboard-page-link');
+  if (!link) return;
+  event.preventDefault();
+
+  link.setAttribute('aria-busy', 'true');
+  fetch(link.href + (link.href.includes('?') ? '&' : '?') + 'fragment=1')
+    .then(function(response) {
+      if (!response.ok) throw new Error('Unable to load activity page');
+      return response.text();
+    })
+    .then(function(html) {
+      const documentFragment = new DOMParser().parseFromString(html, 'text/html');
+      const nextBody = documentFragment.getElementById('audit-table-body');
+      const nextPagination = documentFragment.getElementById('audit-pagination');
+      const currentBody = document.getElementById('audit-table-body');
+      const currentPagination = document.getElementById('audit-pagination');
+      if (!nextBody || !currentBody) throw new Error('Activity table was not returned');
+
+      currentBody.innerHTML = nextBody.innerHTML;
+      if (currentPagination && nextPagination) currentPagination.replaceWith(nextPagination);
+      history.pushState({}, '', link.href);
+    })
+    .catch(function() {
+      window.location.href = link.href;
+    });
+});
 </script>
 {% endblock %}

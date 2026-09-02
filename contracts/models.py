@@ -32,6 +32,9 @@ class Tutorial(models.Model):
         ('warning', 'Warning'),
         ('check', 'Check'),
         ('user', 'User'),
+        ('plus', 'Add'),
+        ('trash', 'Trash'),
+        ('restore', 'Restore'),
     ]
 
     title = models.CharField(max_length=160)

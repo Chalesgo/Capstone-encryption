@@ -7,17 +7,41 @@ from .models import Contract, Tutorial
 
 class _TutorialHTMLSanitizer(HTMLParser):
     allowed_tags = {'p', 'br', 'strong', 'b', 'em', 'i', 'ul', 'ol', 'li'}
+    inline_icons = {
+        'help': 'Help', 'shield': 'Shield', 'file': 'Document', 'upload': 'Upload',
+        'lock': 'Encryption', 'search': 'Search', 'folder': 'Folder',
+        'dashboard': 'Dashboard', 'eye': 'View', 'download': 'Download',
+        'history': 'History', 'warning': 'Warning', 'check': 'Check', 'user': 'User',
+        'plus': 'Add', 'trash': 'Trash', 'restore': 'Restore',
+    }
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.output = []
         self.blocked_depth = 0
+        self.inline_icon_depth = 0
 
     def handle_starttag(self, tag, attrs):
         if tag in {'script', 'style'}:
             self.blocked_depth += 1
             return
         if self.blocked_depth:
+            return
+        if self.inline_icon_depth:
+            self.inline_icon_depth += 1
+            return
+        if tag == 'span':
+            icon_name = dict(attrs).get('data-icon')
+            if icon_name in self.inline_icons:
+                label = escape(self.inline_icons[icon_name], quote=True)
+                self.output.append(
+                    f'<span class="tutorial-inline-icon" data-icon="{icon_name}" '
+                    f'role="img" aria-label="{label}" contenteditable="false">'
+                    f'<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" '
+                    f'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+                    f'stroke-linejoin="round"><use href="#tutorial-icon-{icon_name}"></use></svg></span>'
+                )
+                self.inline_icon_depth = 1
             return
         if tag in self.allowed_tags:
             self.output.append(f'<{tag}>')
@@ -33,6 +57,9 @@ class _TutorialHTMLSanitizer(HTMLParser):
             self.blocked_depth -= 1
             return
         if self.blocked_depth:
+            return
+        if self.inline_icon_depth:
+            self.inline_icon_depth -= 1
             return
         if tag in self.allowed_tags and tag != 'br':
             self.output.append(f'</{tag}>')

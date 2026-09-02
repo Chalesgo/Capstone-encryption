@@ -489,6 +489,10 @@
     transition: background 0.15s;
   }
   .doc-panel .panel-item:hover { background: #eceae6; }
+  .doc-panel .panel-list .panel-item {
+    content-visibility: auto;
+    contain-intrinsic-size: 32px;
+  }
   .doc-panel .panel-item svg { width: 16px; height: 16px; flex-shrink: 0; color: #889aab; }
   .doc-panel .panel-item-title {
     white-space: nowrap;
@@ -496,6 +500,16 @@
     text-overflow: ellipsis;
   }
   .doc-panel-empty { font-size: 12.5px; color: #aabbcc; padding: 8px 10px; }
+  .public-doc-pagination {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 12px;
+    padding: 0 4px;
+    color: #889aab;
+    font-size: 11px;
+  }
+  .public-doc-pagination a { color: #556270; text-decoration: none; font-weight: 600; }
 
   .mobile-doc-toggle,
   .mobile-doc-overlay {
@@ -719,6 +733,13 @@
     <li class="doc-panel-empty">No verified contracts published yet.</li>
     {% endfor %}
   </ul>
+  {% if public_page_obj.paginator.count > 20 %}
+  <div class="public-doc-pagination">
+    {% if public_page_obj.has_previous %}<a href="?page={{ public_page_obj.previous_page_number }}">Previous</a>{% endif %}
+    <span>Page {{ public_page_obj.number }} of {{ public_page_obj.paginator.num_pages }}</span>
+    {% if public_page_obj.has_next %}<a href="?page={{ public_page_obj.next_page_number }}">Next</a>{% endif %}
+  </div>
+  {% endif %}
 </aside>
 
 <!-- PDF Preview Panel (public browse) -->

@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import AuditLog, Contract, ContractVersion, Folder, Tutorial
+from .forms import sanitize_tutorial_html
 from .utils import log_activity, verify_version_chain
 
 
@@ -314,6 +315,19 @@ class AuditLogTests(TestCase):
         self.assertContains(response, '+ Add Tutorial')
         self.assertContains(response, 'id="tutorial-icon-lock"')
         self.assertContains(response, 'contenteditable="true"')
+
+    def test_tutorial_inline_icons_are_whitelisted_and_sanitized(self):
+        content = (
+            '<p><strong>1.</strong> '
+            '<span class="tutorial-inline-icon" data-icon="folder">'
+            '<svg><use href="#bad"></use></svg></span> Open Contracts.</p>'
+        )
+
+        sanitized = sanitize_tutorial_html(content)
+
+        self.assertIn('data-icon="folder"', sanitized)
+        self.assertIn('#tutorial-icon-folder', sanitized)
+        self.assertNotIn('#bad', sanitized)
 
     def test_admin_can_create_sanitized_tutorial(self):
         self.client.force_login(self.user)
