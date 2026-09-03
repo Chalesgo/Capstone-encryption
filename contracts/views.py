@@ -127,7 +127,7 @@ def help_tutorials(request):
 
     form = TutorialForm()
     if request.method == 'POST':
-        if not request.user.is_superuser:
+        if not request.user.has_perm('contracts.add_tutorial'):
             return JsonResponse({'success': False, 'error': 'not_allowed'}, status=403)
 
         form = TutorialForm(request.POST)
@@ -156,7 +156,7 @@ def help_tutorials(request):
 
 @login_required
 def edit_tutorial(request, pk):
-    if not request.user.is_superuser:
+    if not request.user.has_perm('contracts.change_tutorial'):
         return JsonResponse({'success': False, 'error': 'not_allowed'}, status=403)
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'invalid_method'}, status=405)
@@ -171,7 +171,7 @@ def edit_tutorial(request, pk):
 
 @login_required
 def delete_tutorial(request, pk):
-    if not request.user.is_superuser:
+    if not request.user.has_perm('contracts.delete_tutorial'):
         return JsonResponse({'success': False, 'error': 'not_allowed'}, status=403)
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'invalid_method'}, status=405)
@@ -492,7 +492,7 @@ def contract_list(request):
 
 @login_required
 def delete_contract(request, contract_id):
-    if not request.user.is_superuser:
+    if not request.user.has_perm('contracts.delete_contract'):
         return redirect('contract_list')
 
     contract = get_object_or_404(Contract, id=contract_id)
@@ -513,7 +513,7 @@ def delete_contract(request, contract_id):
 
 @login_required
 def bulk_delete_contracts(request):
-    if not request.user.is_superuser:
+    if not request.user.has_perm('contracts.delete_contract'):
         return JsonResponse({'success': False, 'error': 'not_allowed'}, status=403)
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'invalid_method'}, status=405)
@@ -535,7 +535,7 @@ def bulk_delete_contracts(request):
 
 @login_required
 def trash_list(request):
-    if not request.user.is_superuser:
+    if not request.user.has_perm('contracts.delete_contract'):
         return redirect('contract_list')
 
     _purge_expired_trash(request)
@@ -557,7 +557,7 @@ def trash_list(request):
 
 @login_required
 def restore_contract(request, contract_id):
-    if not request.user.is_superuser:
+    if not request.user.has_perm('contracts.change_contract'):
         return JsonResponse({'success': False}, status=403)
 
     if request.method == 'POST':
@@ -572,7 +572,7 @@ def restore_contract(request, contract_id):
 
 @login_required
 def permanently_delete_contract(request, contract_id):
-    if not request.user.is_superuser:
+    if not request.user.has_perm('contracts.delete_contract'):
         return JsonResponse({'success': False}, status=403)
 
     if request.method == 'POST':
@@ -585,7 +585,7 @@ def permanently_delete_contract(request, contract_id):
 
 @login_required
 def empty_trash(request):
-    if not request.user.is_superuser:
+    if not request.user.has_perm('contracts.delete_contract'):
         return JsonResponse({'success': False}, status=403)
 
     if request.method == 'POST':
@@ -892,6 +892,7 @@ def get_contract_meta(contract, include_chain=True):
     }
 
 
+@login_required
 @login_required
 def mark_contract_viewed(request, contract_id):
     if request.method != 'POST':
@@ -1353,7 +1354,7 @@ def create_folder(request):
 
 @login_required
 def bulk_permanently_delete_contracts(request):
-    if not request.user.is_superuser:
+    if not request.user.has_perm('contracts.delete_contract'):
         return JsonResponse({'success': False, 'error': 'not_allowed'}, status=403)
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'invalid_method'}, status=405)
@@ -1427,11 +1428,11 @@ def delete_folder(request, pk):
         mode = data.get('mode', 'unassign')  # 'unassign' or 'delete_items'
         has_items = folder.contracts.exists()
 
-        if has_items and not request.user.is_superuser:
+        if has_items and not request.user.has_perm('contracts.delete_contract'):
             return JsonResponse({'success': False, 'error': 'not_allowed'}, status=403)
 
         if mode == 'delete_items':
-            if not request.user.is_superuser:
+            if not request.user.has_perm('contracts.delete_contract'):
                 return JsonResponse({'success': False, 'error': 'not_allowed'}, status=403)
             for contract in folder.contracts.all():
                 for version in contract.versions.all():
@@ -1470,7 +1471,7 @@ def update_status(request, pk):
 
 @login_required
 def publish_contract(request, pk):
-    if not request.user.is_superuser:
+    if not request.user.has_perm('contracts.change_contract'):
         return JsonResponse({'success': False}, status=403)
 
     if request.method == 'POST':

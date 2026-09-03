@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import fitz
 from Crypto.PublicKey import RSA
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Permission, User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.cache import cache
 from django.test import Client, RequestFactory, TestCase, override_settings
@@ -546,6 +546,10 @@ class AuthenticationMatrixTests(TestCase):
                 self._assert_unauthenticated(client)
                 self.assertTrue(response.context['form'].errors)
                 self.assertNotContains(response, 'valid username', html=False)
+                if username == self.clerk.username and password == 'wrong-password-0':
+                    self.assertContains(response, 'You have 4 attempts left.')
+                if username == self.clerk.username and password == 'wrong-password-5':
+                    self.assertContains(response, 'temporarily locked')
 
         self.assertEqual(AuditLog.objects.filter(action='failed_login').count(), 30)
 
@@ -582,6 +586,121 @@ class AuthenticationMatrixTests(TestCase):
                 username=user.username,
                 password=self.password,
             ))
+
+    def test_auth05_logout_invalidates_protected_session_matrix(self):
+        for user in (self.admin, self.clerk):
+            for cycle in range(10):
+                with self.subTest(username=user.username, cycle=cycle + 1):
+                    client = Client()
+                    self.assertTrue(client.login(
+                        username=user.username,
+                        password=self.password,
+                    ))
+                    protected_page = client.get(reverse('contract_list'))
+                    self.assertEqual(protected_page.status_code, 200)
+
+                    logout_response = client.post(reverse('logout'))
+                    self.assertIn(logout_response.status_code, {200, 302})
+                    self._assert_unauthenticated(client)
+
+                    reopened_page = client.get(reverse('contract_list'))
+                    self.assertEqual(reopened_page.status_code, 302)
+                    self.assertIn(reverse('login'), reopened_page.url)
+
+        self.assertEqual(AuditLog.objects.filter(action='logout').count(), 20)
+
+    def test_auth06_unauthenticated_protected_actions_matrix(self):
+        protected_actions = (
+            ('dashboard', reverse('dashboard'), 'get'),
+            ('upload', reverse('upload_contract'), 'get'),
+            ('edit', reverse('rename_contract', args=[999999]), 'post'),
+            ('archive', reverse('update_status', args=[999999]), 'post'),
+            ('delete', reverse('delete_contract', args=[999999]), 'post'),
+            ('private download', reverse('audit_evidence_preview', args=[999999]), 'get'),
+            ('folder reorder', reverse('reorder_folders'), 'post'),
+            ('reports', reverse('dashboard'), 'get'),
+        )
+
+        for action, url, method in protected_actions:
+            with self.subTest(action=action):
+                client = Client()
+                response = getattr(client, method)(url)
+                self.assertEqual(response.status_code, 302)
+                self.assertIn(reverse('login'), response.url)
+                self._assert_unauthenticated(client)
+
+    def test_auth07_clerk_granted_contract_delete_permission(self):
+        contract = Contract.objects.create(
+            title='Permission-controlled contract',
+            file=SimpleUploadedFile('permission-test.pdf', b'%PDF-test'),
+        )
+        delete_permission = Permission.objects.get(
+            content_type__app_label='contracts', codename='delete_contract'
+        )
+
+        clerk_client = Client()
+        self.assertTrue(clerk_client.login(
+            username=self.clerk.username,
+            password=self.password,
+        ))
+        denied = clerk_client.post(reverse('delete_contract', args=[contract.id]))
+        self.assertEqual(denied.status_code, 302)
+        contract.refresh_from_db()
+        self.assertFalse(contract.is_trashed)
+
+        self.clerk.user_permissions.add(delete_permission)
+        clerk_client = Client()
+        self.assertTrue(clerk_client.login(
+            username=self.clerk.username,
+            password=self.password,
+        ))
+        allowed = clerk_client.post(reverse('delete_contract', args=[contract.id]))
+        self.assertEqual(allowed.status_code, 302)
+        contract.refresh_from_db()
+        self.assertTrue(contract.is_trashed)
+
+    def test_auth07_rbac_role_permission_matrix(self):
+        protected_actions = (
+            ('dashboard', reverse('dashboard'), 'get', {}, True),
+            ('upload', reverse('upload_contract'), 'get', {}, True),
+            ('edit', reverse('rename_contract', args=[999999]), 'post', '{}', True),
+            ('archive', reverse('update_status', args=[999999]), 'post', {}, True),
+            ('delete', reverse('delete_contract', args=[999999]), 'post', {}, False),
+            ('private access', reverse('contract_version_history', args=[999999]), 'get', {}, True),
+            ('folder reorder', reverse('reorder_folders'), 'post', '{"folder_ids": []}', True),
+            ('reports', reverse('dashboard'), 'get', {}, True),
+        )
+
+        for role, username, password in (
+            ('Administrator', self.admin.username, self.password),
+            ('Clerk', self.clerk.username, self.password),
+        ):
+            client = Client()
+            self.assertTrue(client.login(username=username, password=password))
+            for action, url, method, data, clerk_allowed in protected_actions:
+                with self.subTest(role=role, action=action):
+                    if method == 'get':
+                        response = client.get(url)
+                    elif isinstance(data, str):
+                        response = client.post(url, data=data, content_type='application/json')
+                    else:
+                        response = client.post(url, data=data)
+                    if role == 'Administrator' or clerk_allowed:
+                        self.assertNotEqual(response.status_code, 302, f'{role} was redirected for {action}')
+                    else:
+                        self.assertIn(response.status_code, {302, 403})
+
+        public_client = Client()
+        for action, url, method, data, _ in protected_actions:
+            with self.subTest(role='Public', action=action):
+                if method == 'get':
+                    response = public_client.get(url)
+                elif isinstance(data, str):
+                    response = public_client.post(url, data=data, content_type='application/json')
+                else:
+                    response = public_client.post(url, data=data)
+                self.assertEqual(response.status_code, 302)
+                self.assertIn(reverse('login'), response.url)
 
 
 class PublicVerificationCryptoTests(TestCase):

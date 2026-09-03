@@ -190,7 +190,7 @@
       <h1>{% if selected_tutorial %}{{ selected_tutorial.title }}{% else %}Help &amp; Tutorials{% endif %}</h1>
       <p>{% if selected_tutorial %}{{ selected_tutorial.summary }}{% else %}Choose a question to view its directions.{% endif %}</p>
     </div>
-    {% if user.is_superuser %}
+    {% if perms.contracts.add_tutorial or perms.contracts.change_tutorial or perms.contracts.delete_tutorial %}
       <div class="tutorial-header-actions">
         {% if selected_tutorial %}
           <button type="button" class="btn btn-outline" onclick="openTutorialEditor('edit')">Edit Tutorial</button>
@@ -216,7 +216,7 @@
   {% endif %}
 </div>
 
-{% if user.is_superuser %}
+{% if perms.contracts.add_tutorial or perms.contracts.change_tutorial or perms.contracts.delete_tutorial %}
 {{ selected_tutorial_data|json_script:"selected-tutorial-data" }}
 <div class="tutorial-modal{% if tutorial_form.errors %} open{% endif %}" id="tutorial-modal" role="dialog" aria-modal="true" aria-labelledby="tutorial-editor-title">
   <div class="editor-dialog">

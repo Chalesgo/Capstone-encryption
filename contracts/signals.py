@@ -1,4 +1,5 @@
 import hashlib
+import time
 
 from django.conf import settings
 from django.contrib.auth.signals import user_logged_in, user_logged_out, user_login_failed
@@ -30,6 +31,10 @@ def _lockout_key(username):
     return f'sealguard:login-lockout:{_username_digest(username)}'
 
 
+def _lockout_until_key(username):
+    return f'sealguard:login-lockout-until:{_username_digest(username)}'
+
+
 def _username_digest(username):
     return hashlib.sha256(_username_key(username).encode('utf-8')).hexdigest()
 
@@ -38,10 +43,23 @@ def is_account_locked(username):
     return bool(_username_key(username) and cache.get(_lockout_key(username), False))
 
 
+def lockout_remaining_seconds(username):
+    if not is_account_locked(username):
+        return 0
+    return max(0, int(cache.get(_lockout_until_key(username), 0) - time.time() + 0.999))
+
+
+def failed_login_count(username):
+    if not _username_key(username):
+        return 0
+    return int(cache.get(_attempt_key(username), 0) or 0)
+
+
 def clear_login_failures(username):
     if _username_key(username):
         cache.delete(_attempt_key(username))
         cache.delete(_lockout_key(username))
+        cache.delete(_lockout_until_key(username))
 
 
 def record_lockout(request, username):
@@ -64,11 +82,18 @@ def record_failed_login(request, username=''):
     )
     normalized_username = _username_key(username)
     if normalized_username and User.objects.filter(username__iexact=username).exists():
+        if is_account_locked(username):
+            return
         attempt_key = _attempt_key(username)
         failures = (cache.get(attempt_key, 0) or 0) + 1
         cache.set(attempt_key, failures, settings.LOGIN_LOCKOUT_SECONDS)
         if failures >= settings.LOGIN_FAILURE_THRESHOLD:
             cache.set(_lockout_key(username), True, settings.LOGIN_LOCKOUT_SECONDS)
+            cache.set(
+                _lockout_until_key(username),
+                time.time() + settings.LOGIN_LOCKOUT_SECONDS,
+                settings.LOGIN_LOCKOUT_SECONDS,
+            )
             if failures == settings.LOGIN_FAILURE_THRESHOLD:
                 record_lockout(request, username)
 

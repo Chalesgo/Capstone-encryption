@@ -2,10 +2,16 @@ from html import escape
 from html.parser import HTMLParser
 
 from django import forms
+from django.conf import settings
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
 from .models import Contract, Tutorial
-from .signals import is_account_locked, record_failed_login
+from .signals import (
+    failed_login_count,
+    is_account_locked,
+    lockout_remaining_seconds,
+    record_failed_login,
+)
 
 
 class SealGuardAuthenticationForm(AuthenticationForm):
@@ -15,6 +21,11 @@ class SealGuardAuthenticationForm(AuthenticationForm):
         submitted_username = self.data.get('username', '') or self.data.get('email', '')
         if is_account_locked(submitted_username):
             record_failed_login(self.request, submitted_username)
+            self.lockout_seconds_remaining = lockout_remaining_seconds(submitted_username)
+            self.login_error_message = (
+                'This account is temporarily locked. Please try again in '
+                f'{self.lockout_seconds_remaining} seconds.'
+            )
             raise ValidationError(self.error_messages['invalid_login'], code='invalid_login')
         try:
             cleaned_data = super().clean()
@@ -24,6 +35,7 @@ class SealGuardAuthenticationForm(AuthenticationForm):
                     self.request,
                     self.data.get('username', '') or self.data.get('email', ''),
                 )
+            self._set_remaining_attempts_message(submitted_username)
             raise
 
         if not getattr(self.request, '_sealguard_login_failed_recorded', False):
@@ -31,6 +43,24 @@ class SealGuardAuthenticationForm(AuthenticationForm):
             if not getattr(self, 'user_cache', None):
                 record_failed_login(self.request, username)
         return cleaned_data
+
+    def _set_remaining_attempts_message(self, username):
+        from django.contrib.auth.models import User
+
+        if not User.objects.filter(username__iexact=username).exists():
+            return
+        remaining = max(settings.LOGIN_FAILURE_THRESHOLD - failed_login_count(username), 0)
+        if remaining:
+            self.login_error_message = (
+                'The username or password is incorrect. Please try again. '
+                f'You have {remaining} attempts left.'
+            )
+        else:
+            self.lockout_seconds_remaining = lockout_remaining_seconds(username)
+            self.login_error_message = (
+                'This account is temporarily locked. Please try again in '
+                f'{self.lockout_seconds_remaining} seconds.'
+            )
 
 
 class _TutorialHTMLSanitizer(HTMLParser):

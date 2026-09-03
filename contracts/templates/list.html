@@ -771,7 +771,7 @@
         </svg>
         All Documents
       </li>
-      {% if user.is_superuser %}
+      {% if perms.contracts.delete_contract %}
       <li class="panel-item" onclick="window.location.href='{% url 'trash_list' %}'">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="3 6 5 6 21 6"/>
@@ -850,7 +850,7 @@
   <div class="context-menu-item" onclick="contractContextMenuRename()">Rename</div>
   <div class="context-menu-item" onclick="contractContextMenuAddRevision()">Add Revision</div>
   <div class="context-menu-item" onclick="contractContextMenuAddToFolder()">Add to Folder</div>
-  {% if user.is_superuser %}
+  {% if perms.contracts.change_contract %}
   <div class="context-menu-item" id="contract-publish-toggle" onclick="contractContextMenuTogglePublic()">Add to Public Verified Contracts</div>
   {% endif %}
 </div>
@@ -883,7 +883,7 @@
       </svg>
       <span>Encrypt</span>
     </button>
-    {% if user.is_superuser %}
+    {% if perms.contracts.delete_contract %}
     <button type="button" class="mobile-sheet-action danger" onclick="mobileSheetDelete()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/>
@@ -1114,7 +1114,7 @@
           {% endif %}
 
           <!-- Delete (superuser only) -->
-          {% if user.is_superuser %}
+          {% if perms.contracts.delete_contract %}
           <button class="icon-btn danger" title="Delete"
                   onclick="openDeleteModal('{{ contract.id }}', '{{ contract.title|escapejs }}')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1127,7 +1127,7 @@
           {% endif %}
 
           <!-- Public visibility toggle (superuser only) -->
-          {% if user.is_superuser %}
+          {% if perms.contracts.change_contract %}
           <button class="icon-btn eye-toggle-btn {% if contract.is_public %}public-on{% else %}public-off{% endif %}"
                   id="eye-btn-{{ contract.id }}"
                   title="{% if contract.is_public %}Public — click to remove{% else %}Not public — click to add{% endif %}"
@@ -2114,7 +2114,7 @@ function toggleEyeVisibility(id) {
   });
 }
 
-const IS_SUPERUSER = {% if user.is_superuser %}true{% else %}false{% endif %};
+const CAN_DELETE_CONTRACT = {% if perms.contracts.delete_contract %}true{% else %}false{% endif %};
 
 function contextMenuDelete() {
   const id = contextMenuFolderId;
@@ -2126,10 +2126,10 @@ function contextMenuDelete() {
   const msg = document.getElementById('folder-delete-message');
   const actions = document.getElementById('folder-delete-actions');
 
-  if (itemCount > 0 && !IS_SUPERUSER) {
+  if (itemCount > 0 && !CAN_DELETE_CONTRACT) {
     msg.textContent = `This folder contains ${itemCount} document${itemCount > 1 ? 's' : ''}. Only an admin can delete a folder that still has documents in it — move or remove the documents first.`;
     actions.innerHTML = `<button class="btn btn-outline" onclick="closeFolderDeleteModal()">OK</button>`;
-  } else if (itemCount > 0 && IS_SUPERUSER) {
+  } else if (itemCount > 0 && CAN_DELETE_CONTRACT) {
     msg.textContent = `This folder contains ${itemCount} document${itemCount > 1 ? 's' : ''}. What would you like to do?`;
     actions.innerHTML = `
       <button class="btn btn-outline" onclick="closeFolderDeleteModal()">Cancel</button>

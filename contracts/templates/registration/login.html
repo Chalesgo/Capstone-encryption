@@ -15,7 +15,9 @@
             {% csrf_token %}
             {% if form.non_field_errors %}
                 <div role="alert" style="margin-bottom: 1rem; padding: 10px 12px; border: 1px solid #fecaca; border-radius: 8px; background: #fef2f2; color: #b91c1c; font-size: 13px;">
-                    The username or password is incorrect. Please try again.
+                    <span id="login-error-message" data-lockout-seconds="{{ form.lockout_seconds_remaining|default:'' }}">
+                        {{ form.login_error_message|default:'The username or password is incorrect. Please try again.' }}
+                    </span>
                 </div>
             {% endif %}
             {% for field in form %}
@@ -37,4 +39,25 @@
         Not a staff member? <a href="/verify/" style="color: #1a1a2e; font-weight: 500;">Verify a document instead</a>
     </p>
 </div>
+<script>
+    (() => {
+        const message = document.getElementById('login-error-message');
+        if (!message || !message.dataset.lockoutSeconds) return;
+
+        let seconds = Number(message.dataset.lockoutSeconds);
+        const update = () => {
+            message.textContent = `This account is temporarily locked. Please try again in ${seconds} seconds.`;
+        };
+        update();
+        const timer = window.setInterval(() => {
+            seconds -= 1;
+            if (seconds <= 0) {
+                window.clearInterval(timer);
+                message.textContent = 'The account should now be unlocked. You may try logging in again.';
+                return;
+            }
+            update();
+        }, 1000);
+    })();
+</script>
 {% endblock %}
