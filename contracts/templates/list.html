@@ -1347,6 +1347,10 @@ function getVersionHistory(contractId) {
 
 function openPdfPreview(contractId, url, title) {
   activePdfContractId = String(contractId);
+  fetch('/contract/' + contractId + '/mark-viewed/', {
+    method: 'POST',
+    headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+  }).catch(function() {});
   const previewUrl = url + (url.includes('#') ? '&' : '#') + 'toolbar=0&navpanes=0&scrollbar=1&view=FitH';
   document.getElementById('pdf-frame').src = previewUrl;
   document.getElementById('pdf-panel-title').textContent = title;

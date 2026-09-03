@@ -2,7 +2,31 @@ from html import escape
 from html.parser import HTMLParser
 
 from django import forms
+from django.contrib.auth.forms import AuthenticationForm
+from django.core.exceptions import ValidationError
 from .models import Contract, Tutorial
+from .signals import record_failed_login
+
+
+class SealGuardAuthenticationForm(AuthenticationForm):
+    """Audit invalid submissions that never reach Django authentication."""
+
+    def clean(self):
+        try:
+            cleaned_data = super().clean()
+        except ValidationError:
+            if not getattr(self.request, '_sealguard_login_failed_recorded', False):
+                record_failed_login(
+                    self.request,
+                    self.data.get('username', '') or self.data.get('email', ''),
+                )
+            raise
+
+        if not getattr(self.request, '_sealguard_login_failed_recorded', False):
+            username = cleaned_data.get('username', '') if cleaned_data else ''
+            if not getattr(self, 'user_cache', None):
+                record_failed_login(self.request, username)
+        return cleaned_data
 
 
 class _TutorialHTMLSanitizer(HTMLParser):

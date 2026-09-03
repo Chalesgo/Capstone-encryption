@@ -156,6 +156,8 @@ class AuditLog(models.Model):
         ('reported_tampering', 'Reported Tampering'),
         ('verification', 'Verification Attempt'),
         ('failed_login', 'Failed Login Attempt'),
+        ('login', 'Successful Login'),
+        ('logout', 'Logout'),
     ]
 
     contract = models.ForeignKey(

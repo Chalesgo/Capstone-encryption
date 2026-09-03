@@ -3,6 +3,8 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.shortcuts import redirect
+from django.contrib.auth.views import LoginView
+from contracts.forms import SealGuardAuthenticationForm
 
 def home_redirect(request):
     if request.user.is_authenticated:
@@ -11,6 +13,7 @@ def home_redirect(request):
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('accounts/login/', LoginView.as_view(authentication_form=SealGuardAuthenticationForm), name='login'),
     path('accounts/', include('django.contrib.auth.urls')),
     path('', home_redirect),
     path('', include('contracts.urls')),

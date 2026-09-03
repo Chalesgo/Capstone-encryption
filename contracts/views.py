@@ -891,6 +891,15 @@ def get_contract_meta(contract, include_chain=True):
         'chain_valid': all(v['valid'] for v in chain) if chain else None,
     }
 
+
+@login_required
+def mark_contract_viewed(request, contract_id):
+    if request.method != 'POST':
+        return JsonResponse({'success': False}, status=405)
+    contract = get_object_or_404(Contract, id=contract_id, is_trashed=False)
+    log_activity(request, 'viewed', contract=contract, note='Opened in document viewer')
+    return JsonResponse({'success': True})
+
 @login_required
 def contract_version_history(request, contract_id):
     contract = get_object_or_404(Contract, id=contract_id)
@@ -1487,17 +1496,35 @@ def dashboard(request):
     verified_documents = Contract.objects.filter(encrypted_cf__gt='').count()
     flagged_documents = AuditLog.objects.filter(action='reported_tampering').count()
 
-    activity_filter = request.GET.get('activity', 'all')
-    if activity_filter not in {'all', 'viewed', 'added', 'encrypted', 'edited', 'approved', 'rejected', 'deleted', 'reported_tampering', 'verification', 'failed_login'}:
+    valid_activity_filters = ['viewed', 'added', 'encrypted', 'edited', 'approved', 'rejected', 'deleted', 'reported_tampering', 'verification', 'failed_login', 'login', 'logout']
+    requested_activity_filters = [
+        value.strip()
+        for raw_value in request.GET.getlist('activity')
+        for value in raw_value.split(',')
+        if value.strip()
+    ]
+    activity_filters = list(dict.fromkeys(
+        value for value in requested_activity_filters if value in valid_activity_filters
+    ))
+    activity_labels = dict(AuditLog.ACTION_CHOICES)
+    if not activity_filters or set(activity_filters) == set(valid_activity_filters):
+        activity_filters = valid_activity_filters
         activity_filter = 'all'
+        activity_filter_label = 'All activity'
+    elif len(activity_filters) == 1:
+        activity_filter = activity_filters[0]
+        activity_filter_label = activity_labels[activity_filters[0]]
+    else:
+        activity_filter = ','.join(activity_filters)
+        activity_filter_label = f'{len(activity_filters)} activities selected'
 
     sort_order = request.GET.get('sort', 'newest')
     if sort_order not in {'newest', 'oldest'}:
         sort_order = 'newest'
 
     recent_logs = AuditLog.objects.select_related('user', 'contract')
-    if activity_filter != 'all':
-        recent_logs = recent_logs.filter(action=activity_filter)
+    if activity_filters:
+        recent_logs = recent_logs.filter(action__in=activity_filters)
     if sort_order == 'oldest':
         recent_logs = recent_logs.order_by('timestamp', 'id')
     else:
@@ -1520,6 +1547,8 @@ def dashboard(request):
         'recent_logs': page_obj,
         'page_obj': page_obj,
         'activity_filter': activity_filter,
+        'activity_filters': activity_filters,
+        'activity_filter_label': activity_filter_label,
         'sort_order': sort_order,
         'rows_per_page': rows_per_page,
     })

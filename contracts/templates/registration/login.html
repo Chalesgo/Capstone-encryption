@@ -11,8 +11,13 @@
     </div>
 
     <div class="card">
-        <form method="post">
+        <form method="post" novalidate>
             {% csrf_token %}
+            {% if form.non_field_errors %}
+                <div role="alert" style="margin-bottom: 1rem; padding: 10px 12px; border: 1px solid #fecaca; border-radius: 8px; background: #fef2f2; color: #b91c1c; font-size: 13px;">
+                    The username or password is incorrect. Please try again.
+                </div>
+            {% endif %}
             {% for field in form %}
                 <div class="form-group">
                     <label>{{ field.label }}</label>

@@ -61,8 +61,39 @@ class AuditLogTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Contract.objects.filter(id=self.contract.id).exists())
-        titles = list(AuditLog.objects.values_list('document_title', flat=True))
+        titles = list(
+            AuditLog.objects.exclude(action__in={'login', 'logout'})
+            .values_list('document_title', flat=True)
+        )
         self.assertEqual(titles, ['Senior Assistance Form', 'Senior Assistance Form'])
+
+    def test_authentication_events_are_recorded(self):
+        self.assertTrue(self.client.login(username='admin', password='password'))
+        login_event = AuditLog.objects.get(action='login')
+        self.assertEqual(login_event.user, self.user)
+        self.assertEqual(login_event.note, 'Successful authentication')
+
+        self.client.logout()
+        logout_event = AuditLog.objects.get(action='logout')
+        self.assertEqual(logout_event.user, self.user)
+
+        self.client.post(reverse('login'), {'username': 'admin', 'password': 'wrong-password'})
+        failed_event = AuditLog.objects.get(action='failed_login')
+        self.assertIn('admin', failed_event.note)
+
+        self.client.post(reverse('login'), {'username': '', 'password': ''})
+        self.assertEqual(AuditLog.objects.filter(action='failed_login').count(), 2)
+
+        login_page = self.client.get(reverse('login'))
+        self.assertContains(login_page, '<form method="post" novalidate>', html=False)
+
+    def test_opening_contract_view_records_viewed_event(self):
+        self.client.force_login(self.user)
+        response = self.client.post(reverse('mark_contract_viewed', args=[self.contract.id]))
+        self.assertEqual(response.status_code, 200)
+        viewed_event = AuditLog.objects.get(action='viewed')
+        self.assertEqual(viewed_event.contract, self.contract)
+        self.assertEqual(viewed_event.user, self.user)
 
     def test_dashboard_filters_activity_and_sorts_oldest_first(self):
         added = AuditLog.objects.create(action='added', document_title='First')
@@ -100,6 +131,22 @@ class AuditLogTests(TestCase):
         self.assertEqual(response.context['page_obj'].paginator.count, 25)
         self.assertContains(response, 'onchange="this.form.requestSubmit()"', count=2)
         self.assertContains(response, 'page=3')
+
+    def test_dashboard_supports_multiple_persistent_activity_filters(self):
+        added = AuditLog.objects.create(action='added', document_title='Added')
+        tampered = AuditLog.objects.create(action='reported_tampering', document_title='Tampered')
+        AuditLog.objects.create(action='deleted', document_title='Deleted')
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('dashboard'), {
+            'activity': 'added,reported_tampering',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['activity_filters'], ['added', 'reported_tampering'])
+        self.assertEqual(list(response.context['page_obj'].object_list), [tampered, added])
+        self.assertContains(response, 'value="added" selected')
+        self.assertContains(response, 'value="reported_tampering" selected')
 
     def test_document_search_is_debounced_in_the_browser(self):
         self.client.force_login(self.user)
