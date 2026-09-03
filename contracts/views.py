@@ -1496,7 +1496,7 @@ def dashboard(request):
     verified_documents = Contract.objects.filter(encrypted_cf__gt='').count()
     flagged_documents = AuditLog.objects.filter(action='reported_tampering').count()
 
-    valid_activity_filters = ['viewed', 'added', 'encrypted', 'edited', 'approved', 'rejected', 'deleted', 'reported_tampering', 'verification', 'failed_login', 'login', 'logout']
+    valid_activity_filters = ['viewed', 'added', 'encrypted', 'edited', 'approved', 'rejected', 'deleted', 'reported_tampering', 'verification', 'failed_login', 'login', 'logout', 'locked_out']
     requested_activity_filters = [
         value.strip()
         for raw_value in request.GET.getlist('activity')

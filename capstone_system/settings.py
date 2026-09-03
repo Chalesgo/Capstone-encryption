@@ -121,6 +121,12 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
 X_FRAME_OPTIONS = 'SAMEORIGIN'
+LOGIN_FAILURE_THRESHOLD = 5
+LOGIN_LOCKOUT_SECONDS = 30
+
+AUTHENTICATION_BACKENDS = [
+    'contracts.authentication.SealGuardModelBackend',
+]
 # RSA Key Paths
 RSA_PRIVATE_KEY_PATH = os.path.join(BASE_DIR, 'keys', 'private.pem')
 RSA_PUBLIC_KEY_PATH = os.path.join(BASE_DIR, 'keys', 'public.pem')

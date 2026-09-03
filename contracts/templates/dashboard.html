@@ -267,6 +267,7 @@
   .action-badge.failed_login       { background: #f3f4f6; color: #6b7280; }
   .action-badge.login              { background: #e8f5ef; color: #16805a; }
   .action-badge.logout             { background: #eef2ff; color: #4f46e5; }
+  .action-badge.locked_out         { background: #fff0f0; color: #b91c1c; }
 
   .audit-pdf-overlay { position: fixed; inset: 0; z-index: 1100; display: none; background: rgba(0,0,0,.35); }
   .audit-pdf-overlay.open { display: block; }
@@ -446,14 +447,19 @@
         <div class="activity-filter-control" data-activity-dropdown>
            <select id="activity-filter" name="activity" class="activity-filter-native" multiple aria-label="Filter activities">
            <option value="all" {% if activity_filter == 'all' %}selected{% endif %}>All activity</option>
+           <option value="viewed" {% if 'viewed' in activity_filters %}selected{% endif %}>Viewed Document</option>
            <option value="added" {% if 'added' in activity_filters %}selected{% endif %}>Added Document</option>
+           <option value="encrypted" {% if 'encrypted' in activity_filters %}selected{% endif %}>Encrypted Document</option>
            <option value="edited" {% if 'edited' in activity_filters %}selected{% endif %}>Edited Document</option>
+           <option value="approved" {% if 'approved' in activity_filters %}selected{% endif %}>Approved Document</option>
+           <option value="rejected" {% if 'rejected' in activity_filters %}selected{% endif %}>Rejected Document</option>
            <option value="deleted" {% if 'deleted' in activity_filters %}selected{% endif %}>Deleted Document</option>
            <option value="reported_tampering" {% if 'reported_tampering' in activity_filters %}selected{% endif %}>Reported Tampering</option>
            <option value="verification" {% if 'verification' in activity_filters %}selected{% endif %}>Verification Attempt</option>
            <option value="failed_login" {% if 'failed_login' in activity_filters %}selected{% endif %}>Failed Login Attempt</option>
            <option value="login" {% if 'login' in activity_filters %}selected{% endif %}>Successful Login</option>
            <option value="logout" {% if 'logout' in activity_filters %}selected{% endif %}>Logout</option>
+           <option value="locked_out" {% if 'locked_out' in activity_filters %}selected{% endif %}>Account Lockout</option>
           </select>
            <button class="activity-filter-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
              <span class="action-badge {% if activity_filters|length == 1 %}{{ activity_filters.0 }}{% else %}all{% endif %}" data-activity-filter-label>{{ activity_filter_label }}</span>
@@ -465,15 +471,16 @@
              <button class="activity-filter-option" type="button" role="option" data-value="added" aria-selected="{% if 'added' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge added"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Added Document</span></button>
              <button class="activity-filter-option" type="button" role="option" data-value="encrypted" aria-selected="{% if 'encrypted' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge encrypted"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 0 0 1 8 0v3"/></svg>Encrypted Document</span></button>
              <button class="activity-filter-option" type="button" role="option" data-value="edited" aria-selected="{% if 'edited' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge edited"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 16-.8 4.8L8 20l11.5-11.5a2.1 2.1 0 0 0-3-3L5 17zM14.5 7.5l2 2"/></svg>Edited Document</span></button>
-            <button class="activity-filter-option" type="button" role="option" data-value="approved" aria-selected="false"><span class="action-badge approved"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>Approved Document</span></button>
-            <button class="activity-filter-option" type="button" role="option" data-value="rejected" aria-selected="false"><span class="action-badge rejected"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>Rejected Document</span></button>
-            <button class="activity-filter-option" type="button" role="option" data-value="deleted" aria-selected="false"><span class="action-badge deleted"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Deleted Document</span></button>
+             <button class="activity-filter-option" type="button" role="option" data-value="approved" aria-selected="{% if 'approved' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge approved"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>Approved Document</span></button>
+             <button class="activity-filter-option" type="button" role="option" data-value="rejected" aria-selected="{% if 'rejected' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge rejected"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>Rejected Document</span></button>
+             <button class="activity-filter-option" type="button" role="option" data-value="deleted" aria-selected="{% if 'deleted' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge deleted"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Deleted Document</span></button>
              <button class="activity-filter-option" type="button" role="option" data-value="reported_tampering" aria-selected="{% if 'reported_tampering' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge reported_tampering"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 9 17H3L12 3zM12 9v4M12 17h.01"/></svg>Reported Tampering</span></button>
-            <button class="activity-filter-option" type="button" role="option" data-value="verification" aria-selected="false"><span class="action-badge verification"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3zM9 12l2 2 4-4"/></svg>Verification Attempt</span></button>
+             <button class="activity-filter-option" type="button" role="option" data-value="verification" aria-selected="{% if 'verification' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge verification"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3zM9 12l2 2 4-4"/></svg>Verification Attempt</span></button>
              <button class="activity-filter-option" type="button" role="option" data-value="failed_login" aria-selected="{% if 'failed_login' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge failed_login"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M9 14l6 4M15 14l-6 4"/></svg>Failed Login Attempt</span></button>
-             <button class="activity-filter-option" type="button" role="option" data-value="login" aria-selected="false"><span class="action-badge login"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M21 19V5a2 2 0 0 0-2-2h-6"/></svg>Successful Login</span></button>
-             <button class="activity-filter-option" type="button" role="option" data-value="logout" aria-selected="false"><span class="action-badge logout"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M21 19V5a2 2 0 0 0-2-2h-6"/></svg>Logout</span></button>
-             <div class="activity-filter-actions"><button type="button" data-filter-clear>Clear</button><button type="button" data-filter-apply>Apply filters</button></div>
+             <button class="activity-filter-option" type="button" role="option" data-value="login" aria-selected="{% if 'login' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge login"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M21 19V5a2 2 0 0 0-2-2h-6"/></svg>Successful Login</span></button>
+             <button class="activity-filter-option" type="button" role="option" data-value="logout" aria-selected="{% if 'logout' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge logout"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M21 19V5a2 2 0 0 0-2-2h-6"/></svg>Logout</span></button>
+             <button class="activity-filter-option" type="button" role="option" data-value="locked_out" aria-selected="{% if 'locked_out' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge locked_out"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M9 14l6 4M15 14l-6 4"/></svg>Account Lockout</span></button>
+              <div class="activity-filter-actions"><button type="button" data-filter-clear>Clear selection</button><button type="button" data-filter-apply>Apply filters</button></div>
           </div>
         </div>
       </div>
@@ -666,12 +673,13 @@ function closeAuditPdf() {
   const trigger = control.querySelector('.activity-filter-trigger');
   const label = control.querySelector('[data-activity-filter-label]');
   const options = control.querySelectorAll('.activity-filter-option');
+  let emptySelection = false;
 
   function syncActivityFilter() {
     const selected = Array.from(select.selectedOptions).map(option => option.value).filter(value => value !== 'all');
     if (selected.length === 0) {
       const allBadge = control.querySelector('[data-value="all"] .action-badge');
-      label.innerHTML = allBadge ? allBadge.innerHTML : 'All activity';
+      label.innerHTML = emptySelection ? 'Choose activities' : (allBadge ? allBadge.innerHTML : 'All activity');
       label.className = 'action-badge all';
     } else if (selected.length === 1) {
       const selectedBadge = control.querySelector('[data-value="' + selected[0] + '"] .action-badge');
@@ -683,7 +691,7 @@ function closeAuditPdf() {
     }
     options.forEach(function(item) {
       item.setAttribute('aria-selected', item.dataset.value === 'all'
-        ? String(selected.length === 0)
+        ? String(!emptySelection && selected.length === select.options.length - 1)
         : String(selected.includes(item.dataset.value)));
     });
   }
@@ -696,14 +704,18 @@ function closeAuditPdf() {
     option.addEventListener('click', function() {
       const value = option.dataset.value;
       if (value === 'all') {
-        Array.from(select.options).forEach(item => { item.selected = true; });
+        const individualOptions = Array.from(select.options).slice(1);
+        const allCurrentlySelected = individualOptions.every(item => item.selected);
+        emptySelection = allCurrentlySelected;
+        individualOptions.forEach(item => { item.selected = !allCurrentlySelected; });
+        select.querySelector('option[value="all"]').selected = !allCurrentlySelected;
       } else {
+        emptySelection = false;
         select.querySelector('option[value="all"]').selected = false;
         const selectedOption = select.querySelector('option[value="' + value + '"]');
         selectedOption.selected = !selectedOption.selected;
-        if (!Array.from(select.selectedOptions).some(item => item.value !== 'all')) {
-          select.querySelector('option[value="all"]').selected = true;
-        }
+        const allSelected = Array.from(select.options).slice(1).every(item => item.selected);
+        select.querySelector('option[value="all"]').selected = allSelected;
       }
       syncActivityFilter();
     });
@@ -714,7 +726,8 @@ function closeAuditPdf() {
     select.form.requestSubmit();
   });
   control.querySelector('[data-filter-clear]').addEventListener('click', function() {
-    Array.from(select.options).forEach(item => { item.selected = true; });
+    emptySelection = true;
+    Array.from(select.options).forEach(item => { item.selected = false; });
     syncActivityFilter();
   });
   document.addEventListener('click', function(event) {

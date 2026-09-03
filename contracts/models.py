@@ -158,6 +158,7 @@ class AuditLog(models.Model):
         ('failed_login', 'Failed Login Attempt'),
         ('login', 'Successful Login'),
         ('logout', 'Logout'),
+        ('locked_out', 'Account Lockout'),
     ]
 
     contract = models.ForeignKey(

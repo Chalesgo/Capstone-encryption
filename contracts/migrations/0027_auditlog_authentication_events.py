@@ -24,6 +24,7 @@ class Migration(migrations.Migration):
                     ('failed_login', 'Failed Login Attempt'),
                     ('login', 'Successful Login'),
                     ('logout', 'Logout'),
+                    ('locked_out', 'Account Lockout'),
                 ],
                 max_length=30,
             ),

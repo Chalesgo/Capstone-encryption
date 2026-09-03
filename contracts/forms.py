@@ -5,13 +5,17 @@ from django import forms
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
 from .models import Contract, Tutorial
-from .signals import record_failed_login
+from .signals import is_account_locked, record_failed_login
 
 
 class SealGuardAuthenticationForm(AuthenticationForm):
     """Audit invalid submissions that never reach Django authentication."""
 
     def clean(self):
+        submitted_username = self.data.get('username', '') or self.data.get('email', '')
+        if is_account_locked(submitted_username):
+            record_failed_login(self.request, submitted_username)
+            raise ValidationError(self.error_messages['invalid_login'], code='invalid_login')
         try:
             cleaned_data = super().clean()
         except ValidationError:

@@ -9,7 +9,8 @@ import fitz
 from Crypto.PublicKey import RSA
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import RequestFactory, TestCase, override_settings
+from django.core.cache import cache
+from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
@@ -147,6 +148,9 @@ class AuditLogTests(TestCase):
         self.assertEqual(list(response.context['page_obj'].object_list), [tampered, added])
         self.assertContains(response, 'value="added" selected')
         self.assertContains(response, 'value="reported_tampering" selected')
+
+        for activity in ('viewed', 'encrypted', 'approved', 'rejected'):
+            self.assertContains(response, f'<option value="{activity}"')
 
     def test_document_search_is_debounced_in_the_browser(self):
         self.client.force_login(self.user)
@@ -483,6 +487,101 @@ class AuditLogTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertTrue(Tutorial.objects.filter(pk=tutorial.id).exists())
+
+
+class AuthenticationMatrixTests(TestCase):
+    password = 'Matrix-password-2026!'
+
+    def setUp(self):
+        cache.clear()
+        self.admin = User.objects.create_superuser(
+            'matrix_admin', 'matrix-admin@example.com', self.password
+        )
+        self.clerk = User.objects.create_user(
+            'matrix_clerk', password=self.password, is_staff=True
+        )
+
+    @staticmethod
+    def _assert_unauthenticated(client):
+        assert client.session.get('_auth_user_id') is None
+
+    def test_auth01_successful_login_matrix(self):
+        for user in (self.admin, self.clerk):
+            for attempt in range(15):
+                with self.subTest(username=user.username, attempt=attempt + 1):
+                    client = Client()
+                    response = client.post(reverse('login'), {
+                        'username': user.username,
+                        'password': self.password,
+                    })
+                    self.assertEqual(response.status_code, 302)
+                    self.assertEqual(response.url, '/')
+                    self.assertEqual(str(client.session['_auth_user_id']), str(user.id))
+                    client.post(reverse('logout'))
+
+        self.assertEqual(AuditLog.objects.filter(action='login').count(), 30)
+        self.assertEqual(AuditLog.objects.filter(action='logout').count(), 30)
+
+    def test_auth02_unsuccessful_login_matrix(self):
+        cases = (
+            *[(self.clerk.username, f'wrong-password-{n}') for n in range(10)],
+            *[(f'unknown-user-{n}', self.password) for n in range(10)],
+            *[('', '') for _ in range(5)],
+            (' ' * 12, ' ' * 12),
+            ('overlong-' + ('x' * 300), self.password),
+            ('matrix_clerk', ' ' * 300),
+            (' ' * 300, ' ' * 300),
+            ('overlong-password', 'p' * 300),
+        )
+        self.assertEqual(len(cases), 30)
+
+        for username, password in cases:
+            with self.subTest(username=username[:24] or '<blank>'):
+                client = Client()
+                response = client.post(reverse('login'), {
+                    'username': username,
+                    'password': password,
+                })
+                self.assertEqual(response.status_code, 200)
+                self._assert_unauthenticated(client)
+                self.assertTrue(response.context['form'].errors)
+                self.assertNotContains(response, 'valid username', html=False)
+
+        self.assertEqual(AuditLog.objects.filter(action='failed_login').count(), 30)
+
+    def test_auth03_brute_force_lockout_matrix(self):
+        for account_number in range(3):
+            user = User.objects.create_user(
+                f'lockout_account_{account_number}', password=self.password
+            )
+
+            for _ in range(4):
+                client = Client()
+                response = client.post(reverse('login'), {
+                    'username': user.username,
+                    'password': 'wrong-password',
+                })
+                self.assertEqual(response.status_code, 200)
+                self._assert_unauthenticated(client)
+
+            client = Client()
+            self.assertTrue(client.login(username=user.username, password=self.password))
+            client.logout()
+
+            for _ in range(5):
+                client = Client()
+                response = client.post(reverse('login'), {
+                    'username': user.username,
+                    'password': 'wrong-password',
+                })
+                self.assertEqual(response.status_code, 200)
+                self._assert_unauthenticated(client)
+
+            blocked_client = Client()
+            self.assertFalse(blocked_client.login(
+                username=user.username,
+                password=self.password,
+            ))
 
 
 class PublicVerificationCryptoTests(TestCase):
