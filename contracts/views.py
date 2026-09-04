@@ -893,7 +893,6 @@ def get_contract_meta(contract, include_chain=True):
 
 
 @login_required
-@login_required
 def mark_contract_viewed(request, contract_id):
     if request.method != 'POST':
         return JsonResponse({'success': False}, status=405)
@@ -916,7 +915,7 @@ def contract_version_history(request, contract_id):
             'version_number': v.version_number,
             'source': v.get_source_display(),
             'created_at': v.created_at.strftime('%b %d, %Y'),
-            'file_url': v.file.url if v.file else '',
+            'file_url': reverse('download_contract_version', args=[v.id]) if v.file else '',
             'valid': chain_info.get('valid'),
             'is_current': bool(contract.file) and v.file.name == contract.file.name,
         })
@@ -1313,6 +1312,34 @@ def public_verify(request):
         'verify_preview_url': preview_url,
         'verification_timestamp': verification_timestamp,
     })
+
+
+@login_required
+def download_contract(request, contract_id):
+    contract = get_object_or_404(Contract, pk=contract_id, is_trashed=False)
+    if not contract.file:
+        raise Http404
+    return FileResponse(
+        contract.file.open('rb'),
+        content_type='application/pdf',
+        filename=os.path.basename(contract.file.name),
+    )
+
+
+@login_required
+def download_contract_version(request, version_id):
+    version = get_object_or_404(
+        ContractVersion.objects.select_related('contract'),
+        pk=version_id,
+        contract__is_trashed=False,
+    )
+    if not version.file:
+        raise Http404
+    return FileResponse(
+        version.file.open('rb'),
+        content_type='application/pdf',
+        filename=os.path.basename(version.file.name),
+    )
 
 # New rename view
 @login_required

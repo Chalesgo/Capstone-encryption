@@ -980,7 +980,7 @@
     {% for contract in contracts %}
         <tr id="row-{{ contract.id }}" data-status="{{ contract.status }}" data-folder="{{ contract.folder_id|default:'' }}"
         data-public="{{ contract.is_public|yesno:'1,0' }}"
-        data-file-url="{{ contract.file.url }}"
+        data-file-url="{% url 'download_contract' contract.id %}"
         data-contract-title="{{ contract.title|escapejs }}"
         data-encrypted="{% if contract.encrypted_cf %}1{% else %}0{% endif %}"
         data-search="{{ contract.title|lower }} {{ contract.recipient.username|default:''|lower }}"
@@ -1085,7 +1085,7 @@
 
           <!-- View PDF -->
           <button class="icon-btn" title="View PDF"
-                  onclick="openPdfPreview({{ contract.id }}, '{{ contract.file.url }}', '{{ contract.title|escapejs }}')">
+                  onclick="openPdfPreview({{ contract.id }}, '{% url 'download_contract' contract.id %}', '{{ contract.title|escapejs }}')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>

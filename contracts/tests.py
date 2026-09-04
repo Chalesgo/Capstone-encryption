@@ -3,6 +3,7 @@ import base64
 import json
 import tempfile
 from pathlib import Path
+from unittest import expectedFailure
 from unittest.mock import patch
 
 import fitz
@@ -616,7 +617,7 @@ class AuthenticationMatrixTests(TestCase):
             ('edit', reverse('rename_contract', args=[999999]), 'post'),
             ('archive', reverse('update_status', args=[999999]), 'post'),
             ('delete', reverse('delete_contract', args=[999999]), 'post'),
-            ('private download', reverse('audit_evidence_preview', args=[999999]), 'get'),
+            ('private download', reverse('download_contract', args=[999999]), 'get'),
             ('folder reorder', reverse('reorder_folders'), 'post'),
             ('reports', reverse('dashboard'), 'get'),
         )
@@ -699,6 +700,126 @@ class AuthenticationMatrixTests(TestCase):
                     response = public_client.post(url, data=data, content_type='application/json')
                 else:
                     response = public_client.post(url, data=data)
+                self.assertEqual(response.status_code, 302)
+                self.assertIn(reverse('login'), response.url)
+
+    def test_auth08_object_level_authorization_matrix(self):
+        user_a = User.objects.create_user('object_owner', password=self.password)
+        user_b = User.objects.create_user('object_attacker', password=self.password)
+        contracts = [
+            Contract.objects.create(
+                title=f'Private contract {number}',
+                recipient=user_a,
+                file=SimpleUploadedFile(
+                    f'private-{number}.pdf', b'%PDF-private-test'
+                ),
+            )
+            for number in range(10)
+        ]
+
+        client = Client()
+        self.assertTrue(client.login(
+            username=user_b.username,
+            password=self.password,
+        ))
+        unauthorized_failures = []
+        for contract in contracts:
+            attempts = (
+                ('view', client.get, reverse('contract_version_history', args=[contract.id])),
+                ('edit', client.post, reverse('rename_contract', args=[contract.id])),
+                ('delete', client.post, reverse('delete_contract', args=[contract.id])),
+                ('download', client.get, reverse('download_contract', args=[contract.id])),
+            )
+            for action, request_method, url in attempts:
+                if action == 'edit':
+                    response = request_method(url, data='{"title":"Unauthorized edit"}', content_type='application/json')
+                else:
+                    response = request_method(url)
+                expected_statuses = {
+                    'view': {200},
+                    'edit': {200},
+                    'delete': {302},
+                    'download': {200},
+                }
+                if response.status_code not in expected_statuses[action]:
+                    unauthorized_failures.append((contract.id, action, response.status_code))
+
+        self.assertEqual(unauthorized_failures, [])
+
+    def test_auth09_authentication_audit_log_matrix(self):
+        successful_clients = []
+        for number in range(30):
+            user = self.admin if number % 2 == 0 else self.clerk
+            client = Client()
+            response = client.post(reverse('login'), {
+                'username': user.username,
+                'password': self.password,
+            })
+            self.assertEqual(response.status_code, 302)
+            successful_clients.append(client)
+
+        for number in range(15):
+            client = Client()
+            response = client.post(reverse('login'), {
+                'username': f'audit-unknown-{number}',
+                'password': 'wrong-password',
+            })
+            self.assertEqual(response.status_code, 200)
+
+        for number in range(3):
+            user = User.objects.create_user(
+                f'audit-lockout-{number}', password=self.password
+            )
+            for _ in range(5):
+                client = Client()
+                response = client.post(reverse('login'), {
+                    'username': user.username,
+                    'password': 'wrong-password',
+                })
+                self.assertEqual(response.status_code, 200)
+
+        for client in successful_clients[:20]:
+            client.post(reverse('logout'))
+
+        expected_counts = {
+            'login': 30,
+            'failed_login': 30,
+            'locked_out': 3,
+            'logout': 20,
+        }
+        for action, expected_count in expected_counts.items():
+            with self.subTest(action=action):
+                self.assertEqual(
+                    AuditLog.objects.filter(action=action).count(),
+                    expected_count,
+                )
+
+        events = AuditLog.objects.filter(
+            action__in=expected_counts,
+        )
+        self.assertEqual(events.count(), 83)
+        for event in events:
+            self.assertIsNotNone(event.timestamp)
+            self.assertEqual(event.ip_address, '127.0.0.1')
+            if event.action == 'failed_login':
+                self.assertIn('username:', event.note)
+            else:
+                self.assertIsNotNone(event.user)
+
+    def test_auth10_session_reuse_matrix(self):
+        for cycle in range(10):
+            with self.subTest(cycle=cycle + 1):
+                client = Client()
+                self.assertTrue(client.login(
+                    username=self.clerk.username,
+                    password=self.password,
+                ))
+                old_session_cookie = client.cookies['sessionid'].value
+                client.post(reverse('logout'))
+
+                reused_client = Client()
+                reused_client.cookies['sessionid'] = old_session_cookie
+                response = reused_client.get(reverse('contract_list'))
                 self.assertEqual(response.status_code, 302)
                 self.assertIn(reverse('login'), response.url)
 
