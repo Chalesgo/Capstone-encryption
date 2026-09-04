@@ -717,7 +717,8 @@
     {% for item in public_contracts %}
     <li class="panel-item" data-contract-id="{{ item.contract.id }}"
         data-title="{{ item.contract.title|escapejs }}"
-        data-url="{{ item.contract.file.url }}"
+        data-url="{% url 'preview_contract' item.contract.id %}"
+        data-download-url="{% url 'download_contract' item.contract.id %}"
         data-created="{{ item.meta.created|date:'M j, Y' }}"
         data-encrypted="{% if item.meta.encrypted %}{{ item.meta.encrypted|date:'M j, Y' }}{% else %}—{% endif %}"
         data-verified="{% if item.meta.verified %}{{ item.meta.verified|date:'M j, Y' }}{% else %}Not yet verified{% endif %}"
@@ -1164,7 +1165,7 @@ function openPublicPdfPreview(el) {
   currentPublicContractId = el.dataset.contractId;
   document.getElementById('public-pdf-frame').src = el.dataset.url;
   document.getElementById('public-pdf-title').textContent = el.dataset.title;
-  document.getElementById('public-pdf-download-btn').href = el.dataset.url;
+  document.getElementById('public-pdf-download-btn').href = el.dataset.downloadUrl;
   document.getElementById('public-pdf-download-btn').download = el.dataset.title;
   document.getElementById('public-pdf-created').textContent = el.dataset.created;
   document.getElementById('public-pdf-encrypted').textContent = el.dataset.encrypted;

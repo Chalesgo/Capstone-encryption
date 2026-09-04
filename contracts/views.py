@@ -26,9 +26,10 @@ import fitz
 from .utils import generate_qr_code
 import base64
 import json
+import csv
 from PIL import Image
 from hmac import compare_digest
-from django.http import JsonResponse, FileResponse, Http404
+from django.http import JsonResponse, FileResponse, Http404, HttpResponse
 from .utils import log_activity
 from .models import Contract, AuditLog
 from django.utils import timezone
@@ -36,6 +37,8 @@ from datetime import timedelta
 from django.core.paginator import Paginator
 from django.urls import reverse
 from django.core.files import File
+from django.contrib.auth.models import User
+from django.utils.dateparse import parse_date
 from .physical_verification import (
     build_manifest, compare_page, decode_page_token, sign_manifest,
     validate_token_membership, verify_manifest_signature,
@@ -179,6 +182,42 @@ def delete_tutorial(request, pk):
     tutorial = get_object_or_404(Tutorial, pk=pk)
     tutorial.delete()
     return redirect('help_tutorials')
+
+@login_required
+def check_duplicate_upload(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'invalid_method'}, status=405)
+
+    uploaded_file = request.FILES.get('file')
+    if not uploaded_file:
+        return JsonResponse({'success': False, 'error': 'missing_file'}, status=400)
+
+    temp_path = os.path.join(
+        settings.MEDIA_ROOT, 'temp', 'duplicate-check', f'{uuid.uuid4().hex}.pdf'
+    )
+    os.makedirs(os.path.dirname(temp_path), exist_ok=True)
+    try:
+        with open(temp_path, 'wb') as temporary_file:
+            for chunk in uploaded_file.chunks():
+                temporary_file.write(chunk)
+        original_cf = generate_canonical_fingerprint(temp_path)
+        duplicates = Contract.objects.filter(
+            original_fingerprint=original_cf,
+            is_trashed=False,
+        ).order_by('id')
+        return JsonResponse({
+            'success': True,
+            'duplicates': [
+                {'id': contract.id, 'title': contract.title, 'filename': os.path.basename(contract.file.name)}
+                for contract in duplicates
+            ],
+        })
+    except Exception:
+        return JsonResponse({'success': False, 'error': 'unable_to_check_file'}, status=400)
+    finally:
+        if os.path.isfile(temp_path):
+            os.remove(temp_path)
+
 
 @login_required
 def upload_contract(request):
@@ -479,7 +518,19 @@ def contract_list(request):
             | Q(recipient__username__icontains=search_query)
             | Q(tags__icontains=search_query)
         )
-    page_obj = Paginator(contracts, 25).get_page(request.GET.get('page'))
+    status_filter = request.GET.get('status', '').strip()
+    if status_filter in {'pending', 'sent', 'approved'}:
+        contracts = contracts.filter(status=status_filter)
+    folder_filter = request.GET.get('folder', '').strip()
+    if folder_filter.isdigit():
+        contracts = contracts.filter(folder_id=int(folder_filter))
+    try:
+        per_page = int(request.GET.get('per_page', 25))
+    except (TypeError, ValueError):
+        per_page = 25
+    if per_page not in {10, 25, 50}:
+        per_page = 25
+    page_obj = Paginator(contracts, per_page).get_page(request.GET.get('page'))
     # Folders are shared across the staff workspace.  Folder deletion and
     # document removal are still enforced by delete_folder below.
     folders = Folder.objects.all()
@@ -488,6 +539,9 @@ def contract_list(request):
         'page_obj': page_obj,
         'search_query': search_query,
         'folders': folders,
+        'status_filter': status_filter,
+        'folder_filter': folder_filter,
+        'per_page': per_page,
     })
 
 @login_required
@@ -916,6 +970,7 @@ def contract_version_history(request, contract_id):
             'source': v.get_source_display(),
             'created_at': v.created_at.strftime('%b %d, %Y'),
             'file_url': reverse('download_contract_version', args=[v.id]) if v.file else '',
+            'preview_url': reverse('preview_contract_version', args=[v.id]) if v.file else '',
             'valid': chain_info.get('valid'),
             'is_current': bool(contract.file) and v.file.name == contract.file.name,
         })
@@ -1314,9 +1369,16 @@ def public_verify(request):
     })
 
 
-@login_required
-def download_contract(request, contract_id):
+def _contract_file_access(request, contract):
+    if request.user.is_authenticated or contract.is_public:
+        return True
+    return False
+
+
+def preview_contract(request, contract_id):
     contract = get_object_or_404(Contract, pk=contract_id, is_trashed=False)
+    if not _contract_file_access(request, contract):
+        return redirect(f"{reverse('login')}?next={request.path}")
     if not contract.file:
         raise Http404
     return FileResponse(
@@ -1326,15 +1388,62 @@ def download_contract(request, contract_id):
     )
 
 
-@login_required
+def preview_contract_version(request, version_id):
+    version = get_object_or_404(
+        ContractVersion.objects.select_related('contract'),
+        pk=version_id,
+        contract__is_trashed=False,
+    )
+    if not _contract_file_access(request, version.contract):
+        return redirect(f"{reverse('login')}?next={request.path}")
+    if not version.file:
+        raise Http404
+    return FileResponse(
+        version.file.open('rb'),
+        content_type='application/pdf',
+        filename=os.path.basename(version.file.name),
+    )
+
+
+def download_contract(request, contract_id):
+    if not request.user.is_authenticated:
+        contract = Contract.objects.filter(pk=contract_id, is_trashed=False).first()
+        if not contract or not contract.is_public:
+            return redirect(f"{reverse('login')}?next={request.path}")
+    else:
+        contract = get_object_or_404(Contract, pk=contract_id, is_trashed=False)
+    if not _contract_file_access(request, contract):
+        return redirect(f"{reverse('login')}?next={request.path}")
+    if not contract.file:
+        raise Http404
+    latest_version = contract.versions.order_by('-version_number').first()
+    log_activity(
+        request, 'downloaded', contract=contract,
+        note='Downloaded current contract PDF',
+        version_number=latest_version.version_number if latest_version else None,
+    )
+    return FileResponse(
+        contract.file.open('rb'),
+        content_type='application/pdf',
+        filename=os.path.basename(contract.file.name),
+    )
+
+
 def download_contract_version(request, version_id):
     version = get_object_or_404(
         ContractVersion.objects.select_related('contract'),
         pk=version_id,
         contract__is_trashed=False,
     )
+    if not _contract_file_access(request, version.contract):
+        return redirect(f"{reverse('login')}?next={request.path}")
     if not version.file:
         raise Http404
+    log_activity(
+        request, 'downloaded', contract=version.contract,
+        note=f'Downloaded version {version.version_number} PDF',
+        version_number=version.version_number,
+    )
     return FileResponse(
         version.file.open('rb'),
         content_type='application/pdf',
@@ -1524,7 +1633,7 @@ def dashboard(request):
     verified_documents = Contract.objects.filter(encrypted_cf__gt='').count()
     flagged_documents = AuditLog.objects.filter(action='reported_tampering').count()
 
-    valid_activity_filters = ['viewed', 'added', 'encrypted', 'edited', 'approved', 'rejected', 'deleted', 'reported_tampering', 'verification', 'failed_login', 'login', 'logout', 'locked_out']
+    valid_activity_filters = ['viewed', 'downloaded', 'added', 'encrypted', 'edited', 'approved', 'rejected', 'deleted', 'reported_tampering', 'verification', 'failed_login', 'login', 'logout', 'locked_out']
     requested_activity_filters = [
         value.strip()
         for raw_value in request.GET.getlist('activity')
@@ -1553,6 +1662,24 @@ def dashboard(request):
     recent_logs = AuditLog.objects.select_related('user', 'contract')
     if activity_filters:
         recent_logs = recent_logs.filter(action__in=activity_filters)
+    date_from = parse_date(request.GET.get('date_from', '').strip())
+    date_to = parse_date(request.GET.get('date_to', '').strip())
+    if date_from:
+        recent_logs = recent_logs.filter(timestamp__date__gte=date_from)
+    if date_to:
+        recent_logs = recent_logs.filter(timestamp__date__lte=date_to)
+    user_id = request.GET.get('user', '').strip()
+    if user_id.isdigit():
+        recent_logs = recent_logs.filter(user_id=int(user_id))
+    status = request.GET.get('status', '').strip()
+    if status in {'pending', 'sent', 'approved'}:
+        recent_logs = recent_logs.filter(contract__status=status)
+    document_query = request.GET.get('document', '').strip()
+    if document_query:
+        recent_logs = recent_logs.filter(
+            Q(document_title__icontains=document_query)
+            | Q(contract__title__icontains=document_query)
+        )
     if sort_order == 'oldest':
         recent_logs = recent_logs.order_by('timestamp', 'id')
     else:
@@ -1579,4 +1706,58 @@ def dashboard(request):
         'activity_filter_label': activity_filter_label,
         'sort_order': sort_order,
         'rows_per_page': rows_per_page,
+        'report_users': User.objects.filter(is_active=True).order_by('username'),
+        'report_date_from': request.GET.get('date_from', ''),
+        'report_date_to': request.GET.get('date_to', ''),
+        'report_user': user_id,
+        'report_status': status,
+        'report_document': document_query,
     })
+
+
+@login_required
+def export_dashboard_report(request):
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="sealguard-audit-report.csv"'
+    writer = csv.writer(response)
+    writer.writerow(['Document', 'User', 'Action', 'Timestamp', 'IP address', 'Details'])
+
+    valid_actions = [choice[0] for choice in AuditLog.ACTION_CHOICES]
+    requested_actions = [
+        value.strip()
+        for raw_value in request.GET.getlist('activity')
+        for value in raw_value.split(',')
+        if value.strip() in valid_actions
+    ]
+    logs = AuditLog.objects.select_related('user', 'contract')
+    if requested_actions and 'all' not in requested_actions:
+        logs = logs.filter(action__in=list(dict.fromkeys(requested_actions)))
+    date_from = parse_date(request.GET.get('date_from', '').strip())
+    date_to = parse_date(request.GET.get('date_to', '').strip())
+    if date_from:
+        logs = logs.filter(timestamp__date__gte=date_from)
+    if date_to:
+        logs = logs.filter(timestamp__date__lte=date_to)
+    user_id = request.GET.get('user', '').strip()
+    if user_id.isdigit():
+        logs = logs.filter(user_id=int(user_id))
+    status = request.GET.get('status', '').strip()
+    if status in {'pending', 'sent', 'approved'}:
+        logs = logs.filter(contract__status=status)
+    document_query = request.GET.get('document', '').strip()
+    if document_query:
+        logs = logs.filter(
+            Q(document_title__icontains=document_query)
+            | Q(contract__title__icontains=document_query)
+        )
+    logs = logs.order_by('-timestamp', '-id')
+    for log in logs:
+        writer.writerow([
+            log.display_document_title,
+            log.user.username if log.user else 'N/A',
+            log.get_action_display(),
+            log.timestamp.isoformat(),
+            log.ip_address or '',
+            log.note or '',
+        ])
+    return response

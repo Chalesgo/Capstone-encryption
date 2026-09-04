@@ -230,7 +230,7 @@
     </div>
 
     <div class="card">
-<form method="POST" enctype="multipart/form-data" id="upload-form">
+<form method="POST" enctype="multipart/form-data" id="upload-form" data-is-revision="{% if is_revision %}true{% else %}false{% endif %}">
             {% csrf_token %}
 
             <!-- Render non-file fields nicely (skip entirely in revision mode) -->
@@ -377,6 +377,26 @@
     </div>
 </div>
 
+<div class="duplicate-modal" id="duplicate-modal" aria-hidden="true">
+    <div class="duplicate-modal-card" role="dialog" aria-modal="true" aria-labelledby="duplicate-modal-title">
+        <h2 id="duplicate-modal-title">Possible duplicate document</h2>
+        <p id="duplicate-modal-message"></p>
+        <div class="duplicate-modal-actions">
+            <button type="button" class="btn btn-outline" id="duplicate-new-btn">Add as new PDF</button>
+            <button type="button" class="btn btn-primary" id="duplicate-revision-btn">Add as revision</button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .duplicate-modal { display:none; position:fixed; inset:0; z-index:1000; align-items:center; justify-content:center; background:rgba(15,23,42,.45); padding:20px; }
+    .duplicate-modal.open { display:flex; }
+    .duplicate-modal-card { width:min(460px, 100%); background:#fff; border-radius:16px; padding:24px; box-shadow:0 20px 60px rgba(15,23,42,.25); }
+    .duplicate-modal-card h2 { margin:0 0 8px; color:#1a1a2e; font-size:19px; }
+    .duplicate-modal-card p { color:#667788; line-height:1.6; font-size:14px; }
+    .duplicate-modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; }
+</style>
+
 <script>
     // @ts-nocheck
     const zone = document.getElementById('upload-zone');
@@ -387,6 +407,11 @@
     const removeBtn = document.getElementById('remove-file');
     const warningBox = document.getElementById('file-warning');
     const uploadBtn = document.getElementById('upload-btn');
+    const uploadForm = document.getElementById('upload-form');
+    const duplicateModal = document.getElementById('duplicate-modal');
+    const duplicateMessage = document.getElementById('duplicate-modal-message');
+    let duplicateContracts = [];
+    let duplicateCheckComplete = false;
 
     function formatBytes(bytes) {
         if (bytes < 1024) return bytes + ' B';
@@ -475,11 +500,45 @@
         }
     });
 
-    document.getElementById('upload-form').addEventListener('submit', function(e) {
+    uploadForm.addEventListener('submit', async function(e) {
         const file = input.files[0];
         if (!file || !isPdf(file)) {
             e.preventDefault();
             showWarning();
+            return;
+        }
+        if (uploadForm.dataset.isRevision !== 'true' && !duplicateCheckComplete) {
+            e.preventDefault();
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'Checking for duplicates...';
+            const formData = new FormData();
+            formData.append('file', file);
+            const csrfToken = uploadForm.querySelector('[name=csrfmiddlewaretoken]').value;
+            try {
+                const response = await fetch('{% url "check_duplicate_upload" %}', {
+                    method: 'POST',
+                    headers: {'X-CSRFToken': csrfToken},
+                    body: formData,
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) throw new Error('duplicate check failed');
+                duplicateContracts = result.duplicates || [];
+                if (duplicateContracts.length) {
+                    const duplicate = duplicateContracts[0];
+                    duplicateMessage.textContent = `${file.name} appears to be a duplicate of ${duplicate.filename || duplicate.title}. Add it as a revision?`;
+                    duplicateModal.classList.add('open');
+                    duplicateModal.setAttribute('aria-hidden', 'false');
+                    uploadBtn.disabled = false;
+                    uploadBtn.innerHTML = 'Upload & Encrypt';
+                    return;
+                }
+                duplicateCheckComplete = true;
+                uploadForm.submit();
+            } catch (error) {
+                uploadBtn.disabled = false;
+                uploadBtn.innerHTML = 'Upload & Encrypt';
+                uploadForm.submit();
+            }
             return;
         }
         const btn = document.getElementById('upload-btn');
@@ -492,6 +551,27 @@
             </svg>
             Processing...
         `;
+    });
+
+    function closeDuplicateModal() {
+        duplicateModal.classList.remove('open');
+        duplicateModal.setAttribute('aria-hidden', 'true');
+    }
+
+    document.getElementById('duplicate-revision-btn').addEventListener('click', function() {
+        const duplicate = duplicateContracts[0];
+        if (!duplicate) return;
+        uploadForm.action = `/contract/${duplicate.id}/add-revision/`;
+        duplicateCheckComplete = true;
+        closeDuplicateModal();
+        uploadForm.submit();
+    });
+
+    document.getElementById('duplicate-new-btn').addEventListener('click', function() {
+        uploadForm.action = '{% url "upload_contract" %}';
+        duplicateCheckComplete = true;
+        closeDuplicateModal();
+        uploadForm.submit();
     });
 </script>
 

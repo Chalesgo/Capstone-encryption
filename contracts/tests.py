@@ -23,7 +23,7 @@ from .physical_verification import (
     build_manifest, canonical_json, encode_page_token, sign_manifest,
     verify_manifest_signature,
 )
-from .forms import sanitize_tutorial_html
+from .forms import ContractForm, sanitize_tutorial_html
 from .utils import (
     encrypt_cf,
     embed_data_in_image,
@@ -131,7 +131,7 @@ class AuditLogTests(TestCase):
         self.assertEqual(len(response.context['page_obj']), 10)
         self.assertEqual(response.context['page_obj'].number, 2)
         self.assertEqual(response.context['page_obj'].paginator.count, 25)
-        self.assertContains(response, 'onchange="this.form.requestSubmit()"', count=2)
+        self.assertContains(response, 'class="btn btn-primary dashboard-apply-filters" type="submit"')
         self.assertContains(response, 'page=3')
 
     def test_dashboard_supports_multiple_persistent_activity_filters(self):
@@ -822,6 +822,329 @@ class AuthenticationMatrixTests(TestCase):
                 response = reused_client.get(reverse('contract_list'))
                 self.assertEqual(response.status_code, 302)
                 self.assertIn(reverse('login'), response.url)
+
+
+class DocumentManagementTests(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.media_directory = tempfile.TemporaryDirectory()
+        cls.media_override = override_settings(MEDIA_ROOT=cls.media_directory.name)
+        cls.media_override.enable()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.media_override.disable()
+        cls.media_directory.cleanup()
+        super().tearDownClass()
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(
+            'document_admin', 'document-admin@example.com', 'Document-password-2026!'
+        )
+        self.staff = User.objects.create_user(
+            'document_staff', password='Document-password-2026!', is_staff=True
+        )
+        self.client.force_login(self.admin)
+
+    @staticmethod
+    def make_contract(number, user=None, trashed=False):
+        owner = user or User.objects.first()
+        contract = Contract.objects.create(
+            title=f'Document Management {number}',
+            recipient=owner,
+            file=SimpleUploadedFile(
+                f'document-management-{number}.pdf',
+                b'%PDF-1.7\nDocument management test fixture',
+                content_type='application/pdf',
+            ),
+            is_trashed=trashed,
+        )
+        return contract
+
+    def test_doc03_metadata_storage_matrix(self):
+        contracts = [self.make_contract(number, self.staff) for number in range(20)]
+        for contract in contracts:
+            with self.subTest(contract=contract.id):
+                contract.refresh_from_db()
+                self.assertTrue(contract.title)
+                self.assertEqual(contract.recipient, self.staff)
+                self.assertIsNotNone(contract.uploaded_at)
+                self.assertEqual(contract.status, 'pending')
+                self.assertFalse(contract.is_trashed)
+                self.assertTrue(contract.file.name)
+
+    def test_doc01_valid_pdf_upload_matrix(self):
+        document = fitz.open()
+        document.new_page().insert_text((72, 72), 'Valid upload fixture')
+        base_pdf = document.tobytes()
+        document.close()
+        valid_files = []
+        for number in range(10):
+            valid_files.append((f'below-{number}.pdf', base_pdf))
+        for number in range(10):
+            valid_files.append((f'medium-{number}.pdf', base_pdf + (b'0' * (1024 * 1024))))
+        for number in range(5):
+            valid_files.append((f'near-limit-{number}.pdf', base_pdf + (b'0' * (14 * 1024 * 1024))))
+        for number in range(5):
+            document = fitz.open()
+            for page in range(4):
+                document.new_page().insert_text((72, 72), f'Mixed-content page {page}')
+            pdf_bytes = document.tobytes()
+            document.close()
+            valid_files.append((f'multi-page-{number}.pdf', pdf_bytes))
+
+        accepted = 0
+        for filename, contents in valid_files:
+            form = ContractForm(data={'title': filename}, files={
+                'file': SimpleUploadedFile(filename, contents, content_type='application/pdf')
+            })
+            with self.subTest(filename=filename):
+                self.assertTrue(form.is_valid(), form.errors)
+                accepted += 1
+        self.assertEqual(accepted, 30)
+
+    def test_doc02_invalid_upload_rejection_matrix(self):
+        invalid_files = []
+        invalid_files.extend(
+            (f'not-pdf-{number}.txt', b'plain text') for number in range(5)
+        )
+        invalid_files.extend(
+            (f'zero-{number}.pdf', b'') for number in range(5)
+        )
+        invalid_files.extend(
+            (f'malformed-{number}.pdf', b'%PDF-not-a-real-document') for number in range(5)
+        )
+        invalid_files.extend(
+            (f'renamed-{number}.pdf', b'harmless file content') for number in range(5)
+        )
+        invalid_files.extend(
+            (f'oversized-{number}.pdf', b'%PDF-' + (b'0' * (15 * 1024 * 1024 + 1)))
+            for number in range(5)
+        )
+        for number in range(5):
+            document = fitz.open()
+            document.new_page().insert_text((72, 72), 'Password protected fixture')
+            document.save(
+                Path(self.media_directory.name) / f'protected-{number}.pdf',
+                encryption=fitz.PDF_ENCRYPT_AES_256,
+                owner_pw='owner-password',
+                user_pw='user-password',
+                permissions=0,
+            )
+            document.close()
+            invalid_files.append(
+                (f'protected-{number}.pdf', (Path(self.media_directory.name) / f'protected-{number}.pdf').read_bytes())
+            )
+
+        rejected = 0
+        for filename, contents in invalid_files:
+            form = ContractForm(data={'title': filename}, files={
+                'file': SimpleUploadedFile(filename, contents, content_type='application/pdf')
+            })
+            with self.subTest(filename=filename):
+                self.assertFalse(form.is_valid())
+                self.assertTrue(form.errors.get('file'))
+                rejected += 1
+        self.assertEqual(rejected, 30)
+
+    def test_doc04_authorized_view_and_download_matrix(self):
+        contracts = [self.make_contract(number, self.staff) for number in range(20)]
+        view_count_before = AuditLog.objects.filter(action='viewed').count()
+        download_count_before = AuditLog.objects.filter(action='downloaded').count()
+        for contract in contracts:
+            with self.subTest(contract=contract.id):
+                viewed = self.client.post(reverse('mark_contract_viewed', args=[contract.id]))
+                downloaded = self.client.get(reverse('download_contract', args=[contract.id]))
+                self.assertEqual(viewed.status_code, 200)
+                self.assertEqual(downloaded.status_code, 200)
+                downloaded.close()
+        self.assertEqual(
+            AuditLog.objects.filter(action='viewed').count(),
+            view_count_before + 20,
+        )
+        self.assertEqual(
+            AuditLog.objects.filter(action='downloaded').count(),
+            download_count_before + 20,
+        )
+
+    def test_doc05_unauthorized_view_and_download_matrix(self):
+        contracts = [self.make_contract(number, self.staff) for number in range(20)]
+        public_client = Client()
+        for contract in contracts:
+            with self.subTest(contract=contract.id):
+                viewed = public_client.post(reverse('mark_contract_viewed', args=[contract.id]))
+                downloaded = public_client.get(reverse('download_contract', args=[contract.id]))
+                self.assertEqual(viewed.status_code, 302)
+                self.assertEqual(downloaded.status_code, 302)
+
+    def test_doc06_archive_lifecycle_matrix(self):
+        for number in range(10):
+            contract = self.make_contract(number, self.staff)
+            with self.subTest(contract=contract.id):
+                archived = self.client.post(reverse('delete_contract', args=[contract.id]))
+                self.assertEqual(archived.status_code, 302)
+                contract.refresh_from_db()
+                self.assertTrue(contract.is_trashed)
+
+                restored = self.client.post(reverse('restore_contract', args=[contract.id]))
+                self.assertEqual(restored.status_code, 200)
+                contract.refresh_from_db()
+                self.assertFalse(contract.is_trashed)
+
+                archived_again = self.client.post(reverse('delete_contract', args=[contract.id]))
+                self.assertEqual(archived_again.status_code, 302)
+                contract.refresh_from_db()
+                self.assertTrue(contract.is_trashed)
+
+    def test_doc07_version_control_matrix(self):
+        for number in range(10):
+            contract = self.make_contract(number, self.staff)
+            previous = ''
+            for version_number in range(1, 4):
+                fingerprint = f'{contract.id:020d}{version_number:044d}'
+                version = ContractVersion.objects.create(
+                    contract=contract,
+                    version_number=version_number,
+                    source='upload' if version_number == 1 else 'revision',
+                    file=SimpleUploadedFile(
+                        f'contract-{contract.id}-v{version_number}.pdf',
+                        b'%PDF-version-test',
+                    ),
+                    fingerprint=fingerprint,
+                    previous_fingerprint=previous,
+                    created_by=self.staff,
+                )
+                with self.subTest(contract=contract.id, version=version_number):
+                    self.assertEqual(version.version_number, version_number)
+                    self.assertEqual(version.previous_fingerprint, previous)
+                    self.assertIsNotNone(version.created_at)
+                previous = fingerprint
+
+            self.assertEqual(
+                list(contract.versions.order_by('version_number').values_list('version_number', flat=True)),
+                [1, 2, 3],
+            )
+
+    def test_doc08_version_chain_tampering_matrix(self):
+        for number in range(10):
+            contract = self.make_contract(number, self.staff)
+            first = ContractVersion.objects.create(
+                contract=contract,
+                version_number=1,
+                source='upload',
+                file=SimpleUploadedFile(f'chain-{number}-v1.pdf', b'%PDF-chain-test'),
+                fingerprint='fingerprint-one',
+                previous_fingerprint='',
+            )
+            second = ContractVersion.objects.create(
+                contract=contract,
+                version_number=2,
+                source='revision',
+                file=SimpleUploadedFile(f'chain-{number}-v2.pdf', b'%PDF-chain-test'),
+                fingerprint='fingerprint-two',
+                previous_fingerprint='fingerprint-one',
+            )
+            second.previous_fingerprint = 'tampered-previous-link'
+            second.save(update_fields=['previous_fingerprint'])
+            with patch('contracts.utils.generate_canonical_fingerprint', return_value='fingerprint-one'):
+                result = verify_version_chain(contract)
+            with self.subTest(contract=contract.id):
+                self.assertFalse(result[1]['valid'])
+
+    def test_doc09_search_matrix(self):
+        titles = [
+            'Barangay Alpha Agreement', 'Barangay Beta Agreement',
+            'Community Gamma Contract', 'Community Delta Contract',
+        ]
+        for number in range(20):
+            self.make_contract(number, self.staff).title = titles[number % len(titles)]
+            Contract.objects.filter(pk=Contract.objects.latest('id').id).update(
+                title=titles[number % len(titles)]
+            )
+
+        queries = (
+            [(title, 5) for title in titles[:2] for _ in range(5)]
+            + [('Agreement', 10)] * 5
+            + [('agreement', 10)] * 5
+            + [('no-such-document', 0)] * 10
+        )
+        for query, expected_count in queries:
+            with self.subTest(query=query):
+                response = self.client.get(reverse('contract_list'), {'q': query})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context['page_obj'].paginator.count, expected_count)
+
+    def test_doc10_filter_and_pagination_matrix(self):
+        for number in range(50):
+            self.make_contract(number, self.staff)
+        for per_page in (10, 25, 50):
+            for status in ('pending', 'sent', 'approved', 'all', 'unknown'):
+                response = self.client.get(reverse('contract_list'), {
+                    'status': status,
+                    'per_page': per_page,
+                })
+                self.assertEqual(response.context['page_obj'].paginator.per_page, per_page)
+
+    def test_doc11_duplicate_upload_detection_matrix(self):
+        pdf_path = Path(self.media_directory.name) / 'duplicate-source.pdf'
+        document = fitz.open()
+        document.new_page().insert_text((72, 72), 'Duplicate detection fixture')
+        document.save(pdf_path)
+        document.close()
+        pdf_bytes = pdf_path.read_bytes()
+        fingerprint = generate_canonical_fingerprint(pdf_path)
+        existing = Contract.objects.create(
+            title='Existing duplicate.pdf',
+            recipient=self.staff,
+            original_fingerprint=fingerprint,
+            file=SimpleUploadedFile('existing.pdf', pdf_bytes),
+        )
+
+        for attempt in range(20):
+            with self.subTest(attempt=attempt + 1):
+                response = self.client.post(
+                    reverse('check_duplicate_upload'),
+                    {'file': SimpleUploadedFile('incoming.pdf', pdf_bytes, content_type='application/pdf')},
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()['duplicates'][0]['id'], existing.id)
+        self.assertEqual(Contract.objects.count(), 1)
+
+    def test_doc12_report_filter_and_export_matrix(self):
+        contract = self.make_contract(1, self.staff)
+        AuditLog.objects.create(
+            contract=contract,
+            user=self.staff,
+            action='added',
+            document_title=contract.title,
+        )
+        AuditLog.objects.create(
+            contract=contract,
+            user=self.admin,
+            action='deleted',
+            document_title=contract.title,
+        )
+        combinations = [
+            {'activity': 'added'},
+            {'activity': 'deleted'},
+            {'activity': 'added', 'sort': 'oldest'},
+            {'activity': 'deleted', 'sort': 'newest'},
+            {'user': str(self.staff.id)},
+            {'user': str(self.admin.id)},
+            {'status': 'pending'},
+            {'document': 'Document Management'},
+            {'date_from': timezone.now().date().isoformat()},
+            {'date_to': timezone.now().date().isoformat()},
+        ] * 2
+        for query in combinations:
+            with self.subTest(query=query):
+                response = self.client.get(reverse('dashboard'), query)
+                self.assertEqual(response.status_code, 200)
+        export = self.client.get(reverse('export_dashboard_report'), {'activity': 'added'})
+        self.assertEqual(export.status_code, 200)
+        self.assertEqual(export['Content-Type'], 'text/csv')
+        self.assertIn(b'Document,User,Action,Timestamp,IP address,Details', export.content)
 
 
 class PublicVerificationCryptoTests(TestCase):

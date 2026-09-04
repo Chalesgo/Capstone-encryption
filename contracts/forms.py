@@ -5,6 +5,7 @@ from django import forms
 from django.conf import settings
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
+import fitz
 from .models import Contract, Tutorial
 from .signals import (
     failed_login_count,
@@ -147,6 +148,12 @@ class ContractForm(forms.ModelForm):
             "This file is not a PDF. Please convert your document to PDF format before uploading."
         )
 
+        if file.size > settings.MAX_UPLOAD_SIZE:
+            raise forms.ValidationError(
+                f"This file is too large. The maximum allowed size is "
+                f"{settings.MAX_UPLOAD_SIZE // (1024 * 1024)} MB."
+            )
+
         # Check 1: extension
         if not file.name.lower().endswith('.pdf'):
             raise forms.ValidationError(error_message)
@@ -167,6 +174,21 @@ class ContractForm(forms.ModelForm):
 
         if header != b'%PDF-':
             raise forms.ValidationError(error_message)
+
+        try:
+            file.seek(0)
+            pdf_data = file.read()
+            with fitz.open(stream=pdf_data, filetype='pdf') as document:
+                if document.is_encrypted:
+                    raise forms.ValidationError(
+                        'Password-protected PDFs are not supported. Remove the password and try again.'
+                    )
+        except forms.ValidationError:
+            raise
+        except Exception:
+            raise forms.ValidationError(error_message)
+        finally:
+            file.seek(0)
 
         return file
 

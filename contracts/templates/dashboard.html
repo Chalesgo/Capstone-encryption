@@ -1,6 +1,18 @@
 {% extends 'base.html' %}
 {% block title %}Dashboard{% endblock %}
 
+{% block mobile_topbar_extra %}
+<div class="mobile-topbar-extra mobile-topbar-left">
+  <button type="button" class="mobile-nav-link" id="dashboard-mobile-filter-toggle"
+          title="Open dashboard filters" aria-label="Open dashboard filters"
+          aria-controls="audit-filters" aria-expanded="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <path d="M4 5h16M4 12h16M4 19h16"/>
+    </svg>
+  </button>
+</div>
+{% endblock %}
+
 {% block content %}
 <style>
   html, body { max-width: 100%; overflow-x: hidden; }
@@ -67,6 +79,7 @@
   .audit-panel-header {
     padding: 16px 20px;
     border-bottom: 1px solid #eef0f4;
+    position: relative;
   }
   .audit-panel-heading {
     margin-bottom: 12px;
@@ -74,22 +87,80 @@
     font-size: 15px;
     font-weight: 600;
   }
-  .audit-filters {
-    display: flex;
-    align-items: end;
-    gap: 12px;
-    flex-wrap: wrap;
+  .dashboard-filter-toggle {
+    display: none;
+    align-items: center;
+    gap: 7px;
+    border: 1px solid #dbe2ea;
+    border-radius: 8px;
+    background: #fff;
+    color: #2d3a47;
+    padding: 8px 11px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
   }
+  .dashboard-filter-toggle:hover,
+  .dashboard-filter-toggle[aria-expanded="true"] { border-color: #3b5bdb; color: #3b5bdb; background: #f7f9ff; }
+  .dashboard-filter-toggle svg { width: 15px; height: 15px; }
+  .audit-filters {
+    position: fixed;
+    top: 56px;
+    left: 72px;
+    bottom: 0;
+    width: 260px;
+    z-index: 300;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+    padding: 24px 16px;
+    border-right: 1px solid #e8e6e2;
+    background: #f7f6f4;
+  }
+  .container { margin-left: 292px; max-width: none; padding-right: 2rem; }
+  .mobile-dashboard-filter-overlay { display: none; position: fixed; inset: 56px 0 0; z-index: 1240; background: rgba(30, 40, 50, .18); }
+  .dashboard-filter-sidebar-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: -4px -2px 6px;
+    color: #889aab;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .dashboard-filter-close {
+    display: inline-grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border: 1px solid #dbe2ea;
+    border-radius: 7px;
+    background: #fff;
+    color: #889aab;
+    font: inherit;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .dashboard-filter-close:hover { border-color: #3b5bdb; color: #3b5bdb; }
   .audit-filter-field {
     display: flex;
     flex-direction: column;
     gap: 5px;
   }
   .audit-filter-field label {
-    color: #52606d;
-    font-size: 13px;
+    color: #889aab;
+    font-size: 11px;
     font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
+
   .audit-filter-field select {
     min-width: 180px;
     min-height: 42px;
@@ -97,14 +168,34 @@
     border: 1px solid #cbd5e1;
     border-radius: 6px;
     background: #fff;
-    color: #1f2937;
+    color: #2d3a47;
     font-family: inherit;
     font-size: 13px;
-    font-weight: 500;
+    font-weight: 400;
     box-shadow: 0 1px 2px rgba(30, 40, 50, .04);
     cursor: pointer;
     transition: border-color .15s ease, box-shadow .15s ease;
   }
+  .audit-filter-field input[type="date"],
+  .audit-filter-field input[type="search"] {
+    min-height: 42px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 11px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #fff;
+    color: #2d3a47;
+    font: inherit;
+    font-size: 13px;
+    box-shadow: 0 1px 2px rgba(30, 40, 50, .04);
+  }
+  .audit-filter-field input:focus { outline: none; border-color: #3b5bdb; box-shadow: 0 0 0 3px rgba(59, 91, 219, .12); }
+  .audit-filters .audit-filter-field select { width: 100%; min-width: 0; }
+  .status-filter-select { font-weight: 600 !important; }
+  .status-filter-select.status-pending { color: #667085; border-color: #cbd5e1; }
+  .status-filter-select.status-sent { color: #b7791f; border-color: #f4c54d; background: #fffdf4; }
+  .status-filter-select.status-approved { color: #16805a; border-color: #8bd8b5; background: #f3fcf7; }
   .audit-filter-field select:hover { border-color: #94a3b8; }
   .audit-filter-field select:focus { outline: none; border-color: #3b5bdb; box-shadow: 0 0 0 3px rgba(59, 91, 219, .12); }
   .activity-filter-control { position: relative; min-width: 240px; }
@@ -128,7 +219,7 @@
     border: 1px solid #cbd5e1;
     border-radius: 6px;
     background: #fff;
-    color: #1f2937;
+    color: #2d3a47;
     cursor: pointer;
     font: inherit;
     text-align: left;
@@ -138,14 +229,16 @@
   .activity-filter-chevron { color: #667788; font-size: 16px; line-height: 1; transition: transform .15s ease; }
   .activity-filter-control.open .activity-filter-chevron { transform: rotate(180deg); }
   .activity-filter-menu {
-    position: absolute;
-    top: calc(100% + 5px);
+    position: fixed;
+    top: 0;
     left: 0;
-    z-index: 20;
+    z-index: 1400;
     display: none;
     width: 300px;
     min-width: 100%;
     max-width: calc(100vw - 32px);
+    max-height: calc(100vh - 16px);
+    overflow-y: auto;
     padding: 5px;
     border: 1px solid #dbe2ea;
     border-radius: 8px;
@@ -164,6 +257,7 @@
     text-align: left;
     font-family: inherit;
     font-size: 13px;
+    color: #2d3a47;
   }
   .activity-filter-menu .action-badge { white-space: nowrap; }
   .activity-filter-option:hover,
@@ -172,13 +266,30 @@
   .activity-filter-option[aria-selected="true"]::before { border-color: #3b5bdb; background: #3b5bdb; box-shadow: inset 0 0 0 3px #fff; }
   .activity-filter-actions { display: flex; gap: 6px; margin-top: 5px; padding: 7px 5px 2px; border-top: 1px solid #eef0f4; }
   .activity-filter-actions button { flex: 1; padding: 6px 8px; border: 1px solid #dbe2ea; border-radius: 6px; background: #fff; color: #52606d; cursor: pointer; font: inherit; font-size: 12px; }
-  .activity-filter-actions button[data-filter-apply] { border-color: #3b5bdb; background: #3b5bdb; color: #fff; }
+  .activity-filter-actions button[data-filter-done] { border-color: #3b5bdb; background: #3b5bdb; color: #fff; }
   .action-badge.all { background: #f3f4f6; color: #667085; }
   .audit-filter-status {
     align-self: center;
     margin-left: auto;
     color: #667788;
     font-size: 13px;
+  }
+  .audit-filters .audit-filter-status { align-self: stretch; margin: 0; padding: 9px 0 0; border-top: 1px solid #e8e6e2; }
+  .dashboard-apply-filters { width: 100%; justify-content: center; margin-top: 2px; }
+  .audit-export-link { width: 100%; box-sizing: border-box; justify-content: center; margin-top: auto; }
+  @media (max-width: 900px) {
+    .dashboard-filter-toggle { display: none; }
+    .container { margin-left: 0; }
+    .audit-filters {
+      left: 0;
+      width: min(84vw, 320px);
+      z-index: 1250;
+      transform: translateX(-105%);
+      transition: transform 0.25s ease;
+      box-shadow: 8px 0 24px rgba(30, 40, 50, .16);
+    }
+    .audit-filters.open { transform: translateX(0); }
+    .mobile-dashboard-filter-overlay.open { display: block; }
   }
 
   .audit-table {
@@ -256,6 +367,7 @@
   }
   .action-badge-icon { width: 13px; height: 13px; flex-shrink: 0; stroke-width: 2; }
   .action-badge.viewed    { background: #eef2ff; color: #3b5bdb; }
+  .action-badge.downloaded { background: #e8f5ef; color: #16805a; }
   .action-badge.added     { background: #e8f5ef; color: #1a9e6a; }
   .action-badge.encrypted { background: #f3ecfd; color: #7c3aed; }
   .action-badge.edited    { background: #fff8e6; color: #d97706; }
@@ -293,6 +405,16 @@
   .audit-meta-value { color: #2d3a47; font-weight: 500; text-align: right; overflow-wrap: anywhere; }
   .audit-meta-value.warning { color: #dc2626; }
   .audit-pdf-note { margin: 0; padding: 0 16px 18px; color: #52606d; font-size: 12.5px; line-height: 1.55; overflow-wrap: anywhere; }
+  .audit-version-list { padding: 0 10px 12px; border-bottom: 1px solid #eef0f4; }
+  .audit-version-item { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 6px; border: 0; border-radius: 7px; background: transparent; color: #2d3a47; text-align: left; font: inherit; cursor: pointer; }
+  .audit-version-item:hover { background: #f0f2f5; }
+  .audit-version-item.active { background: #eef2ff; color: #3b5bdb; }
+  .audit-version-icon { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #27c485; color: #fff; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+  .audit-version-item.invalid .audit-version-icon { background: #e53e3e; }
+  .audit-version-meta { min-width: 0; }
+  .audit-version-label { display: block; font-size: 12.5px; font-weight: 600; }
+  .audit-version-date { display: block; margin-top: 1px; color: #889aab; font-size: 11px; }
+  .audit-version-loading { padding: 0 6px 10px; color: #aabbcc; font-size: 12px; }
   @media (max-width: 900px) { .audit-pdf-panel { width: 100%; right: -100%; min-width: 0; } .audit-pdf-body { flex-direction: column; } .audit-pdf-frame-wrap { min-height: 55vh; } .audit-pdf-sidebar { width: 100%; max-height: 45vh; border-left: 0; border-top: 1px solid #eef0f4; } }
 
   .empty-audit {
@@ -440,14 +562,26 @@
 
 <div class="audit-panel">
   <div class="audit-panel-header">
-    <div class="audit-panel-heading">Document Activity</div>
+    <div class="audit-panel-heading" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+      <span>Document Activity</span>
+      <button type="button" class="dashboard-filter-toggle" id="dashboard-filter-toggle" aria-controls="audit-filters" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+        Filters
+      </button>
+    </div>
+    <div class="mobile-dashboard-filter-overlay" id="mobile-dashboard-filter-overlay" onclick="closeDashboardFilters()"></div>
     <form class="audit-filters" id="audit-filters" method="get">
+      <div class="dashboard-filter-sidebar-heading">
+        <span>Activity filters</span>
+        <button type="button" class="dashboard-filter-close" id="dashboard-filter-close" aria-label="Close filters">&times;</button>
+      </div>
       <div class="audit-filter-field">
         <label for="activity-filter">Show activity</label>
         <div class="activity-filter-control" data-activity-dropdown>
            <select id="activity-filter" name="activity" class="activity-filter-native" multiple aria-label="Filter activities">
            <option value="all" {% if activity_filter == 'all' %}selected{% endif %}>All activity</option>
            <option value="viewed" {% if 'viewed' in activity_filters %}selected{% endif %}>Viewed Document</option>
+           <option value="downloaded" {% if 'downloaded' in activity_filters %}selected{% endif %}>Downloaded Document</option>
            <option value="added" {% if 'added' in activity_filters %}selected{% endif %}>Added Document</option>
            <option value="encrypted" {% if 'encrypted' in activity_filters %}selected{% endif %}>Encrypted Document</option>
            <option value="edited" {% if 'edited' in activity_filters %}selected{% endif %}>Edited Document</option>
@@ -468,6 +602,7 @@
           <div class="activity-filter-menu" role="listbox" aria-label="Activity types">
              <button class="activity-filter-option" type="button" role="option" data-value="all" aria-selected="{% if activity_filter == 'all' %}true{% else %}false{% endif %}"><span class="action-badge all"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>All activity</span></button>
              <button class="activity-filter-option" type="button" role="option" data-value="viewed" aria-selected="{% if 'viewed' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge viewed"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.5"/></svg>Viewed Document</span></button>
+             <button class="activity-filter-option" type="button" role="option" data-value="downloaded" aria-selected="{% if 'downloaded' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge downloaded"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Downloaded Document</span></button>
              <button class="activity-filter-option" type="button" role="option" data-value="added" aria-selected="{% if 'added' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge added"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Added Document</span></button>
              <button class="activity-filter-option" type="button" role="option" data-value="encrypted" aria-selected="{% if 'encrypted' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge encrypted"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 0 0 1 8 0v3"/></svg>Encrypted Document</span></button>
              <button class="activity-filter-option" type="button" role="option" data-value="edited" aria-selected="{% if 'edited' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge edited"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 16-.8 4.8L8 20l11.5-11.5a2.1 2.1 0 0 0-3-3L5 17zM14.5 7.5l2 2"/></svg>Edited Document</span></button>
@@ -480,27 +615,59 @@
              <button class="activity-filter-option" type="button" role="option" data-value="login" aria-selected="{% if 'login' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge login"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M21 19V5a2 2 0 0 0-2-2h-6"/></svg>Successful Login</span></button>
              <button class="activity-filter-option" type="button" role="option" data-value="logout" aria-selected="{% if 'logout' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge logout"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M21 19V5a2 2 0 0 0-2-2h-6"/></svg>Logout</span></button>
              <button class="activity-filter-option" type="button" role="option" data-value="locked_out" aria-selected="{% if 'locked_out' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge locked_out"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M9 14l6 4M15 14l-6 4"/></svg>Account Lockout</span></button>
-              <div class="activity-filter-actions"><button type="button" data-filter-clear>Clear selection</button><button type="button" data-filter-apply>Apply filters</button></div>
+              <div class="activity-filter-actions"><button type="button" data-filter-clear>Clear selection</button><button type="button" data-filter-done>Done</button></div>
           </div>
         </div>
       </div>
       <div class="audit-filter-field">
+        <label for="report-date-from">Date from</label>
+        <input id="report-date-from" type="date" name="date_from" value="{{ report_date_from }}">
+      </div>
+      <div class="audit-filter-field">
+        <label for="report-date-to">Date to</label>
+        <input id="report-date-to" type="date" name="date_to" value="{{ report_date_to }}">
+      </div>
+      <div class="audit-filter-field">
+        <label for="report-user">User</label>
+        <select id="report-user" name="user">
+          <option value="">All users</option>
+          {% for available_user in report_users %}
+            <option value="{{ available_user.id }}" {% if available_user.id|stringformat:'s' == report_user %}selected{% endif %}>{{ available_user.username }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="audit-filter-field">
+        <label for="report-status">Document status</label>
+        <select id="report-status" class="status-filter-select" name="status" onchange="styleDashboardStatusFilter(this)">
+          <option value="">All statuses</option>
+          <option value="pending" {% if report_status == 'pending' %}selected{% endif %}>Draft</option>
+          <option value="sent" {% if report_status == 'sent' %}selected{% endif %}>Sent</option>
+          <option value="approved" {% if report_status == 'approved' %}selected{% endif %}>Signed</option>
+        </select>
+      </div>
+      <div class="audit-filter-field">
+        <label for="report-document">Document</label>
+        <input id="report-document" type="search" name="document" value="{{ report_document }}" placeholder="Search documents">
+      </div>
+      <div class="audit-filter-field">
         <label for="sort-order">Sort by date</label>
-        <select id="sort-order" name="sort" onchange="this.form.requestSubmit()">
+        <select id="sort-order" name="sort">
           <option value="newest" {% if sort_order == 'newest' %}selected{% endif %}>Newest first</option>
           <option value="oldest" {% if sort_order == 'oldest' %}selected{% endif %}>Oldest first</option>
         </select>
       </div>
       <div class="audit-filter-field">
         <label for="rows-per-page">Rows per page</label>
-        <select id="rows-per-page" name="per_page" onchange="this.form.requestSubmit()">
+        <select id="rows-per-page" name="per_page">
           <option value="10" {% if rows_per_page == 10 %}selected{% endif %}>10 rows</option>
           <option value="20" {% if rows_per_page == 20 %}selected{% endif %}>20 rows</option>
           <option value="50" {% if rows_per_page == 50 %}selected{% endif %}>50 rows</option>
           <option value="100" {% if rows_per_page == 100 %}selected{% endif %}>100 rows</option>
         </select>
       </div>
-      <div class="audit-filter-status" aria-live="polite">Updates automatically</div>
+      <div class="audit-filter-status" aria-live="polite">Choose filters, then apply to update results.</div>
+      <button class="btn btn-primary dashboard-apply-filters" type="submit">Apply filters</button>
+      <a class="btn btn-outline audit-export-link" href="{% url 'export_dashboard_report' %}?{{ request.GET.urlencode }}">Export CSV</a>
       <noscript><button class="btn btn-primary" type="submit">Apply</button></noscript>
     </form>
   </div>
@@ -518,9 +685,12 @@
     </thead>
     <tbody id="audit-table-body">
       {% for log in recent_logs %}
-      <tr{% if log.has_inspection_details %} class="inspectable" tabindex="0" role="button"
-          aria-label="Inspect verification details for {{ log.display_document_title|default:'reported document' }}"
-          data-preview-url="{% if log.evidence_file %}{% url 'audit_evidence_preview' log.id %}{% endif %}"
+      <tr{% if log.contract or log.has_inspection_details %} class="inspectable" tabindex="0" role="button"
+          aria-label="Inspect {{ log.display_document_title|default:'document activity' }}"
+          data-preview-url="{% if log.evidence_file %}{% url 'audit_evidence_preview' log.id %}{% elif log.contract and log.contract.file %}{% url 'preview_contract' log.contract.id %}{% endif %}"
+          data-download-url="{% if log.contract and log.contract.file %}{% url 'download_contract' log.contract.id %}{% endif %}"
+          data-contract-id="{% if log.contract %}{{ log.contract.id }}{% endif %}"
+          data-version="{% if log.version_number %}{{ log.version_number }}{% endif %}"
           data-title="{{ log.display_document_title|default:'Reported document' }}"
           data-source="{{ log.inspection_source }}"
           data-result="{{ log.inspection_result }}"
@@ -552,6 +722,7 @@
         <td>
           <span class="action-badge {{ log.action }}">
             {% if log.action == 'viewed' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.5"/></svg>
+            {% elif log.action == 'downloaded' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
             {% elif log.action == 'added' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
             {% elif log.action == 'encrypted' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
             {% elif log.action == 'edited' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 16-.8 4.8L8 20l11.5-11.5a2.1 2.1 0 0 0-3-3L5 17zM14.5 7.5l2 2"/></svg>
@@ -581,16 +752,18 @@
     </div>
     <div class="pagination-links">
       {% if page_obj.has_previous %}
-        <a class="pagination-link dashboard-page-link" href="?activity={{ activity_filter }}&amp;sort={{ sort_order }}&amp;per_page={{ rows_per_page }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>
+        <a class="pagination-link dashboard-page-link" href="?activity={{ activity_filter }}&amp;date_from={{ report_date_from|urlencode }}&amp;date_to={{ report_date_to|urlencode }}&amp;user={{ report_user|urlencode }}&amp;status={{ report_status|urlencode }}&amp;document={{ report_document|urlencode }}&amp;sort={{ sort_order }}&amp;per_page={{ rows_per_page }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>
       {% endif %}
       <span class="pagination-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
       {% if page_obj.has_next %}
-        <a class="pagination-link dashboard-page-link" href="?activity={{ activity_filter }}&amp;sort={{ sort_order }}&amp;per_page={{ rows_per_page }}&amp;page={{ page_obj.next_page_number }}">Next</a>
+        <a class="pagination-link dashboard-page-link" href="?activity={{ activity_filter }}&amp;date_from={{ report_date_from|urlencode }}&amp;date_to={{ report_date_to|urlencode }}&amp;user={{ report_user|urlencode }}&amp;status={{ report_status|urlencode }}&amp;document={{ report_document|urlencode }}&amp;sort={{ sort_order }}&amp;per_page={{ rows_per_page }}&amp;page={{ page_obj.next_page_number }}">Next</a>
       {% endif %}
     </div>
   </nav>
   {% endif %}
 </div>
+{% include "includes/pdf_viewer.html" with viewer_prefix="audit-pdf" viewer_close_function="closeAuditPdf" viewer_show_verification=True viewer_show_unavailable=True %}
+{% comment %}
 <div class="audit-pdf-overlay" id="audit-pdf-overlay" onclick="closeAuditPdf()"></div>
 <div class="audit-pdf-panel" id="audit-pdf-panel" aria-hidden="true">
   <div class="audit-pdf-body">
@@ -620,37 +793,48 @@
         <div class="audit-meta-row"><span class="audit-meta-label">Verification Result</span><span class="audit-meta-value" id="audit-pdf-result">—</span></div>
         <div class="audit-meta-row"><span class="audit-meta-label">Integrity Check</span><span class="audit-meta-value" id="audit-pdf-integrity">—</span></div>
         <div class="audit-meta-row"><span class="audit-meta-label">Verified On</span><span class="audit-meta-value" id="audit-pdf-time">—</span></div>
+        <div class="audit-meta-row"><span class="audit-meta-label">Version</span><span class="audit-meta-value" id="audit-pdf-version">Current</span></div>
       </div>
       <p class="audit-pdf-section-label">Document Info</p>
       <div class="audit-meta-list">
         <div class="audit-meta-row"><span class="audit-meta-label">File Size</span><span class="audit-meta-value" id="audit-pdf-size">—</span></div>
         <div class="audit-meta-row"><span class="audit-meta-label">Evidence</span><span class="audit-meta-value" id="audit-pdf-retention">—</span></div>
       </div>
+      <p class="audit-pdf-section-label">Version History</p>
+      <div class="audit-version-list" id="audit-version-list"><div class="audit-version-loading">Select a document to load versions.</div></div>
       <p class="audit-pdf-section-label">Investigation Note</p>
       <p class="audit-pdf-note" id="audit-pdf-note">This document has been reported to the admin for further investigation.</p>
     </aside>
   </div>
 </div>
+{% endcomment %}
 <script>
+function styleDashboardStatusFilter(select) {
+  if (!select) return;
+  select.classList.remove('status-pending', 'status-sent', 'status-approved');
+  if (select.value) select.classList.add('status-' + select.value);
+}
+styleDashboardStatusFilter(document.getElementById('report-status'));
 function openAuditPdfFromRow(row) {
   const url = row.dataset.previewUrl;
   const title = row.dataset.title;
   const frame = document.getElementById('audit-pdf-frame');
   const unavailable = document.getElementById('audit-pdf-unavailable');
-  const download = document.getElementById('audit-pdf-download');
+  const download = document.getElementById('audit-pdf-download-btn');
 
   frame.src = url || '';
   frame.style.display = url ? 'block' : 'none';
   unavailable.classList.toggle('show', !url);
   download.style.display = url ? 'grid' : 'none';
-  download.href = url || '#';
+  download.href = row.dataset.downloadUrl || url || '#';
   download.download = title;
 
-  document.getElementById('audit-pdf-title').textContent = title;
+  document.getElementById('audit-pdf-panel-title').textContent = title;
   document.getElementById('audit-pdf-source').textContent = row.dataset.source || '—';
   document.getElementById('audit-pdf-result').textContent = row.dataset.result || '—';
   document.getElementById('audit-pdf-integrity').textContent = row.dataset.integrity || '—';
   document.getElementById('audit-pdf-time').textContent = row.dataset.verifiedOn || '—';
+  document.getElementById('audit-pdf-version').textContent = row.dataset.version ? 'v' + row.dataset.version : 'Current';
   document.getElementById('audit-pdf-size').textContent = row.dataset.fileSize || '—';
   document.getElementById('audit-pdf-retention').textContent = url ? 'Retained for inspection' : 'Removed after verification';
   document.getElementById('audit-pdf-note').textContent = row.dataset.note || '—';
@@ -659,6 +843,43 @@ function openAuditPdfFromRow(row) {
   document.getElementById('audit-pdf-panel').classList.add('open');
   document.getElementById('audit-pdf-overlay').classList.add('open');
   document.getElementById('audit-pdf-panel').setAttribute('aria-hidden', 'false');
+  loadAuditVersions(row.dataset.contractId, row.dataset.version);
+}
+function loadAuditVersions(contractId, selectedVersion) {
+  const list = document.getElementById('audit-version-list');
+  if (!list) return;
+  if (!contractId) {
+    list.innerHTML = '<div class="audit-version-loading">No contract is linked to this activity.</div>';
+    return;
+  }
+  list.innerHTML = '<div class="audit-version-loading">Loading versions...</div>';
+  fetch('/contract/' + encodeURIComponent(contractId) + '/version-history/')
+    .then(function(response) { if (!response.ok) throw new Error('Unable to load versions'); return response.json(); })
+    .then(function(data) {
+      list.innerHTML = '';
+      if (!data.versions || !data.versions.length) {
+        list.innerHTML = '<div class="audit-version-loading">No version history available.</div>';
+        return;
+      }
+      const current = data.versions.find(function(version) { return version.is_current; });
+      const activeVersion = Number(selectedVersion) || (current && current.version_number);
+      if (activeVersion) document.getElementById('audit-pdf-version').textContent = 'v' + activeVersion;
+      data.versions.forEach(function(version) {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'audit-version-item' + (version.valid === false ? ' invalid' : '') + (version.version_number === activeVersion ? ' active' : '');
+        item.innerHTML = '<span class="audit-version-icon">' + (version.valid === false ? '!' : '✓') + '</span><span class="audit-version-meta"><span class="audit-version-label">Version ' + version.version_number + (version.is_current ? ' · Current' : '') + '</span><span class="audit-version-date">' + version.created_at + '</span></span>';
+        item.addEventListener('click', function() {
+          document.getElementById('audit-pdf-frame').src = version.preview_url || version.file_url;
+          document.getElementById('audit-pdf-download-btn').href = version.file_url || version.preview_url || '#';
+          document.getElementById('audit-pdf-version').textContent = 'v' + version.version_number;
+          document.querySelectorAll('.audit-version-item').forEach(function(other) { other.classList.remove('active'); });
+          item.classList.add('active');
+        });
+        list.appendChild(item);
+      });
+    })
+    .catch(function() { list.innerHTML = '<div class="audit-version-loading">Version history could not be loaded.</div>'; });
 }
 function closeAuditPdf() {
   document.getElementById('audit-pdf-panel').classList.remove('open');
@@ -699,7 +920,23 @@ function closeAuditPdf() {
   trigger.addEventListener('click', function() {
     const isOpen = control.classList.toggle('open');
     trigger.setAttribute('aria-expanded', String(isOpen));
+    if (isOpen) positionActivityMenu();
   });
+  function positionActivityMenu() {
+    const menu = control.querySelector('.activity-filter-menu');
+    if (!menu || !control.classList.contains('open')) return;
+    const triggerRect = trigger.getBoundingClientRect();
+    const width = Math.min(300, window.innerWidth - 16);
+    menu.style.width = width + 'px';
+    const menuHeight = Math.min(menu.scrollHeight, window.innerHeight - 16);
+    let top = triggerRect.bottom + 5;
+    if (top + menuHeight > window.innerHeight - 8) top = triggerRect.top - menuHeight - 5;
+    let left = Math.min(triggerRect.left, window.innerWidth - width - 8);
+    menu.style.top = Math.max(8, top) + 'px';
+    menu.style.left = Math.max(8, left) + 'px';
+  }
+  window.addEventListener('resize', positionActivityMenu);
+  window.addEventListener('scroll', positionActivityMenu, true);
   options.forEach(function(option) {
     option.addEventListener('click', function() {
       const value = option.dataset.value;
@@ -720,10 +957,9 @@ function closeAuditPdf() {
       syncActivityFilter();
     });
   });
-  control.querySelector('[data-filter-apply]').addEventListener('click', function() {
+  control.querySelector('[data-filter-done]').addEventListener('click', function() {
     control.classList.remove('open');
     trigger.setAttribute('aria-expanded', 'false');
-    select.form.requestSubmit();
   });
   control.querySelector('[data-filter-clear]').addEventListener('click', function() {
     emptySelection = true;
@@ -741,6 +977,43 @@ function closeAuditPdf() {
 document.addEventListener('keydown', function(event) {
   if (event.key === 'Escape') closeAuditPdf();
 });
+const dashboardFilterToggle = document.getElementById('dashboard-filter-toggle');
+const dashboardMobileFilterToggle = document.getElementById('dashboard-mobile-filter-toggle');
+const dashboardFilterForm = document.getElementById('audit-filters');
+const dashboardFilterClose = document.getElementById('dashboard-filter-close');
+const dashboardFilterOverlay = document.getElementById('mobile-dashboard-filter-overlay');
+function closeDashboardFilters() {
+  if (!dashboardFilterForm) return;
+  dashboardFilterForm.classList.remove('open');
+  dashboardFilterOverlay?.classList.remove('open');
+  dashboardFilterToggle?.setAttribute('aria-expanded', 'false');
+  dashboardMobileFilterToggle?.setAttribute('aria-expanded', 'false');
+}
+function toggleDashboardFilters() {
+  if (!dashboardFilterForm) return;
+  const isOpen = dashboardFilterForm.classList.toggle('open');
+  dashboardFilterOverlay?.classList.toggle('open', isOpen);
+  dashboardFilterToggle?.setAttribute('aria-expanded', String(isOpen));
+  dashboardMobileFilterToggle?.setAttribute('aria-expanded', String(isOpen));
+}
+dashboardFilterToggle?.addEventListener('click', toggleDashboardFilters);
+dashboardMobileFilterToggle?.addEventListener('click', toggleDashboardFilters);
+dashboardFilterClose?.addEventListener('click', closeDashboardFilters);
+document.addEventListener('click', function(event) {
+  if (dashboardFilterForm?.classList.contains('open')
+      && !dashboardFilterForm.contains(event.target)
+      && !dashboardFilterToggle?.contains(event.target)
+      && !dashboardMobileFilterToggle?.contains(event.target)) {
+    closeDashboardFilters();
+  }
+});
+function syncDashboardExportLink(currentUrl) {
+  const exportLink = document.querySelector('.audit-export-link');
+  if (!exportLink) return;
+  const exportUrl = new URL(exportLink.href, window.location.origin);
+  exportUrl.search = currentUrl.search;
+  exportLink.href = exportUrl.toString();
+}
 document.getElementById('audit-filters')?.addEventListener('submit', function() {
   sessionStorage.setItem('sealguard-dashboard-scroll-y', String(window.scrollY));
 });
@@ -780,6 +1053,8 @@ document.getElementById('audit-filters')?.addEventListener('submit', function(ev
       currentBody.innerHTML = nextBody.innerHTML;
       if (currentPagination && nextPagination) currentPagination.replaceWith(nextPagination);
       history.pushState({}, '', url.toString());
+      syncDashboardExportLink(url);
+      closeDashboardFilters();
     })
     .catch(function() {
       window.location.href = url.toString();
@@ -811,6 +1086,7 @@ document.addEventListener('click', function(event) {
       currentBody.innerHTML = nextBody.innerHTML;
       if (currentPagination && nextPagination) currentPagination.replaceWith(nextPagination);
       history.pushState({}, '', link.href);
+      syncDashboardExportLink(new URL(link.href, window.location.origin));
     })
   .catch(function() {
     window.location.href = link.href;

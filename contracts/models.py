@@ -147,6 +147,7 @@ class Contract(models.Model):
 class AuditLog(models.Model):
     ACTION_CHOICES = [
         ('viewed', 'Viewed Document'),
+        ('downloaded', 'Downloaded Document'),
         ('added', 'Added Document'),
         ('encrypted', 'Encrypted Document'),
         ('edited', 'Edited Document'),
@@ -170,6 +171,7 @@ class AuditLog(models.Model):
     action = models.CharField(max_length=30, choices=ACTION_CHOICES)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
+    version_number = models.PositiveIntegerField(null=True, blank=True)
     document_title = models.CharField(max_length=255, blank=True)
     note = models.CharField(max_length=255, blank=True)  # optional extra context
     evidence_file = models.FileField(upload_to='verification_evidence/', blank=True, null=True)

@@ -579,6 +579,7 @@ def log_activity(
     verification_result='',
     integrity_check='',
     document_size=None,
+    version_number=None,
 ):
     return AuditLog.objects.create(
         contract=contract,
@@ -586,6 +587,7 @@ def log_activity(
         user=request.user if request.user.is_authenticated else None,
         action=action,
         ip_address=get_client_ip(request),
+        version_number=version_number,
         note=note,
         verification_source=verification_source,
         verification_result=verification_result,

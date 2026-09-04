@@ -197,6 +197,53 @@
     font-weight: 600;
   }
   .list-pagination a:hover { background: #f8fafc; }
+  .list-pagination label {
+    color: #889aab;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .list-pagination select {
+    min-height: 34px;
+    padding: 6px 28px 6px 9px;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    background: #fff;
+    color: #2d3a47;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(30, 40, 50, .04);
+  }
+  .list-pagination select:hover { border-color: #94a3b8; }
+  .list-pagination select:focus { outline: none; border-color: #3b5bdb; box-shadow: 0 0 0 3px rgba(59, 91, 219, .12); }
+  .bulk-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 56px;
+    box-sizing: border-box;
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border: 1px solid #dbe2ea;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(30, 40, 50, .05);
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .15s ease;
+  }
+  .bulk-actions.open { visibility: visible; opacity: 1; pointer-events: auto; }
+  .bulk-actions-count { color: #52606d; font-size: 13px; font-weight: 600; }
+  .bulk-actions-spacer { flex: 1; }
+  .bulk-action-button,
+  .bulk-clear-button { min-height: 34px; padding: 7px 11px; border-radius: 7px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .bulk-action-button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #fbd5d5; background: #fff0f0; color: #e53e3e; }
+  .bulk-action-button:hover { background: #ffe4e4; }
+  .bulk-action-button svg { width: 14px; height: 14px; flex-shrink: 0; }
+  .bulk-clear-button { border: 1px solid #dbe2ea; background: #fff; color: #52606d; }
+  .bulk-clear-button:hover { background: #f8fafc; }
 
   .contracts-table td.contract-document-cell { cursor: pointer; }
 
@@ -964,6 +1011,12 @@
 </div>
 
 {% if contracts %}
+<div class="bulk-actions" id="bulk-actions" aria-live="polite">
+  <span class="bulk-actions-count"><span id="selected-contract-count">0</span> selected</span>
+  <span class="bulk-actions-spacer"></span>
+  <button type="button" class="bulk-clear-button" id="clear-contract-selection">Clear</button>
+  {% if perms.contracts.delete_contract %}<button type="button" class="bulk-action-button" id="bulk-delete-contracts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Move selected to Trash</button>{% endif %}
+</div>
 <table class="contracts-table">
   <thead>
     <tr>
@@ -988,7 +1041,7 @@
         ondragstart="dragContractStart(event, {{ contract.id }})">
 
       <!-- Checkbox -->
-      <td><input type="checkbox" class="row-check"></td>
+      <td><input type="checkbox" class="row-check" value="{{ contract.id }}" aria-label="Select {{ contract.title|escapejs }}"></td>
 
       <!-- Document Name -->
       <td class="contract-document-cell" onclick="handleMobileContractTap(event, {{ contract.id }})">
@@ -1153,9 +1206,15 @@
 <nav class="list-pagination" aria-label="Contract pages">
   <span>Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} contracts</span>
   <span style="display:flex;align-items:center;gap:8px;">
-    {% if page_obj.has_previous %}<a href="?q={{ search_query|urlencode }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+    <label for="contracts-per-page">Rows</label>
+    <select id="contracts-per-page" onchange="changeContractsPerPage(this.value)" aria-label="Contracts per page">
+      <option value="10" {% if per_page == 10 %}selected{% endif %}>10</option>
+      <option value="25" {% if per_page == 25 %}selected{% endif %}>25</option>
+      <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+    </select>
+    {% if page_obj.has_previous %}<a href="?q={{ search_query|urlencode }}&amp;status={{ status_filter|urlencode }}&amp;folder={{ folder_filter|urlencode }}&amp;per_page={{ per_page }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
     <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
-    {% if page_obj.has_next %}<a href="?q={{ search_query|urlencode }}&amp;page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+    {% if page_obj.has_next %}<a href="?q={{ search_query|urlencode }}&amp;status={{ status_filter|urlencode }}&amp;folder={{ folder_filter|urlencode }}&amp;per_page={{ per_page }}&amp;page={{ page_obj.next_page_number }}">Next</a>{% endif %}
   </span>
 </nav>
 {% endif %}
@@ -1198,6 +1257,8 @@
 </div>
 
 <!-- PDF Preview Panel -->
+{% include "includes/pdf_viewer.html" with viewer_prefix="pdf" viewer_close_function="closePdfPreview" %}
+{% comment %}
 <div class="pdf-overlay" id="pdf-overlay" onclick="closePdfPreview()"></div>
 <div class="pdf-panel" id="pdf-panel">
   <div class="pdf-panel-body">
@@ -1233,6 +1294,7 @@
     </div>
   </div>
 </div>
+{% endcomment %}
 
 <script>
 // @ts-nocheck
@@ -1256,6 +1318,13 @@ function scheduleSearchFilter() {
     url.searchParams.delete('page');
     window.location.href = url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '');
   }, 350);
+}
+
+function changeContractsPerPage(value) {
+  const url = new URL(window.location.href);
+  url.searchParams.set('per_page', value);
+  url.searchParams.delete('page');
+  window.location.href = url.pathname + '?' + url.searchParams.toString();
 }
 
 function setStatusFilter(status, el) {
@@ -1284,10 +1353,50 @@ function applyFilters() {
 }
 
 
-// Select all checkbox
-document.getElementById('select-all').addEventListener('change', function() {
-  document.querySelectorAll('.row-check').forEach(cb => cb.checked = this.checked);
-});
+// Bulk selection and deletion
+(function() {
+  const selectAll = document.getElementById('select-all');
+  const bulkActions = document.getElementById('bulk-actions');
+  const count = document.getElementById('selected-contract-count');
+  const clear = document.getElementById('clear-contract-selection');
+  const deleteButton = document.getElementById('bulk-delete-contracts');
+  if (!selectAll || !bulkActions || !count) return;
+  const rowChecks = () => Array.from(document.querySelectorAll('.row-check'));
+  function updateSelectionState() {
+    const checks = rowChecks();
+    const selected = checks.filter(cb => cb.checked);
+    count.textContent = selected.length;
+    bulkActions.classList.toggle('open', selected.length > 0);
+    selectAll.checked = checks.length > 0 && selected.length === checks.length;
+    selectAll.indeterminate = selected.length > 0 && selected.length < checks.length;
+  }
+  selectAll.addEventListener('change', function() {
+    rowChecks().forEach(cb => { cb.checked = selectAll.checked; });
+    updateSelectionState();
+  });
+  rowChecks().forEach(cb => cb.addEventListener('change', updateSelectionState));
+  clear?.addEventListener('click', function() {
+    rowChecks().forEach(cb => { cb.checked = false; });
+    selectAll.checked = false;
+    selectAll.indeterminate = false;
+    updateSelectionState();
+  });
+  deleteButton?.addEventListener('click', function() {
+    const ids = rowChecks().filter(cb => cb.checked).map(cb => cb.value);
+    if (!ids.length || !window.confirm('Move the selected documents to Trash?')) return;
+    const body = new URLSearchParams();
+    ids.forEach(id => body.append('ids', id));
+    deleteButton.disabled = true;
+    fetch('{% url "bulk_delete_contracts" %}', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    }).then(response => {
+      if (!response.ok) throw new Error('Bulk delete failed');
+      window.location.reload();
+    }).catch(() => { deleteButton.disabled = false; window.alert('The selected documents could not be moved to Trash.'); });
+  });
+})();
 
 
 // Inline rename

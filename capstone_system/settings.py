@@ -130,3 +130,4 @@ AUTHENTICATION_BACKENDS = [
 # RSA Key Paths
 RSA_PRIVATE_KEY_PATH = os.path.join(BASE_DIR, 'keys', 'private.pem')
 RSA_PUBLIC_KEY_PATH = os.path.join(BASE_DIR, 'keys', 'public.pem')
+MAX_UPLOAD_SIZE = 15 * 1024 * 1024
