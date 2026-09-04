@@ -117,49 +117,53 @@ Do not share login credentials in this file.
 
 ---
 
-## Testing on Mobile Devices
-To access the system from a phone, you can use Ngrok.
+## Remote Advisor Demo with Ngrok
 
-### Step 1: Download and Set Up Ngrok
-Install Ngrok from https://ngrok.com and sign up for a free account.
-Add your authtoken:
-```bash
+Use the included launcher to show SealGuard from another phone or computer without deploying it. Your laptop must remain powered on, connected to the internet, and running the launcher throughout the demo.
+
+### One-Time Setup on Windows
+
+1. Create a free account at https://ngrok.com.
+2. Install the ngrok agent from the Microsoft Store or with:
+
+```powershell
+winget install ngrok -s msstore
+```
+
+3. Copy your authtoken from the ngrok dashboard and save it in ngrok's local configuration:
+
+```powershell
 ngrok config add-authtoken YOUR_TOKEN_HERE
 ```
 
-### Step 2: Start the Django Server
-```bash
-python manage.py runserver 0.0.0.0:8000
+Never paste the authtoken into `.env`, this README, source code, screenshots, or chat messages.
+
+### Start the Demo
+
+Activate the project's virtual environment, then run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start_ngrok_demo.ps1
 ```
 
-### Step 3: Open a New Terminal and Run Ngrok
-```bash
-ngrok http 8000
+The launcher automatically:
+
+- creates the ngrok HTTPS tunnel;
+- reads the temporary public URL;
+- allows only that hostname in Django;
+- adds that exact HTTPS origin for CSRF-protected forms;
+- starts Django on port 8000; and
+- prints the link to open or send to your advisor.
+
+Keep the PowerShell window open. Press `Ctrl+C` once to stop both Django and ngrok. The public link stops working immediately and a new URL may be issued the next time you launch it.
+
+To use another local port:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start_ngrok_demo.ps1 -Port 8080
 ```
 
-Ngrok will generate a public URL similar to:
-https://abc123.ngrok-free.app
-
-### Step 4: Update Django Settings
-In `settings.py`, add the generated Ngrok URL to both `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS`:
-
-```python
-ALLOWED_HOSTS = [
-    'localhost',
-    '127.0.0.1',
-    '192.168.0.103',
-    'abc123.ngrok-free.app'
-]
-
-CSRF_TRUSTED_ORIGINS = [
-    'https://abc123.ngrok-free.app'
-]
-```
-
-Restart the Django server after making changes.
-
-> Note: The Ngrok URL changes every session on the free plan.
-> Update `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` each time.
+This is a temporary development demo, not a production deployment. The generated link is reachable from the public internet, so use test records, keep normal account permissions enabled, do not share administrator credentials, and stop the launcher as soon as the presentation is finished.
 
 ---
 
