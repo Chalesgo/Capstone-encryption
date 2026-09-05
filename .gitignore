@@ -4,3 +4,13 @@ db.sqlite3
 .env
 *.pem
 *.sqlite3
+
+# Generated test, report, and Python cache files
+tmp/
+output/reports/
+__pycache__/
+*.py[cod]
+
+# Local tool output and logs
+tools/
+*.log
