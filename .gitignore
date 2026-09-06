@@ -14,3 +14,5 @@ __pycache__/
 # Local tool output and logs
 tools/
 *.log
+performance/fixtures/*.pdf
+performance/fixtures/manifest.json

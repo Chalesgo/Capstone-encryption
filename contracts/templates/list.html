@@ -219,6 +219,7 @@
   .list-pagination select:focus { outline: none; border-color: #3b5bdb; box-shadow: 0 0 0 3px rgba(59, 91, 219, .12); }
   .bulk-actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 10px;
     min-height: 56px;
@@ -239,11 +240,16 @@
   .bulk-actions-spacer { flex: 1; }
   .bulk-action-button,
   .bulk-clear-button { min-height: 34px; padding: 7px 11px; border-radius: 7px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
-  .bulk-action-button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #fbd5d5; background: #fff0f0; color: #e53e3e; }
-  .bulk-action-button:hover { background: #ffe4e4; }
+  .bulk-action-button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #dbe2ea; background: #f8fafc; color: #40566b; }
+  .bulk-action-button:hover { border-color: #b9c8d6; background: #eef3f7; }
+  .bulk-action-button.danger { border-color: #fbd5d5; background: #fff0f0; color: #e53e3e; }
+  .bulk-action-button.danger:hover { background: #ffe4e4; }
+  .bulk-action-button:disabled { opacity: .55; cursor: wait; }
   .bulk-action-button svg { width: 14px; height: 14px; flex-shrink: 0; }
   .bulk-clear-button { border: 1px solid #dbe2ea; background: #fff; color: #52606d; }
   .bulk-clear-button:hover { background: #f8fafc; }
+  .bulk-operation-select { width: 100%; min-height: 42px; margin-top: 8px; padding: 8px 34px 8px 11px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #2d3a47; font: inherit; }
+  .bulk-operation-select:focus { outline: none; border-color: #3b5bdb; box-shadow: 0 0 0 3px rgba(59, 91, 219, .12); }
 
   .contracts-table td.contract-document-cell { cursor: pointer; }
 
@@ -700,32 +706,40 @@
   }
 
   .pdf-sidebar {
-    width: 240px;
+    width: 270px;
     flex-shrink: 0;
     min-width: 0;
-    background: #fafbfc;
-    border-left: 1px solid #eef0f4;
+    padding-bottom: 16px;
+    background: #f5f7fa;
+    border-left: 1px solid #e5ebf0;
     display: flex;
     flex-direction: column;
     overflow-y: auto;
   }
   .pdf-sidebar-title {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    margin: 0 0 4px;
     font-size: 15px;
-    font-weight: 600;
-    color: #2d3a47;
-    padding: 16px 16px 4px;
+    font-weight: 700;
+    color: #243443;
+    padding: 17px;
+    border-bottom: 1px solid #e5ebf0;
+    background: rgba(255,255,255,.96);
     line-height: 1.35;
     word-break: break-word;
   }
   .sidebar-section-label {
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.05em;
+    margin: 0;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: #aabbcc;
-    padding: 14px 16px 8px;
+    color: #7d8e9e;
+    padding: 14px 14px 7px;
   }
-  .meta-list { padding: 0 16px 12px; border-bottom: 1px solid #eef0f4; }
+  .meta-list { margin: 0 10px; padding: 8px 12px; border: 1px solid #e3e9ef; border-radius: 10px; background: #fff; box-shadow: 0 1px 2px rgba(28,43,56,.03); }
   .meta-row {
     display: flex;
     justify-content: space-between;
@@ -736,7 +750,7 @@
   .meta-row-label { color: #889aab; }
   .meta-row-value { color: #2d3a47; font-weight: 500; text-align: right; }
 
-  .version-list { flex: 1; overflow-y: auto; }
+  .version-list { flex: 1; margin: 0 10px; overflow-y: auto; border: 1px solid #e3e9ef; border-radius: 10px; background: #fff; }
   .version-list-loading {
     padding: 12px 16px;
     font-size: 12.5px;
@@ -1015,7 +1029,11 @@
   <span class="bulk-actions-count"><span id="selected-contract-count">0</span> selected</span>
   <span class="bulk-actions-spacer"></span>
   <button type="button" class="bulk-clear-button" id="clear-contract-selection">Clear</button>
-  {% if perms.contracts.delete_contract %}<button type="button" class="bulk-action-button" id="bulk-delete-contracts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Move selected to Trash</button>{% endif %}
+  <button type="button" class="bulk-action-button" id="bulk-move-folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h6l2 2h10v10H3z"/><path d="m9 13 3 3 3-3M12 10v6"/></svg>Move to folder</button>
+  <button type="button" class="bulk-action-button" id="bulk-change-status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h7"/><path d="m16 17 2 2 4-5"/></svg>Change status</button>
+  <button type="button" class="bulk-action-button" id="bulk-download-contracts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Download ZIP</button>
+  <button type="button" class="bulk-action-button" id="bulk-encrypt-contracts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Encrypt selected</button>
+  {% if perms.contracts.delete_contract %}<button type="button" class="bulk-action-button danger" id="bulk-delete-contracts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Move to Trash</button>{% endif %}
 </div>
 <table class="contracts-table">
   <thead>
@@ -1044,7 +1062,7 @@
       <td><input type="checkbox" class="row-check" value="{{ contract.id }}" aria-label="Select {{ contract.title|escapejs }}"></td>
 
       <!-- Document Name -->
-      <td class="contract-document-cell" onclick="handleMobileContractTap(event, {{ contract.id }})">
+      <td class="contract-document-cell" onclick="handleDocumentCellClick(event, {{ contract.id }})">
         <div class="contract-name-cell">
           {% if contract.seal_image %}
             <img src="{{ contract.seal_image.url }}" class="contract-seal-thumb">
@@ -1294,7 +1312,41 @@
     </div>
   </div>
 </div>
+
 {% endcomment %}
+
+<div class="modal-overlay" id="bulk-choice-modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="bulk-choice-title">
+    <h3 id="bulk-choice-title">Bulk action</h3>
+    <p id="bulk-choice-message"></p>
+    <select class="bulk-operation-select" id="bulk-choice-select"></select>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-outline" id="bulk-choice-cancel">Cancel</button>
+      <button type="button" class="btn btn-primary" id="bulk-choice-confirm">Apply</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="bulk-confirm-modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="bulk-confirm-title">
+    <h3 id="bulk-confirm-title">Confirm bulk action</h3>
+    <p id="bulk-confirm-message"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-outline" id="bulk-confirm-cancel">Cancel</button>
+      <button type="button" class="btn btn-primary" id="bulk-confirm-apply">Continue</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="bulk-result-modal">
+  <div class="modal" role="status" aria-live="polite">
+    <h3>Bulk action complete</h3>
+    <p id="bulk-result-message"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary" id="bulk-result-close">Done</button>
+    </div>
+  </div>
+</div>
 
 <script>
 // @ts-nocheck
@@ -1353,15 +1405,50 @@ function applyFilters() {
 }
 
 
-// Bulk selection and deletion
+// Bulk contract actions
 (function() {
   const selectAll = document.getElementById('select-all');
   const bulkActions = document.getElementById('bulk-actions');
   const count = document.getElementById('selected-contract-count');
   const clear = document.getElementById('clear-contract-selection');
   const deleteButton = document.getElementById('bulk-delete-contracts');
+  const folderButton = document.getElementById('bulk-move-folder');
+  const statusButton = document.getElementById('bulk-change-status');
+  const downloadButton = document.getElementById('bulk-download-contracts');
+  const encryptButton = document.getElementById('bulk-encrypt-contracts');
+  const choiceModal = document.getElementById('bulk-choice-modal');
+  const choiceTitle = document.getElementById('bulk-choice-title');
+  const choiceMessage = document.getElementById('bulk-choice-message');
+  const choiceSelect = document.getElementById('bulk-choice-select');
+  const choiceConfirm = document.getElementById('bulk-choice-confirm');
+  const confirmModal = document.getElementById('bulk-confirm-modal');
+  const confirmTitle = document.getElementById('bulk-confirm-title');
+  const confirmMessage = document.getElementById('bulk-confirm-message');
+  const confirmApply = document.getElementById('bulk-confirm-apply');
+  const resultModal = document.getElementById('bulk-result-modal');
+  const resultMessage = document.getElementById('bulk-result-message');
+  let choiceAction = null;
+  let confirmAction = null;
+  let reloadAfterResult = false;
   if (!selectAll || !bulkActions || !count) return;
   const rowChecks = () => Array.from(document.querySelectorAll('.row-check'));
+  const selectedIds = () => rowChecks().filter(cb => cb.checked).map(cb => cb.value);
+  const statusChoices = [
+    { value: 'pending', label: 'Draft' },
+    { value: 'sent', label: 'Sent' },
+    { value: 'approved', label: 'Signed' },
+  ];
+  function getLiveFolderChoices() {
+    const choices = [{ value: '', label: 'No folder' }];
+    document.querySelectorAll('#folder-list .folder-item').forEach(function(item) {
+      const name = item.querySelector('.folder-name-text');
+      if (item.dataset.folderId && name) {
+        choices.push({ value: item.dataset.folderId, label: name.textContent.trim() });
+      }
+    });
+    return choices;
+  }
+
   function updateSelectionState() {
     const checks = rowChecks();
     const selected = checks.filter(cb => cb.checked);
@@ -1370,6 +1457,72 @@ function applyFilters() {
     selectAll.checked = checks.length > 0 && selected.length === checks.length;
     selectAll.indeterminate = selected.length > 0 && selected.length < checks.length;
   }
+
+  function closeChoiceModal() {
+    choiceModal.classList.remove('active');
+    choiceAction = null;
+  }
+
+  function openChoiceModal(type, choices) {
+    const ids = selectedIds();
+    if (!ids.length) return;
+    choiceAction = type;
+    choiceTitle.textContent = type === 'folder' ? 'Move selected documents' : 'Change document status';
+    choiceMessage.textContent = type === 'folder'
+      ? 'Choose a destination for ' + ids.length + ' selected document(s).'
+      : 'Choose the new status for ' + ids.length + ' selected document(s).';
+    choiceSelect.innerHTML = '';
+    choices.forEach(function(choice) {
+      const option = document.createElement('option');
+      option.value = choice.value;
+      option.textContent = choice.label;
+      choiceSelect.appendChild(option);
+    });
+    choiceModal.classList.add('active');
+    choiceSelect.focus();
+  }
+
+  function closeConfirmModal() {
+    confirmModal.classList.remove('active');
+    confirmAction = null;
+  }
+
+  function openConfirmModal(type) {
+    const ids = selectedIds();
+    if (!ids.length) return;
+    confirmAction = type;
+    const deleting = type === 'delete';
+    confirmTitle.textContent = deleting ? 'Move selected documents to Trash?' : 'Encrypt selected documents?';
+    confirmMessage.textContent = deleting
+      ? ids.length + ' selected document(s) will be moved to Trash. Public documents will be skipped.'
+      : 'SealGuard will encrypt ' + ids.length + ' selected document(s). Documents already encrypted will be skipped.';
+    confirmApply.textContent = deleting ? 'Move to Trash' : 'Encrypt documents';
+    confirmApply.classList.toggle('btn-danger', deleting);
+    confirmModal.classList.add('active');
+  }
+
+  function showResult(message, shouldReload) {
+    resultMessage.textContent = message;
+    reloadAfterResult = Boolean(shouldReload);
+    resultModal.classList.add('active');
+  }
+
+  function postBulk(url, extra) {
+    const body = new URLSearchParams();
+    selectedIds().forEach(id => body.append('ids', id));
+    Object.keys(extra || {}).forEach(key => body.set(key, extra[key]));
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    }).then(function(response) {
+      return response.json().then(function(data) {
+        if (!response.ok && response.status !== 207) throw new Error(data.error || 'bulk_action_failed');
+        return data;
+      });
+    });
+  }
+
   selectAll.addEventListener('change', function() {
     rowChecks().forEach(cb => { cb.checked = selectAll.checked; });
     updateSelectionState();
@@ -1381,20 +1534,78 @@ function applyFilters() {
     selectAll.indeterminate = false;
     updateSelectionState();
   });
-  deleteButton?.addEventListener('click', function() {
-    const ids = rowChecks().filter(cb => cb.checked).map(cb => cb.value);
-    if (!ids.length || !window.confirm('Move the selected documents to Trash?')) return;
-    const body = new URLSearchParams();
-    ids.forEach(id => body.append('ids', id));
-    deleteButton.disabled = true;
-    fetch('{% url "bulk_delete_contracts" %}', {
-      method: 'POST',
-      headers: { 'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString()
-    }).then(response => {
-      if (!response.ok) throw new Error('Bulk delete failed');
-      window.location.reload();
-    }).catch(() => { deleteButton.disabled = false; window.alert('The selected documents could not be moved to Trash.'); });
+
+  folderButton?.addEventListener('click', function() { openChoiceModal('folder', getLiveFolderChoices()); });
+  statusButton?.addEventListener('click', function() { openChoiceModal('status', statusChoices); });
+  deleteButton?.addEventListener('click', function() { openConfirmModal('delete'); });
+  encryptButton?.addEventListener('click', function() { openConfirmModal('encrypt'); });
+
+  document.getElementById('bulk-choice-cancel')?.addEventListener('click', closeChoiceModal);
+  choiceConfirm?.addEventListener('click', function() {
+    const type = choiceAction;
+    const value = choiceSelect.value;
+    choiceConfirm.disabled = true;
+    const url = type === 'folder' ? '{% url "bulk_assign_folder" %}' : '{% url "bulk_update_status" %}';
+    const extra = type === 'folder' ? { folder_id: value } : { status: value };
+    postBulk(url, extra).then(function(data) {
+      closeChoiceModal();
+      showResult(data.updated + ' document(s) updated.', true);
+    }).catch(function() {
+      closeChoiceModal();
+      showResult('The selected documents could not be updated.', false);
+    }).finally(function() { choiceConfirm.disabled = false; });
+  });
+
+  document.getElementById('bulk-confirm-cancel')?.addEventListener('click', closeConfirmModal);
+  confirmApply?.addEventListener('click', function() {
+    const type = confirmAction;
+    confirmApply.disabled = true;
+    const url = type === 'delete' ? '{% url "bulk_delete_contracts" %}' : '{% url "bulk_encrypt_contracts" %}';
+    postBulk(url).then(function(data) {
+      closeConfirmModal();
+      if (type === 'delete') {
+        let message = data.moved + ' document(s) moved to Trash.';
+        if (data.skipped_public) message += ' ' + data.skipped_public + ' public document(s) were skipped.';
+        showResult(message, true);
+      } else {
+        let message = data.encrypted + ' document(s) encrypted.';
+        if (data.already_encrypted) message += ' ' + data.already_encrypted + ' already encrypted.';
+        if (data.failed && data.failed.length) message += ' ' + data.failed.length + ' failed.';
+        showResult(message, true);
+      }
+    }).catch(function() {
+      closeConfirmModal();
+      showResult('The bulk action could not be completed.', false);
+    }).finally(function() { confirmApply.disabled = false; });
+  });
+
+  downloadButton?.addEventListener('click', function() {
+    const ids = selectedIds();
+    if (!ids.length) return;
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{% url "bulk_download_contracts" %}';
+    form.style.display = 'none';
+    const csrf = document.createElement('input');
+    csrf.type = 'hidden';
+    csrf.name = 'csrfmiddlewaretoken';
+    csrf.value = '{{ csrf_token }}';
+    form.appendChild(csrf);
+    ids.forEach(function(id) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'ids';
+      input.value = id;
+      form.appendChild(input);
+    });
+    document.body.appendChild(form);
+    form.submit();
+    form.remove();
+  });
+
+  document.getElementById('bulk-result-close')?.addEventListener('click', function() {
+    resultModal.classList.remove('active');
+    if (reloadAfterResult) window.location.reload();
   });
 })();
 
@@ -1460,11 +1671,12 @@ function openPdfPreview(contractId, url, title) {
     method: 'POST',
     headers: { 'X-CSRFToken': '{{ csrf_token }}' }
   }).catch(function() {});
+  if (openPdfInMobileViewer(url)) return;
   const previewUrl = url + (url.includes('#') ? '&' : '#') + 'toolbar=0&navpanes=0&scrollbar=1&view=FitH';
   document.getElementById('pdf-frame').src = previewUrl;
   document.getElementById('pdf-panel-title').textContent = title;
   document.getElementById('pdf-download-btn').href = url;
-  document.getElementById('pdf-download-btn').download = title;
+  document.getElementById('pdf-download-btn').removeAttribute('download');
   document.getElementById('pdf-panel').classList.add('open');
   document.getElementById('pdf-overlay').classList.add('open');
   document.getElementById('pdf-panel').setAttribute('aria-hidden', 'false');
@@ -1490,7 +1702,7 @@ function openPdfPreview(contractId, url, title) {
       data.versions.forEach(function(v) {
         const item = document.createElement('div');
         item.className = 'version-item' + (v.is_current ? ' active' : '');
-        const downloadName = document.getElementById('pdf-panel-title').textContent.trim() + ' (v' + v.version_number + ').pdf';
+        const downloadName = document.getElementById('pdf-panel-title').textContent.trim() + '_v' + v.version_number + '.pdf';
         item.onclick = function() { viewPdfVersion(v.file_url, item, downloadName); };
         item.innerHTML = `
           <span class="version-chain-icon ${v.valid ? 'valid' : 'invalid'}" title="${v.valid ? 'Chain verified' : 'Chain broken — this version does not match the expected fingerprint'}">
@@ -1506,7 +1718,23 @@ function openPdfPreview(contractId, url, title) {
     });
 }
 
+function handleDocumentCellClick(event, contractId) {
+  if (event.defaultPrevented) return;
+  if (event.target.closest('input, button, a, select, textarea, form, .rename-input')) return;
+
+  // On phones, keep the existing action sheet workflow. On larger screens,
+  // the document-name cell is the PDF-preview target.
+  if (window.matchMedia('(max-width: 900px)').matches) {
+    openMobileContractSheet(contractId);
+    return;
+  }
+
+  const row = document.getElementById('row-' + contractId);
+  if (row) openPdfPreview(contractId, row.dataset.fileUrl, row.dataset.contractTitle);
+}
+
 function viewPdfVersion(url, el, versionLabel) {
+  if (openPdfInMobileViewer(url)) return;
   const previewUrl = url + (url.includes('#') ? '&' : '#') + 'toolbar=0&navpanes=0&scrollbar=1&view=FitH';
   document.getElementById('pdf-frame').src = previewUrl;
   document.querySelectorAll('.version-item').forEach(i => i.classList.remove('active'));
@@ -1514,7 +1742,7 @@ function viewPdfVersion(url, el, versionLabel) {
 
   const downloadBtn = document.getElementById('pdf-download-btn');
   downloadBtn.href = url;
-  downloadBtn.download = versionLabel;
+  downloadBtn.removeAttribute('download');
 }
 
 function closePdfPreview() {
@@ -1544,13 +1772,6 @@ function closeContractsDocPanel() {
   if (panel) panel.classList.remove('open');
   if (overlay) overlay.classList.remove('open');
   if (button) button.setAttribute('aria-expanded', 'false');
-}
-
-function handleMobileContractTap(event, contractId) {
-  if (!window.matchMedia('(max-width: 900px)').matches) return;
-  if (event.target.closest('input, button, a, select')) return;
-  event.stopPropagation();
-  openMobileContractSheet(contractId);
 }
 
 function openMobileContractSheet(contractId) {

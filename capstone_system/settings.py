@@ -71,6 +71,13 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        # Concurrent staging/performance requests may briefly contend for
+        # SQLite's single-writer lock. Wait instead of failing at the default
+        # five-second driver timeout. Production should use the configured
+        # server database rather than relying on SQLite for high concurrency.
+        'OPTIONS': {
+            'timeout': 30,
+        },
     }
 }
 
@@ -118,6 +125,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGIN_URL = '/accounts/login/'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+# The Django development server must serve local media during staging and
+# performance tests even when DEBUG is disabled. Production deployments should
+# set SERVE_MEDIA=False and serve MEDIA_ROOT through the web server/storage layer.
+SERVE_MEDIA = config('SERVE_MEDIA', default=True, cast=bool)
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
 X_FRAME_OPTIONS = 'SAMEORIGIN'

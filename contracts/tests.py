@@ -2,8 +2,10 @@ from datetime import timedelta
 import base64
 import json
 import hashlib
+import io
 import os
 import tempfile
+import zipfile
 from pathlib import Path
 from unittest import expectedFailure
 from unittest.mock import patch
@@ -13,6 +15,7 @@ from Crypto.PublicKey import RSA
 from django.contrib.auth.models import Permission, User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.cache import cache
+from django.http import HttpResponse
 from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -35,6 +38,7 @@ from .utils import (
     generate_canonical_fingerprint,
     generate_file_hash,
     generate_hmac,
+    generate_vector_fingerprint,
     log_activity,
     stamp_seal_on_pdf,
     verify_hmac,
@@ -161,6 +165,23 @@ class AuditLogTests(TestCase):
         for activity in ('viewed', 'encrypted', 'approved', 'rejected'):
             self.assertContains(response, f'<option value="{activity}"')
 
+    def test_dashboard_marks_deleted_pdf_as_unavailable_with_reason(self):
+        self.contract.is_trashed = True
+        self.contract.trashed_at = timezone.now()
+        self.contract.save(update_fields=['is_trashed', 'trashed_at'])
+        AuditLog.objects.create(
+            action='deleted', contract=self.contract,
+            document_title=self.contract.title,
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('dashboard'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "PDF can't be viewed")
+        self.assertContains(response, 'This document is in the trash.')
+        self.assertContains(response, 'data-preview-url=""')
+
     def test_document_search_is_debounced_in_the_browser(self):
         self.client.force_login(self.user)
 
@@ -173,9 +194,22 @@ class AuditLogTests(TestCase):
         self.assertContains(response, 'oninput="scheduleSearchFilter()"')
         self.assertContains(response, 'setTimeout(() =>')
         self.assertContains(response, '}, 350);')
+
+    def test_contract_rows_open_pdf_from_non_control_area(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse('contract_list'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'onclick="handleDocumentCellClick(event,')
+        self.assertNotContains(response, 'onclick="handleContractRowClick(event,')
+        self.assertContains(response, "event.target.closest('input, button, a, select, textarea, form")
+        self.assertContains(response, 'openPdfPreview(contractId, row.dataset.fileUrl, row.dataset.contractTitle)')
         self.assertContains(response, 'id="contracts-doc-panel"')
         self.assertContains(response, 'id="mobile-contract-action-sheet"')
-        self.assertContains(response, 'function handleMobileContractTap(event, contractId)')
+        self.assertContains(response, 'function handleDocumentCellClick(event, contractId)')
+        self.assertContains(response, 'function getLiveFolderChoices()')
+        self.assertContains(response, "document.querySelectorAll('#folder-list .folder-item')")
         self.assertContains(response, 'data-file-url=')
 
     def test_filename_demo_mode_is_preserved_and_disclosed(self):
@@ -207,8 +241,60 @@ class AuditLogTests(TestCase):
             self.assertEqual(audit_log.verification_source, 'Official Barangay Database')
             self.assertEqual(audit_log.verification_result, 'Possible Modification')
             self.assertEqual(audit_log.integrity_check, 'Failed')
+            self.assertIn('Verification pipeline initialized', audit_log.verification_debug_log)
+            self.assertIn('document fingerprint mismatch', audit_log.verification_debug_log)
             self.assertTrue(audit_log.evidence_file)
             self.assertTrue(audit_log.evidence_file.storage.exists(audit_log.evidence_file.name))
+
+            self.client.force_login(self.user)
+            dashboard = self.client.get(reverse('dashboard'))
+            self.assertContains(dashboard, 'Verification History')
+            self.assertNotContains(dashboard, 'Verification pipeline initialized')
+
+            history = self.client.get(
+                reverse('audit_verification_history', args=[audit_log.id])
+            )
+            self.assertEqual(history.status_code, 200)
+            self.assertEqual(history.json()['events'][0]['id'], audit_log.id)
+            self.assertNotIn('debug_log', history.json()['events'][0])
+
+            detail = self.client.get(
+                reverse('audit_verification_log_detail', args=[audit_log.id])
+            )
+            self.assertEqual(detail.status_code, 200)
+            self.assertIn('Verification pipeline initialized', detail.json()['debug_log'])
+
+    def test_verification_history_keeps_repeated_attempts_collapsed_and_lazy(self):
+        first = AuditLog.objects.create(
+            contract=self.contract,
+            action='viewed',
+            verification_result='Authentic',
+            integrity_check='Complete',
+            verification_debug_log='first verification trace',
+        )
+        second = AuditLog.objects.create(
+            contract=self.contract,
+            action='reported_tampering',
+            verification_result='Possible Modification',
+            integrity_check='Failed',
+            verification_debug_log='second verification trace',
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(
+            reverse('audit_verification_history', args=[first.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        events = response.json()['events']
+        self.assertEqual([event['id'] for event in events], [second.id, first.id])
+        self.assertTrue(all('verified_at' in event for event in events))
+        self.assertTrue(all('debug_log' not in event for event in events))
+
+        detail = self.client.get(
+            reverse('audit_verification_log_detail', args=[second.id])
+        )
+        self.assertEqual(detail.json()['debug_log'], 'second verification trace')
 
     def test_unknown_verification_logs_details_without_retaining_pdf(self):
         with tempfile.TemporaryDirectory() as media_root, self.settings(MEDIA_ROOT=media_root):
@@ -912,6 +998,30 @@ class DocumentManagementTests(TestCase):
                 accepted += 1
         self.assertEqual(accepted, 30)
 
+    def test_upload_can_store_a_pdf_without_encryption(self):
+        document = fitz.open()
+        page = document.new_page()
+        page.insert_text((72, 72), 'Staged document without encryption')
+        pdf_bytes = document.tobytes()
+        document.close()
+
+        response = self.client.post(reverse('upload_contract'), {
+            'title': 'staged-document',
+            'skip_encryption': '1',
+            'file': SimpleUploadedFile('staged-document.pdf', pdf_bytes, content_type='application/pdf'),
+        })
+
+        self.assertEqual(response.status_code, 302)
+        contract = Contract.objects.get(title='staged-document')
+        version = contract.versions.get(version_number=1)
+        self.assertTrue(contract.file)
+        self.assertTrue(contract.original_fingerprint)
+        self.assertEqual(contract.fingerprint, contract.original_fingerprint)
+        self.assertFalse(contract.encrypted_cf)
+        self.assertEqual(version.source, 'upload-unencrypted')
+        self.assertFalse(version.encrypted_cf)
+        self.assertTrue(Path(contract.file.path).is_file())
+
     def test_doc02_invalid_upload_rejection_matrix(self):
         invalid_files = []
         invalid_files.extend(
@@ -975,6 +1085,26 @@ class DocumentManagementTests(TestCase):
             AuditLog.objects.filter(action='downloaded').count(),
             download_count_before + 20,
         )
+
+    def test_download_names_use_system_title_and_version_number(self):
+        contract = self.make_contract(6, self.staff)
+        contract.title = '06_blank_page_contract'
+        contract.save(update_fields=['title'])
+        version = ContractVersion.objects.create(
+            contract=contract,
+            version_number=2,
+            source='revision',
+            file=contract.file.name,
+            created_by=self.staff,
+        )
+
+        current = self.client.get(reverse('download_contract', args=[contract.id]))
+        selected = self.client.get(reverse('download_contract_version', args=[version.id]))
+
+        self.assertIn('06_blank_page_contract_v2.pdf', current['Content-Disposition'])
+        self.assertIn('06_blank_page_contract_v2.pdf', selected['Content-Disposition'])
+        current.close()
+        selected.close()
 
     def test_doc05_unauthorized_view_and_download_matrix(self):
         contracts = [self.make_contract(number, self.staff) for number in range(20)]
@@ -1117,7 +1247,61 @@ class DocumentManagementTests(TestCase):
                 )
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.json()['duplicates'][0]['id'], existing.id)
+                self.assertEqual(response.json()['duplicates'][0]['match_type'], 'same_content')
         self.assertEqual(Contract.objects.count(), 1)
+
+    def test_same_filename_is_detected_before_content_and_becomes_revision(self):
+        existing = self.make_contract(60, self.staff)
+        existing.title = '06_blank_page_contract'
+        existing.base_filename = '06_blank_page_contract'
+        existing.save(update_fields=['title', 'base_filename'])
+        ContractVersion.objects.create(
+            contract=existing,
+            version_number=1,
+            source='upload',
+            file=existing.file.name,
+            created_by=self.staff,
+        )
+
+        changed_document = fitz.open()
+        changed_document.new_page().insert_text((72, 72), 'Changed revision contents')
+        changed_pdf = changed_document.tobytes()
+        changed_document.close()
+
+        duplicate_check = self.client.post(
+            reverse('check_duplicate_upload'),
+            {
+                'title': '06_blank_page_contract',
+                'file': SimpleUploadedFile(
+                    '06_blank_page_contract.pdf', changed_pdf, content_type='application/pdf'
+                ),
+            },
+        )
+        match = duplicate_check.json()['duplicates'][0]
+        self.assertEqual(match['id'], existing.id)
+        self.assertEqual(match['match_type'], 'same_name')
+        self.assertEqual(match['next_version'], 2)
+
+        with patch('contracts.views.add_revision', return_value=HttpResponse(status=204)) as revision:
+            response = self.client.post(
+                reverse('upload_contract'),
+                {
+                    'title': '06_blank_page_contract',
+                    'file': SimpleUploadedFile(
+                        '06_blank_page_contract.pdf', changed_pdf, content_type='application/pdf'
+                    ),
+                },
+            )
+
+        self.assertEqual(response.status_code, 204)
+        revision.assert_called_once()
+        self.assertEqual(revision.call_args.args[1], existing.id)
+        self.assertEqual(Contract.objects.count(), 1)
+
+        upload_page = self.client.get(reverse('upload_contract'))
+        self.assertContains(upload_page, 'Add it as a new document or add it as revision')
+        self.assertContains(upload_page, 'id="duplicate-new-btn"')
+        self.assertContains(upload_page, 'id="duplicate-revision-btn"')
 
     def test_doc12_report_filter_and_export_matrix(self):
         contract = self.make_contract(1, self.staff)
@@ -1153,6 +1337,176 @@ class DocumentManagementTests(TestCase):
         self.assertEqual(export.status_code, 200)
         self.assertEqual(export['Content-Type'], 'text/csv')
         self.assertIn(b'Document,User,Action,Timestamp,IP address,Details', export.content)
+
+    def test_bulk_staff_actions_move_status_download_and_encrypt(self):
+        first = self.make_contract(201, self.staff)
+        second = self.make_contract(202, self.staff)
+        second.encrypted_cf = 'already-encrypted'
+        second.save(update_fields=['encrypted_cf'])
+        folder = Folder.objects.create(name='Bulk destination', owner=self.admin)
+        self.client.force_login(self.staff)
+
+        move = self.client.post(reverse('bulk_assign_folder'), {
+            'ids': [first.id, second.id], 'folder_id': folder.id,
+        })
+        self.assertEqual(move.status_code, 200)
+        self.assertEqual(move.json()['updated'], 2)
+        self.assertEqual(
+            set(Contract.objects.filter(pk__in=[first.id, second.id]).values_list('folder_id', flat=True)),
+            {folder.id},
+        )
+
+        status = self.client.post(reverse('bulk_update_status'), {
+            'ids': [first.id, second.id], 'status': 'approved',
+        })
+        self.assertEqual(status.status_code, 200)
+        self.assertEqual(status.json()['updated'], 2)
+        self.assertEqual(
+            set(Contract.objects.filter(pk__in=[first.id, second.id]).values_list('status', flat=True)),
+            {'approved'},
+        )
+
+        download = self.client.post(reverse('bulk_download_contracts'), {
+            'ids': [first.id, second.id],
+        })
+        self.assertEqual(download.status_code, 200)
+        self.assertEqual(download['Content-Type'], 'application/zip')
+        with zipfile.ZipFile(io.BytesIO(download.content)) as archive:
+            self.assertEqual(len(archive.namelist()), 2)
+
+        with patch('contracts.views.encrypt_contract', return_value=HttpResponse(status=302)) as encrypt:
+            encrypted = self.client.post(reverse('bulk_encrypt_contracts'), {
+                'ids': [first.id, second.id],
+            })
+        self.assertEqual(encrypted.status_code, 200)
+        self.assertEqual(encrypted.json()['encrypted'], 1)
+        self.assertEqual(encrypted.json()['already_encrypted'], 1)
+        encrypt.assert_called_once()
+
+    def test_bulk_toolbar_keeps_trash_permission_gated(self):
+        self.make_contract(203, self.staff)
+        self.client.force_login(self.staff)
+
+        page = self.client.get(reverse('contract_list'))
+
+        self.assertContains(page, 'id="bulk-move-folder"')
+        self.assertContains(page, 'id="bulk-change-status"')
+        self.assertContains(page, 'id="bulk-download-contracts"')
+        self.assertContains(page, 'id="bulk-encrypt-contracts"')
+        self.assertNotContains(page, 'id="bulk-delete-contracts"')
+        denied = self.client.post(reverse('bulk_delete_contracts'), {'ids': []})
+        self.assertEqual(denied.status_code, 403)
+
+
+class EndToEndWorkflowTests(TestCase):
+    """Real-PDF workflow coverage for the locally configured SealGuard stack."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.key_directory = tempfile.TemporaryDirectory()
+        key = RSA.generate(2048)
+        cls.private_key_path = Path(cls.key_directory.name) / 'private.pem'
+        cls.public_key_path = Path(cls.key_directory.name) / 'public.pem'
+        cls.private_key_path.write_bytes(key.export_key())
+        cls.public_key_path.write_bytes(key.publickey().export_key())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.key_directory.cleanup()
+        super().tearDownClass()
+
+    def setUp(self):
+        self.media_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.media_directory.cleanup)
+        media_root = Path(self.media_directory.name)
+        (media_root / 'seals').mkdir(parents=True, exist_ok=True)
+        Image.new('RGBA', (180, 180), (30, 95, 85, 255)).save(media_root / 'seals' / 'default_seal.png')
+        self.settings_override = override_settings(
+            MEDIA_ROOT=self.media_directory.name,
+            RSA_PRIVATE_KEY_PATH=str(self.private_key_path),
+            RSA_PUBLIC_KEY_PATH=str(self.public_key_path),
+        )
+        self.settings_override.enable()
+        self.addCleanup(self.settings_override.disable)
+        self.staff = User.objects.create_user('e2e-staff', password='E2E-password-2026!', is_staff=True)
+        self.client.force_login(self.staff)
+
+    @staticmethod
+    def make_pdf(number):
+        document = fitz.open()
+        page_count = 1 + (number % 4)
+        for page_number in range(page_count):
+            page = document.new_page()
+            page.insert_text((72, 72), f'E2E document {number}, page {page_number + 1}')
+            if page_number == 0 and number % 3 == 0:
+                page.draw_rect(fitz.Rect(72, 110, 240, 180), color=(0, 0.4, 0.3), fill=(0.8, 0.9, 0.85))
+        result = document.tobytes()
+        document.close()
+        return result
+
+    def process_documents(self, count):
+        processed = []
+        for number in range(count):
+            original = self.make_pdf(number)
+            response = self.client.post(reverse('upload_contract'), {
+                'title': f'E2E document {number}',
+                'file': SimpleUploadedFile(
+                    f'e2e-document-{number}.pdf', original,
+                    content_type='application/pdf',
+                ),
+            })
+            self.assertEqual(response.status_code, 302, response.content[:200])
+            contract = Contract.objects.get(title=f'E2E document {number}')
+            contract.refresh_from_db()
+            self.assertTrue(contract.encrypted_cf)
+            self.assertTrue(contract.wrapped_key)
+            self.assertTrue(contract.hmac_value)
+            self.assertTrue(contract.file and Path(contract.file.path).is_file())
+            processed.append((contract, original))
+        return processed
+
+    def test_e2e01_complete_lifecycle_matrix(self):
+        processed = self.process_documents(30)
+        for contract, _original in processed:
+            with self.subTest(contract=contract.id):
+                version = contract.versions.get(version_number=1)
+                self.assertTrue(version.file and Path(version.file.path).is_file())
+                retrieved = self.client.get(reverse('preview_contract', args=[contract.id]))
+                self.assertEqual(retrieved.status_code, 200)
+                retrieved_bytes = b''.join(retrieved.streaming_content)
+                self.assertEqual(retrieved_bytes, Path(contract.file.path).read_bytes())
+
+    def test_e2e03_staff_and_public_verification_matrix(self):
+        processed = self.process_documents(30)
+        public_client = Client()
+        for contract, _original in processed:
+            sealed_bytes = Path(contract.file.path).read_bytes()
+            for verifier in (self.client, public_client):
+                with self.subTest(contract=contract.id, verifier=verifier is self.client):
+                    response = verifier.post(reverse('public_verify'), {
+                        'pdf_file': SimpleUploadedFile(
+                            'verification-upload.pdf', sealed_bytes,
+                            content_type='application/pdf',
+                        ),
+                    })
+                    self.assertRedirects(response, reverse('public_verify'), fetch_redirect_response=False)
+                    self.assertEqual(verifier.session['verify_result'], 'authentic')
+        self.assertEqual(
+            AuditLog.objects.filter(action='viewed', note__startswith='Public verification: authentic').count(),
+            60,
+        )
+
+    def test_e2e04_persistence_after_new_client_session(self):
+        processed = self.process_documents(20)
+        restarted_client = Client()
+        restarted_client.force_login(self.staff)
+        for contract, _original in processed:
+            with self.subTest(contract=contract.id):
+                response = restarted_client.get(reverse('download_contract', args=[contract.id]))
+                self.assertEqual(response.status_code, 200)
+                response_bytes = b''.join(response.streaming_content)
+                self.assertEqual(response_bytes, Path(contract.file.path).read_bytes())
 
 
 class CryptographicUnitTests(TestCase):
@@ -1236,6 +1590,10 @@ class CryptographicUnitTests(TestCase):
                 second = generate_canonical_fingerprint(second_path)
                 if label.startswith('vector-'):
                     self.assertEqual(first, second, 'Vector-only changes are intentionally excluded by canonicalization')
+                    self.assertNotEqual(
+                        generate_vector_fingerprint(first_path),
+                        generate_vector_fingerprint(second_path),
+                    )
                 else:
                     self.assertNotEqual(first, second)
 
@@ -1302,6 +1660,25 @@ class CryptographicUnitTests(TestCase):
             embed_data_in_image(str(source), str(output), payload)
             with self.subTest(number=number):
                 self.assertEqual(extract_data_from_image(str(output)), payload)
+
+    def test_lsb_survives_transparent_seal_pdf_embedding(self):
+        source_pdf = self.make_pdf('transparent-seal-source.pdf')
+        carrier = self.temp_path / 'transparent-carrier.png'
+        embedded = self.temp_path / 'transparent-embedded.png'
+        sealed_pdf = self.temp_path / 'transparent-sealed.pdf'
+
+        image = Image.new('RGBA', (160, 160), (255, 255, 255, 0))
+        for y in range(40, 160):
+            for x in range(160):
+                image.putpixel((x, y), (30, 95, 85, 255))
+        image.save(carrier)
+
+        payload = 'transparent-seal-marker-' + ('x' * 320)
+        embed_data_in_image(str(carrier), str(embedded), payload)
+        stamp_seal_on_pdf(source_pdf, sealed_pdf, embedded, encrypted_cf=payload)
+
+        self.assertEqual(extract_data_from_image(str(embedded)), payload)
+        self.assertEqual(extract_lsb_marker_from_pdf(str(sealed_pdf), payload), payload)
 
     def test_cry10_invalid_lsb_payloads_are_not_accepted_matrix(self):
         corrupt_image_path = self.temp_path / 'corrupt-carrier.png'
@@ -1422,9 +1799,10 @@ class PublicVerificationCryptoTests(TestCase):
 
         media_root = Path(self.media_directory.name)
         source_path = media_root / 'source.pdf'
-        default_seal_path = media_root / 'default-seal.png'
+        default_seal_path = media_root / 'seals' / 'default_seal.png'
         seal_path = media_root / 'seal.png'
         sealed_path = media_root / 'sealed.pdf'
+        default_seal_path.parent.mkdir(parents=True, exist_ok=True)
 
         source = fitz.open()
         source.new_page().insert_text((72, 72), 'Official procurement agreement: PHP 10,000.00')
@@ -1446,6 +1824,7 @@ class PublicVerificationCryptoTests(TestCase):
         )
         self.sealed_bytes = sealed_path.read_bytes()
         self.sealed_fingerprint = generate_canonical_fingerprint(sealed_path)
+        self.vector_fingerprint = generate_vector_fingerprint(sealed_path)
         self.encrypted_marker = encrypted
 
         stored_path = media_root / 'contracts' / 'enrolled.pdf'
@@ -1455,6 +1834,7 @@ class PublicVerificationCryptoTests(TestCase):
             title='Cryptographic verification fixture',
             file='contracts/enrolled.pdf',
             fingerprint=self.sealed_fingerprint,
+            vector_fingerprint=self.vector_fingerprint,
             original_fingerprint=self.original_fingerprint,
             encrypted_cf=encrypted,
             wrapped_key=wrapped_key,
@@ -1468,6 +1848,7 @@ class PublicVerificationCryptoTests(TestCase):
             source='upload',
             file='contracts/enrolled.pdf',
             fingerprint=self.sealed_fingerprint,
+            vector_fingerprint=self.vector_fingerprint,
             previous_fingerprint='',
             encrypted_cf=encrypted,
             wrapped_key=wrapped_key,
@@ -1495,20 +1876,123 @@ class PublicVerificationCryptoTests(TestCase):
     def test_valid_authentic_sealed_pdf(self):
         result, debug_log = self.verify()
 
-        self.assertEqual(result, 'authentic')
+        self.assertEqual(result, 'authentic', debug_log)
         self.assertIn('[PASS] Metadata marker belongs to the matched contract', debug_log)
         self.assertIn('[PASS] Original fingerprint decrypted with AES-256-CBC and HMAC-SHA256 verified', debug_log)
         self.assertIn('[PASS] Version history chain validated', debug_log)
         self.assertEqual(AuditLog.objects.get(action='viewed').contract, self.contract)
+
+    def test_issued_pdf_upload_offers_existing_copy_without_creating_revision(self):
+        user = User.objects.create_user('issued-copy-staff', is_staff=True)
+        self.client.force_login(user)
+        for route, data in (
+            (reverse('check_duplicate_upload'), {}),
+            (reverse('upload_contract'), {'title': 'Renamed copy', 'force_new': '1'}),
+            (reverse('add_revision', args=[self.contract.id]), {}),
+        ):
+            response = self.client.post(route, {
+                **data,
+                'file': SimpleUploadedFile('renamed.pdf', self.sealed_bytes, content_type='application/pdf'),
+            })
+            self.assertEqual(response.status_code, 200)
+            if route == reverse('check_duplicate_upload'):
+                self.assertEqual(response.json()['already_authenticated']['version'], 1)
+            else:
+                self.assertContains(response, 'View existing document')
+                self.assertTrue(response.context['already_authenticated'])
+        self.assertEqual(Contract.objects.count(), 1)
+        self.assertEqual(self.contract.versions.count(), 1)
+
+    def test_legacy_transparent_seal_uses_enrollment_seal_compatibility(self):
+        media_root = Path(self.media_directory.name)
+        source_path = media_root / 'source.pdf'
+        legacy_seal_path = media_root / 'legacy-transparent-seal.png'
+        legacy_pdf_path = media_root / 'legacy-transparent-sealed.pdf'
+
+        image = Image.new('RGBA', (160, 160), (255, 255, 255, 0))
+        for y in range(40, 160):
+            for x in range(160):
+                image.putpixel((x, y), (30, 95, 85, 255))
+
+        pixels = list(image.getdata())
+        payload_bits = ''.join(
+            format(ord(character), '08b')
+            for character in self.encrypted_marker + '||END||'
+        )
+        encoded_pixels = []
+        bit_index = 0
+        for red, green, blue, alpha in pixels:
+            channels = [red, green, blue]
+            for channel_index in range(3):
+                if bit_index < len(payload_bits):
+                    channels[channel_index] = (
+                        channels[channel_index] & ~1
+                    ) | int(payload_bits[bit_index])
+                    bit_index += 1
+            encoded_pixels.append((*channels, alpha))
+        image.putdata(encoded_pixels)
+        image.save(legacy_seal_path)
+
+        stamp_seal_on_pdf(
+            source_path,
+            legacy_pdf_path,
+            legacy_seal_path,
+            encrypted_cf=self.encrypted_marker,
+        )
+        legacy_bytes = legacy_pdf_path.read_bytes()
+        legacy_fingerprint = generate_canonical_fingerprint(legacy_pdf_path)
+
+        self.assertIsNone(
+            extract_lsb_marker_from_pdf(str(legacy_pdf_path), self.encrypted_marker)
+        )
+        self.assertEqual(
+            extract_data_from_image(str(legacy_seal_path)),
+            self.encrypted_marker,
+        )
+
+        stored_path = media_root / 'contracts' / 'enrolled.pdf'
+        stored_path.write_bytes(legacy_bytes)
+        self.contract.fingerprint = legacy_fingerprint
+        self.contract.seal_image = 'legacy-transparent-seal.png'
+        self.contract.save(update_fields=['fingerprint', 'seal_image'])
+        self.version.fingerprint = legacy_fingerprint
+        self.version.save(update_fields=['fingerprint'])
+
+        result, debug_log = self.verify(legacy_bytes)
+
+        self.assertEqual(result, 'authentic', debug_log)
+        self.assertIn('[PASS] Legacy enrollment seal LSB marker validated', debug_log)
 
     def test_modified_text_is_rejected(self):
         modified = self.mutate_pdf(
             lambda document: document[0].insert_text((72, 110), 'ALTERED AMOUNT: PHP 900,000.00')
         )
 
-        result, _debug_log = self.verify(modified)
+        result, debug_log = self.verify(modified)
 
         self.assertEqual(result, 'tampered')
+        audit_log = AuditLog.objects.get(action='reported_tampering')
+        self.assertEqual(audit_log.verification_debug_log, '\n'.join(debug_log))
+        self.assertIn('[FAIL] Sealed PDF fingerprint does not match', audit_log.verification_debug_log)
+
+    def test_modified_vector_is_rejected_with_pdf_editor_warning(self):
+        modified = self.mutate_pdf(
+            lambda document: document[0].draw_line(
+                (72, 150), (260, 150), color=(1, 0, 0), width=3,
+            )
+        )
+
+        result, debug_log = self.verify(modified)
+
+        self.assertEqual(result, 'tampered')
+        self.assertIn(
+            '[FAIL] Vector drawing fingerprint differs from the official record',
+            debug_log,
+        )
+        self.assertTrue(any('re-saved with a PDF editor' in line for line in debug_log))
+        audit_log = AuditLog.objects.get(action='reported_tampering')
+        self.assertIn('PDF editor', audit_log.note)
+        self.assertIn('Even without a visible change', audit_log.verification_debug_log)
 
     def test_modified_or_replaced_metadata_marker_is_rejected(self):
         other_marker, _hmac, _wrapped, _iv = encrypt_cf(
@@ -1577,6 +2061,245 @@ class PublicVerificationCryptoTests(TestCase):
         result, _debug_log = self.verify()
 
         self.assertEqual(result, 'tampered')
+
+    def test_e_accuracy_controlled_100_file_matrix_and_audit_events(self):
+        """Run the 100-file accuracy dataset through real enrollment/verification."""
+        staff = User.objects.create_user('accuracy-staff', password='Accuracy-password-2026!', is_staff=True)
+        self.client.force_login(staff)
+
+        def build_pdf(number, profile):
+            document = fitz.open()
+            page = document.new_page()
+            page.insert_text((72, 72), {
+                'single-word': 'AUTHENTIC',
+                'short-phrase': 'Official record',
+                'paragraph': 'This paragraph represents a controlled procurement record for testing.',
+                'special-character': 'Amount: PHP 10,000.00 / Ref. #A-01',
+                'mixed': 'Mixed text and image control',
+                'realistic': f'Procurement Contract {number}: Barangay supply agreement',
+            }.get(profile, f'Accuracy fixture {number}'))
+            if profile == 'mixed':
+                image = Image.new('RGB', (80, 40), (30, 95, 85))
+                image_buffer = io.BytesIO()
+                image.save(image_buffer, format='PNG')
+                page.insert_image(fitz.Rect(72, 100, 152, 140), stream=image_buffer.getvalue())
+            if profile == 'realistic':
+                page.draw_rect(fitz.Rect(72, 110, 240, 180), color=(0, 0.4, 0.3), fill=(0.8, 0.9, 0.85))
+            result = document.tobytes()
+            document.close()
+            return result
+
+        profiles = ['single-word', 'short-phrase', 'paragraph', 'special-character', 'mixed', 'realistic']
+        enrolled = []
+        for number in range(30):
+            raw = build_pdf(number, profiles[number % len(profiles)])
+            response = self.client.post(reverse('upload_contract'), {
+                'title': f'Accuracy control {number}',
+                'file': SimpleUploadedFile(
+                    f'accuracy-control-{number}.pdf', raw,
+                    content_type='application/pdf',
+                ),
+            })
+            self.assertEqual(response.status_code, 302)
+            enrolled.append((Contract.objects.get(title=f'Accuracy control {number}'), raw))
+
+        public_client = Client()
+
+        def verify_bytes(pdf_bytes, filename):
+            response = public_client.post(reverse('public_verify'), {
+                'pdf_file': SimpleUploadedFile(filename, pdf_bytes, content_type='application/pdf'),
+            })
+            self.assertRedirects(response, reverse('public_verify'), fetch_redirect_response=False)
+            return public_client.session['verify_result']
+
+        observed = {'authentic': 0, 'tampered': 0, 'not_found': 0, 'error': 0}
+        for contract, _raw in enrolled:
+            result = verify_bytes(Path(contract.file.path).read_bytes(), f'accuracy-authentic-{contract.id}.pdf')
+            observed[result] += 1
+
+        def mutate(pdf_bytes, category):
+            document = fitz.open(stream=pdf_bytes, filetype='pdf')
+            page = document[0]
+            if category == 'text':
+                page.insert_text((72, 210), 'Unauthorized text modification')
+            elif category == 'image':
+                image = Image.new('RGB', (40, 40), (200, 40, 40))
+                image_buffer = io.BytesIO()
+                image.save(image_buffer, format='PNG')
+                page.insert_image(fitz.Rect(260, 100, 300, 140), stream=image_buffer.getvalue())
+            elif category == 'vector':
+                page.draw_line((72, 220), (260, 220), color=(1, 0, 0), width=3)
+            elif category == 'metadata':
+                metadata = document.metadata
+                metadata['subject'] = 'Unauthorized metadata modification'
+                document.set_metadata(metadata)
+            elif category == 'structural':
+                document.new_page()
+            result = document.tobytes(garbage=4, deflate=True)
+            document.close()
+            return result
+
+        category_results = {}
+        for category in ('text', 'image', 'vector', 'metadata', 'structural'):
+            category_results[category] = []
+            for number in range(10):
+                source_contract = enrolled[(number + len(category)) % len(enrolled)][0]
+                result = verify_bytes(
+                    mutate(Path(source_contract.file.path).read_bytes(), category),
+                    f'accuracy-{category}-{number}.pdf',
+                )
+                category_results[category].append(result)
+                observed[result] += 1
+
+        for number in range(20):
+            unknown = build_pdf(100 + number, 'realistic')
+            result = verify_bytes(unknown, f'accuracy-unregistered-{number}.pdf')
+            observed[result] += 1
+
+        self.assertEqual(observed, {'authentic': 30, 'tampered': 50, 'not_found': 20, 'error': 0})
+        self.assertEqual(set(category_results['text']), {'tampered'})
+        self.assertEqual(set(category_results['image']), {'tampered'})
+        self.assertEqual(set(category_results['metadata']), {'tampered'})
+        self.assertEqual(set(category_results['structural']), {'tampered'})
+        self.assertEqual(set(category_results['vector']), {'tampered'})
+        self.assertEqual(
+            AuditLog.objects.filter(verification_result__gt='').count(),
+            100,
+        )
+
+    def test_acc01_to_acc07_three_repetition_accuracy_matrix(self):
+        """Run the controlled dataset three times without demo filename hints."""
+        staff = User.objects.create_user('acc-staff', password='Accuracy-password-2026!', is_staff=True)
+        self.client.force_login(staff)
+
+        def build_pdf(number, profile='control'):
+            document = fitz.open()
+            page = document.new_page()
+            page.insert_text((72, 72), f'Accuracy repetition fixture {number} {profile}')
+            if profile == 'mixed':
+                image = Image.new('RGB', (80, 40), (30, 95, 85))
+                image_buffer = io.BytesIO()
+                image.save(image_buffer, format='PNG')
+                page.insert_image(fitz.Rect(72, 100, 152, 140), stream=image_buffer.getvalue())
+            if profile == 'realistic':
+                page.draw_rect(fitz.Rect(72, 110, 240, 180), color=(0, 0.4, 0.3), fill=(0.8, 0.9, 0.85))
+            result = document.tobytes()
+            document.close()
+            return result
+
+        enrolled = []
+        for number in range(30):
+            raw = build_pdf(number, 'mixed' if number % 5 == 0 else 'realistic')
+            response = self.client.post(reverse('upload_contract'), {
+                'title': f'Accuracy repetition control {number}',
+                'file': SimpleUploadedFile(
+                    f'acc-control-{number}.pdf', raw,
+                    content_type='application/pdf',
+                ),
+            })
+            self.assertEqual(response.status_code, 302)
+            enrolled.append((Contract.objects.get(title=f'Accuracy repetition control {number}'), raw))
+
+        def mutate(pdf_bytes, category):
+            document = fitz.open(stream=pdf_bytes, filetype='pdf')
+            page = document[0]
+            if category == 'text':
+                page.insert_text((72, 210), 'Accuracy text alteration')
+            elif category == 'image':
+                image = Image.new('RGB', (40, 40), (200, 40, 40))
+                image_buffer = io.BytesIO()
+                image.save(image_buffer, format='PNG')
+                page.insert_image(fitz.Rect(260, 100, 300, 140), stream=image_buffer.getvalue())
+            elif category == 'vector':
+                page.draw_line((72, 220), (260, 220), color=(1, 0, 0), width=3)
+            elif category == 'metadata':
+                metadata = document.metadata
+                metadata['subject'] = 'Accuracy metadata alteration'
+                document.set_metadata(metadata)
+            elif category == 'structural':
+                document.new_page()
+            result = document.tobytes(garbage=4, deflate=True)
+            document.close()
+            return result
+
+        public_client = Client()
+        observed = []
+        expected = []
+        decryption_matches = 0
+        sealed_hash_differences = 0
+
+        for contract, original_bytes in enrolled:
+            with contract.file.open('rb') as stored_file:
+                sealed_bytes = stored_file.read()
+            original_hash = hashlib.sha256(original_bytes).hexdigest()
+            sealed_hash = hashlib.sha256(sealed_bytes).hexdigest()
+            if original_hash != sealed_hash:
+                sealed_hash_differences += 1
+            # The implementation protects the fingerprint, not the PDF, so
+            # this is the available decryption-integrity measurement.
+            decrypted_cf = decrypt_cf(
+                contract.encrypted_cf,
+                contract.wrapped_key,
+                contract.aes_iv,
+                contract.hmac_value,
+                str(self.private_key_path),
+            )
+            if decrypted_cf == contract.original_fingerprint:
+                decryption_matches += 1
+
+        # Repeat each file three times. Names deliberately avoid authentic,
+        # tampered, and unknown so the filename demonstration branch is excluded.
+        cases = []
+        for contract, _original_bytes in enrolled:
+            cases.append(('authentic', Path(contract.file.path).read_bytes(), 'acc-control'))
+        for category in ('text', 'image', 'vector', 'metadata', 'structural'):
+            for number in range(10):
+                contract = enrolled[(number + len(category)) % len(enrolled)][0]
+                cases.append(('tampered', mutate(Path(contract.file.path).read_bytes(), category), f'acc-{category}'))
+        for number in range(20):
+            cases.append(('not_found', build_pdf(100 + number, 'unregistered'), 'acc-unregistered'))
+
+        for repetition in range(3):
+            for expected_result, pdf_bytes, label in cases:
+                response = public_client.post(reverse('public_verify'), {
+                    'pdf_file': SimpleUploadedFile(
+                        f'{label}-rep-{repetition}.pdf', pdf_bytes,
+                        content_type='application/pdf',
+                    ),
+                })
+                self.assertRedirects(response, reverse('public_verify'), fetch_redirect_response=False)
+                observed.append(public_client.session['verify_result'])
+                expected.append(expected_result)
+
+        correct = sum(actual == wanted for actual, wanted in zip(observed, expected))
+        false_positives = sum(
+            actual in {'tampered', 'not_found'}
+            for actual, wanted in zip(observed, expected)
+            if wanted == 'authentic'
+        )
+        false_negatives = sum(
+            actual == 'authentic'
+            for actual, wanted in zip(observed, expected)
+            if wanted == 'tampered'
+        )
+        unknown_correct = sum(
+            actual == 'not_found'
+            for actual, wanted in zip(observed, expected)
+            if wanted == 'not_found'
+        )
+
+        self.assertEqual(len(observed), 300)
+        self.assertEqual(correct, 300)
+        self.assertEqual(false_positives, 0)
+        self.assertEqual(false_negatives, 0)
+        self.assertEqual(unknown_correct, 60)
+        self.assertEqual(decryption_matches, 30)
+        self.assertEqual(sealed_hash_differences, 30)
+        self.assertEqual(
+            AuditLog.objects.filter(verification_result__gt='').count(),
+            300,
+        )
+        self.assertEqual(correct / 300 * 100, 100.0)
 
 
 class PhysicalVerificationTests(TestCase):

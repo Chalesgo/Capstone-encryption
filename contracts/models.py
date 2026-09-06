@@ -67,6 +67,7 @@ class ContractVersion(models.Model):
     source = models.CharField(max_length=20, choices=SOURCE_CHOICES)
     file = models.FileField(upload_to='contract_versions/')
     fingerprint = models.CharField(max_length=64, blank=True)
+    vector_fingerprint = models.CharField(max_length=64, blank=True)
     previous_fingerprint = models.CharField(max_length=64, blank=True)
     encrypted_cf = models.TextField(blank=True)
     hmac_value = models.TextField(blank=True)
@@ -115,6 +116,7 @@ class Contract(models.Model):
         validators=[FileExtensionValidator(['pdf']), validate_pdf_signature],
     )
     fingerprint = models.CharField(max_length=64, blank=True, db_index=True)
+    vector_fingerprint = models.CharField(max_length=64, blank=True)
     encrypted_cf = models.TextField(blank=True)
     aes_key = models.TextField(blank=True)
     aes_iv = models.TextField(blank=True)
@@ -179,6 +181,7 @@ class AuditLog(models.Model):
     verification_result = models.CharField(max_length=50, blank=True)
     integrity_check = models.CharField(max_length=30, blank=True)
     document_size = models.PositiveBigIntegerField(null=True, blank=True)
+    verification_debug_log = models.TextField(blank=True)
 
     @property
     def display_document_title(self):

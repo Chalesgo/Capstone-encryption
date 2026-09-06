@@ -1,0 +1,41 @@
+[
+  {
+    "test": "PERF-07",
+    "repetition": 1,
+    "users": 50,
+    "requests": 1476,
+    "failures": 0,
+    "failure_rate": 0.0,
+    "average_ms": 3544.922989227646,
+    "p95_ms": 8500.0,
+    "p99_ms": 13000.0,
+    "throughput_rps": 12.30008093887184,
+    "completed_at": "2026-09-06T00:12:10.0608103+08:00"
+  },
+  {
+    "test": "PERF-07",
+    "repetition": 2,
+    "users": 50,
+    "requests": 1609,
+    "failures": 0,
+    "failure_rate": 0.0,
+    "average_ms": 3213.432950279363,
+    "p95_ms": 7100.0,
+    "p99_ms": 10000.0,
+    "throughput_rps": 13.416327235348206,
+    "completed_at": "2026-09-06T00:14:10.2079152+08:00"
+  },
+  {
+    "test": "PERF-07",
+    "repetition": 3,
+    "users": 50,
+    "requests": 1351,
+    "failures": 0,
+    "failure_rate": 0.0,
+    "average_ms": 3894.31194485566,
+    "p95_ms": 10000.0,
+    "p99_ms": 16000.0,
+    "throughput_rps": 11.264620903209973,
+    "completed_at": "2026-09-06T00:16:25.3648489+08:00"
+  }
+]

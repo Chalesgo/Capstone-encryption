@@ -234,9 +234,9 @@
     left: 0;
     z-index: 1400;
     display: none;
-    width: 300px;
-    min-width: 100%;
-    max-width: calc(100vw - 32px);
+    box-sizing: border-box;
+    width: min(300px, calc(100vw - 16px));
+    max-width: calc(100vw - 16px);
     max-height: calc(100vh - 16px);
     overflow-y: auto;
     padding: 5px;
@@ -383,29 +383,31 @@
 
   .audit-pdf-overlay { position: fixed; inset: 0; z-index: 1100; display: none; background: rgba(0,0,0,.35); }
   .audit-pdf-overlay.open { display: block; }
-  .audit-pdf-panel { position: fixed; top: 0; right: -70%; z-index: 1200; width: 68%; min-width: 620px; height: 100vh; display: flex; flex-direction: column; background: #fff; border-left: 1px solid #eef0f4; box-shadow: -8px 0 32px rgba(0,0,0,.12); visibility: hidden; pointer-events: none; transition: right .3s ease, visibility 0s linear .3s; }
+  .audit-pdf-panel { position: fixed; top: 0; right: -74%; z-index: 1200; width: 72%; min-width: 680px; height: 100vh; display: flex; flex-direction: column; background: #fff; border-left: 1px solid #e5ebf0; box-shadow: -8px 0 32px rgba(0,0,0,.12); visibility: hidden; pointer-events: none; transition: right .3s ease, visibility 0s linear .3s; }
   .audit-pdf-panel.open { right: 0; visibility: visible; pointer-events: auto; transition-delay: 0s; }
   .audit-pdf-body { flex: 1; display: flex; min-height: 0; }
   .audit-pdf-frame-wrap { flex: 1; position: relative; display: flex; min-width: 0; }
   .audit-pdf-frame { flex: 1; border: none; background: #f5f6f8; }
   .audit-pdf-unavailable { flex: 1; display: none; place-items: center; padding: 32px; color: #667788; background: #f5f6f8; text-align: center; }
   .audit-pdf-unavailable.show { display: grid; }
-  .audit-pdf-unavailable svg { width: 42px; height: 42px; margin-bottom: 12px; color: #aabbcc; }
-  .audit-pdf-unavailable strong { display: block; margin-bottom: 5px; color: #2d3a47; }
+  .pdf-unavailable-card { max-width: 360px; padding: 24px 26px; border: 1px solid #e3e9ef; border-radius: 14px; background: #fff; box-shadow: 0 8px 24px rgba(30, 40, 50, .08); }
+  .audit-pdf-unavailable svg { width: 42px; height: 42px; margin-bottom: 12px; color: #c47a7a; }
+  .audit-pdf-unavailable strong { display: block; margin-bottom: 7px; color: #2d3a47; font-size: 15px; }
+  .audit-pdf-unavailable span { display: block; line-height: 1.5; }
   .audit-pdf-actions { position: absolute; top: 10px; right: 10px; z-index: 2; display: flex; gap: 4px; padding: 3px; background: rgba(255,255,255,.92); border: 1px solid #eef0f4; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
   .audit-pdf-action { width: 32px; height: 32px; border: 0; border-radius: 6px; display: grid; place-items: center; color: #667788; background: transparent; cursor: pointer; }
   .audit-pdf-action:hover { background: #f1f3f5; color: #1a1a2e; }
   .audit-pdf-action svg { width: 16px; height: 16px; }
-  .audit-pdf-sidebar { width: 285px; flex-shrink: 0; overflow-y: auto; background: #fafbfc; border-left: 1px solid #eef0f4; }
-  .audit-pdf-title { margin: 0; padding: 18px 16px 5px; color: #2d3a47; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
-  .audit-pdf-section-label { margin: 0; padding: 16px 16px 8px; color: #aabbcc; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
-  .audit-meta-list { padding: 0 16px 12px; border-bottom: 1px solid #eef0f4; }
+  .audit-pdf-sidebar { width: 320px; flex-shrink: 0; overflow-y: auto; padding-bottom: 18px; background: #f5f7fa; border-left: 1px solid #e5ebf0; }
+  .audit-pdf-title { position: sticky; top: 0; z-index: 1; margin: 0 0 4px; padding: 18px; border-bottom: 1px solid #e5ebf0; background: rgba(255,255,255,.96); color: #243443; font-size: 15px; font-weight: 700; line-height: 1.4; overflow-wrap: anywhere; }
+  .audit-pdf-sidebar .sidebar-section-label { margin: 0; padding: 14px 14px 7px; color: #7d8e9e; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+  .audit-meta-list { margin: 0 10px; padding: 8px 12px; border: 1px solid #e3e9ef; border-radius: 10px; background: #fff; box-shadow: 0 1px 2px rgba(28,43,56,.03); }
   .audit-meta-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 6px 0; font-size: 12.5px; }
   .audit-meta-label { color: #889aab; }
   .audit-meta-value { color: #2d3a47; font-weight: 500; text-align: right; overflow-wrap: anywhere; }
   .audit-meta-value.warning { color: #dc2626; }
-  .audit-pdf-note { margin: 0; padding: 0 16px 18px; color: #52606d; font-size: 12.5px; line-height: 1.55; overflow-wrap: anywhere; }
-  .audit-version-list { padding: 0 10px 12px; border-bottom: 1px solid #eef0f4; }
+  .pdf-viewer-note { margin: 0 10px; padding: 10px 12px; border: 1px solid #e3e9ef; border-radius: 10px; background: #fff; color: #52606d; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+  .audit-version-list { margin: 0 10px; padding: 5px; border: 1px solid #e3e9ef; border-radius: 10px; background: #fff; }
   .audit-version-item { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 6px; border: 0; border-radius: 7px; background: transparent; color: #2d3a47; text-align: left; font: inherit; cursor: pointer; }
   .audit-version-item:hover { background: #f0f2f5; }
   .audit-version-item.active { background: #eef2ff; color: #3b5bdb; }
@@ -415,6 +417,20 @@
   .audit-version-label { display: block; font-size: 12.5px; font-weight: 600; }
   .audit-version-date { display: block; margin-top: 1px; color: #889aab; font-size: 11px; }
   .audit-version-loading { padding: 0 6px 10px; color: #aabbcc; font-size: 12px; }
+  .verification-history-list { margin: 0 10px; border: 1px solid #e3e9ef; border-radius: 10px; overflow: hidden; background: #fff; }
+  .verification-history-empty { padding: 13px; color: #8a99a8; font-size: 12px; line-height: 1.45; }
+  .verification-history-item + .verification-history-item { border-top: 1px solid #edf1f4; }
+  .verification-history-toggle { display: flex; align-items: center; gap: 9px; width: 100%; padding: 10px 11px; border: 0; background: #fff; color: #2d3a47; text-align: left; font: inherit; cursor: pointer; }
+  .verification-history-toggle:hover, .verification-history-toggle[aria-expanded="true"] { background: #f7f9fb; }
+  .verification-history-date { flex: 1; min-width: 0; font-size: 11.5px; font-weight: 600; }
+  .verification-history-result { flex-shrink: 0; padding: 3px 7px; border-radius: 999px; background: #eef2f6; color: #607184; font-size: 9.5px; font-weight: 700; }
+  .verification-history-result.authentic { background: #e7f8f0; color: #14835d; }
+  .verification-history-result.warning { background: #fff0f0; color: #c43d3d; }
+  .verification-history-chevron { width: 14px; color: #8796a5; transition: transform .18s ease; }
+  .verification-history-toggle[aria-expanded="true"] .verification-history-chevron { transform: rotate(180deg); }
+  .verification-history-detail { padding: 0 11px 11px; background: #f7f9fb; }
+  .verification-history-note { margin: 0 0 8px; color: #607184; font-size: 11.5px; line-height: 1.45; }
+  .verification-history-log { max-height: 230px; margin: 0; padding: 10px; overflow: auto; border: 1px solid #dfe6ed; border-radius: 7px; background: #fff; color: #334455; font-family: inherit; font-size: 11px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
   @media (max-width: 900px) { .audit-pdf-panel { width: 100%; right: -100%; min-width: 0; } .audit-pdf-body { flex-direction: column; } .audit-pdf-frame-wrap { min-height: 55vh; } .audit-pdf-sidebar { width: 100%; max-height: 45vh; border-left: 0; border-top: 1px solid #eef0f4; } }
 
   .empty-audit {
@@ -687,7 +703,9 @@
       {% for log in recent_logs %}
       <tr{% if log.contract or log.has_inspection_details %} class="inspectable" tabindex="0" role="button"
           aria-label="Inspect {{ log.display_document_title|default:'document activity' }}"
-          data-preview-url="{% if log.evidence_file %}{% url 'audit_evidence_preview' log.id %}{% elif log.contract and log.contract.file %}{% url 'preview_contract' log.contract.id %}{% endif %}"
+          data-log-id="{{ log.id }}"
+          data-preview-url="{% if log.evidence_file %}{% url 'audit_evidence_preview' log.id %}{% elif log.contract and log.contract.file and not log.contract.is_trashed %}{% url 'preview_contract' log.contract.id %}{% endif %}"
+          data-preview-reason="{% if log.contract and log.contract.is_trashed %}This document is in the trash.{% elif log.contract and not log.contract.file %}The document file is missing.{% elif not log.evidence_file and not log.contract %}No document file is linked to this activity.{% else %}This PDF is no longer retained.{% endif %}"
           data-download-url="{% if log.contract and log.contract.file %}{% url 'download_contract' log.contract.id %}{% endif %}"
           data-contract-id="{% if log.contract %}{{ log.contract.id }}{% endif %}"
           data-version="{% if log.version_number %}{{ log.version_number }}{% endif %}"
@@ -817,17 +835,20 @@ function styleDashboardStatusFilter(select) {
 styleDashboardStatusFilter(document.getElementById('report-status'));
 function openAuditPdfFromRow(row) {
   const url = row.dataset.previewUrl;
+  if (openPdfInMobileViewer(url)) return;
   const title = row.dataset.title;
   const frame = document.getElementById('audit-pdf-frame');
   const unavailable = document.getElementById('audit-pdf-unavailable');
+  const unavailableReason = document.getElementById('audit-pdf-unavailable-reason');
   const download = document.getElementById('audit-pdf-download-btn');
 
   frame.src = url || '';
   frame.style.display = url ? 'block' : 'none';
   unavailable.classList.toggle('show', !url);
+  unavailableReason.textContent = 'Reason: ' + (row.dataset.previewReason || 'This PDF is no longer retained.');
   download.style.display = url ? 'grid' : 'none';
   download.href = row.dataset.downloadUrl || url || '#';
-  download.download = title;
+  download.removeAttribute('download');
 
   document.getElementById('audit-pdf-panel-title').textContent = title;
   document.getElementById('audit-pdf-source').textContent = row.dataset.source || '—';
@@ -844,6 +865,26 @@ function openAuditPdfFromRow(row) {
   document.getElementById('audit-pdf-overlay').classList.add('open');
   document.getElementById('audit-pdf-panel').setAttribute('aria-hidden', 'false');
   loadAuditVersions(row.dataset.contractId, row.dataset.version);
+  loadVerificationHistory(row.dataset.logId);
+
+  if (url) {
+    fetch(url, { method: 'HEAD', credentials: 'same-origin' })
+      .then(function(response) {
+        if (response.ok) return;
+        frame.src = '';
+        frame.style.display = 'none';
+        unavailableReason.textContent = 'Reason: The PDF could not be accessed (' + response.status + ').';
+        unavailable.classList.add('show');
+        download.style.display = 'none';
+      })
+      .catch(function() {
+        frame.src = '';
+        frame.style.display = 'none';
+        unavailableReason.textContent = 'Reason: The PDF could not be accessed.';
+        unavailable.classList.add('show');
+        download.style.display = 'none';
+      });
+  }
 }
 function loadAuditVersions(contractId, selectedVersion) {
   const list = document.getElementById('audit-version-list');
@@ -870,7 +911,9 @@ function loadAuditVersions(contractId, selectedVersion) {
         item.className = 'audit-version-item' + (version.valid === false ? ' invalid' : '') + (version.version_number === activeVersion ? ' active' : '');
         item.innerHTML = '<span class="audit-version-icon">' + (version.valid === false ? '!' : '✓') + '</span><span class="audit-version-meta"><span class="audit-version-label">Version ' + version.version_number + (version.is_current ? ' · Current' : '') + '</span><span class="audit-version-date">' + version.created_at + '</span></span>';
         item.addEventListener('click', function() {
-          document.getElementById('audit-pdf-frame').src = version.preview_url || version.file_url;
+          const versionUrl = version.preview_url || version.file_url;
+          if (openPdfInMobileViewer(versionUrl)) return;
+          document.getElementById('audit-pdf-frame').src = versionUrl;
           document.getElementById('audit-pdf-download-btn').href = version.file_url || version.preview_url || '#';
           document.getElementById('audit-pdf-version').textContent = 'v' + version.version_number;
           document.querySelectorAll('.audit-version-item').forEach(function(other) { other.classList.remove('active'); });
@@ -881,6 +924,98 @@ function loadAuditVersions(contractId, selectedVersion) {
     })
     .catch(function() { list.innerHTML = '<div class="audit-version-loading">Version history could not be loaded.</div>'; });
 }
+
+function loadVerificationHistory(logId) {
+  const list = document.getElementById('audit-pdf-verification-history');
+  if (!list) return;
+  list.innerHTML = '<div class="verification-history-empty">Loading verification history...</div>';
+  if (!logId) {
+    list.innerHTML = '<div class="verification-history-empty">No verification history is linked to this activity.</div>';
+    return;
+  }
+
+  fetch('/dashboard/activity/' + encodeURIComponent(logId) + '/verification-history/')
+    .then(function(response) {
+      if (!response.ok) throw new Error('Unable to load verification history');
+      return response.json();
+    })
+    .then(function(data) {
+      list.innerHTML = '';
+      if (!data.events || !data.events.length) {
+        list.innerHTML = '<div class="verification-history-empty">This document has no recorded verification attempts.</div>';
+        return;
+      }
+
+      data.events.forEach(function(event) {
+        const item = document.createElement('div');
+        item.className = 'verification-history-item';
+
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'verification-history-toggle';
+        toggle.setAttribute('aria-expanded', 'false');
+
+        const date = document.createElement('span');
+        date.className = 'verification-history-date';
+        date.textContent = event.verified_at + (event.is_selected ? ' · Selected' : '');
+
+        const result = document.createElement('span');
+        result.className = 'verification-history-result ' + (
+          event.result === 'Authentic' ? 'authentic' :
+          event.result === 'Possible Modification' ? 'warning' : ''
+        );
+        result.textContent = event.result;
+
+        const chevron = document.createElement('span');
+        chevron.className = 'verification-history-chevron';
+        chevron.setAttribute('aria-hidden', 'true');
+        chevron.textContent = '⌄';
+
+        const detail = document.createElement('div');
+        detail.className = 'verification-history-detail';
+        detail.hidden = true;
+
+        toggle.append(date, result, chevron);
+        item.append(toggle, detail);
+        list.appendChild(item);
+
+        toggle.addEventListener('click', function() {
+          const expanding = toggle.getAttribute('aria-expanded') !== 'true';
+          toggle.setAttribute('aria-expanded', expanding ? 'true' : 'false');
+          detail.hidden = !expanding;
+          if (!expanding || detail.dataset.loaded === 'true') return;
+
+          detail.textContent = 'Loading verification trace...';
+          fetch('/dashboard/activity/' + encodeURIComponent(event.id) + '/verification-log/')
+            .then(function(response) {
+              if (!response.ok) throw new Error('Unable to load verification trace');
+              return response.json();
+            })
+            .then(function(logData) {
+              detail.innerHTML = '';
+              if (logData.note) {
+                const note = document.createElement('p');
+                note.className = 'verification-history-note';
+                note.textContent = logData.note;
+                detail.appendChild(note);
+              }
+              const trace = document.createElement('pre');
+              trace.className = 'verification-history-log';
+              trace.textContent = logData.debug_log || 'A debug trace was not stored for this older verification.';
+              detail.appendChild(trace);
+              detail.dataset.loaded = 'true';
+            })
+            .catch(function() {
+              detail.textContent = 'The verification trace could not be loaded.';
+            });
+        });
+      });
+    })
+    .catch(function() {
+      list.innerHTML = '<div class="verification-history-empty">Verification history could not be loaded.</div>';
+    });
+}
+
 function closeAuditPdf() {
   document.getElementById('audit-pdf-panel').classList.remove('open');
   document.getElementById('audit-pdf-overlay').classList.remove('open');

@@ -163,6 +163,10 @@
         line-height: 1.6;
     }
     .info-box svg { flex-shrink: 0; margin-top: 1px; }
+    .upload-option { display:flex; align-items:flex-start; gap:10px; margin:0 0 1.2rem; padding:12px 14px; border:1px solid #dbe2ea; border-radius:10px; background:#fafbfc; color:#445566; cursor:pointer; }
+    .upload-option input { width:16px; height:16px; margin-top:2px; accent-color:#3b5bdb; }
+    .upload-option strong { display:block; color:#2d3a47; font-size:13px; }
+    .upload-option small { display:block; margin-top:3px; color:#889aab; font-size:12px; line-height:1.45; }
 
     .steps {
         display: flex;
@@ -353,10 +357,20 @@
                     <line x1="12" y1="8" x2="12" y2="12"/>
                     <line x1="12" y1="16" x2="12.01" y2="16"/>
                 </svg>
-                After uploading, the system will automatically generate a SHA-256 canonical fingerprint,
+                <span id="upload-process-info">After uploading, the system will automatically generate a SHA-256 canonical fingerprint,
                 encrypt it with AES-256-CBC, embed it into the digital seal via LSB steganography,
-                and stamp the authenticated seal onto your contract.
+                and stamp the authenticated seal onto your contract.</span>
             </div>
+
+            {% if not is_revision %}
+            <label class="upload-option" for="skip-encryption">
+                <input type="checkbox" id="skip-encryption" name="skip_encryption" value="1">
+                <span>
+                    <strong>Upload without encryption</strong>
+                    <small>Store the PDF and fingerprint now. You can encrypt it later from the Contracts page.</small>
+                </span>
+            </label>
+            {% endif %}
 
             <div style="display:flex; gap:10px;">
                 <button type="submit" id="upload-btn" class="btn btn-primary"
@@ -367,7 +381,7 @@
                         <polyline points="17,8 12,3 7,8"/>
                         <line x1="12" y1="3" x2="12" y2="15"/>
                     </svg>
-                    {% if is_revision %}Upload Revision{% else %}Upload & Encrypt{% endif %}
+                    <span id="upload-btn-label">{% if is_revision %}Upload Revision{% else %}Upload & Encrypt{% endif %}</span>
                 </button>
                 <a href="/contracts/" class="btn btn-outline" style="padding: 12px 20px;">
                     Cancel
@@ -377,12 +391,22 @@
     </div>
 </div>
 
+<div class="duplicate-modal{% if already_authenticated %} open{% endif %}" id="authenticated-modal" aria-hidden="{% if already_authenticated %}false{% else %}true{% endif %}">
+    <div class="duplicate-modal-card" role="dialog" aria-modal="true" aria-labelledby="authenticated-title">
+        <h2 id="authenticated-title">Already authenticated</h2>
+        <p id="authenticated-message">This document is already authenticated as {{ already_authenticated.title }}, version {{ already_authenticated.version }}.</p>
+        <div class="duplicate-modal-actions">
+            <button type="button" class="btn btn-outline" id="authenticated-cancel">Cancel</button>
+            <a class="btn btn-primary" id="authenticated-view" href="{{ already_authenticated.url }}" target="_blank" rel="noopener">View existing document</a>
+        </div>
+    </div>
+</div>
 <div class="duplicate-modal" id="duplicate-modal" aria-hidden="true">
     <div class="duplicate-modal-card" role="dialog" aria-modal="true" aria-labelledby="duplicate-modal-title">
         <h2 id="duplicate-modal-title">Possible duplicate document</h2>
         <p id="duplicate-modal-message"></p>
         <div class="duplicate-modal-actions">
-            <button type="button" class="btn btn-outline" id="duplicate-new-btn">Add as new PDF</button>
+            <button type="button" class="btn btn-outline" id="duplicate-new-btn">Add as new document</button>
             <button type="button" class="btn btn-primary" id="duplicate-revision-btn">Add as revision</button>
         </div>
     </div>
@@ -407,11 +431,25 @@
     const removeBtn = document.getElementById('remove-file');
     const warningBox = document.getElementById('file-warning');
     const uploadBtn = document.getElementById('upload-btn');
+    const uploadBtnLabel = document.getElementById('upload-btn-label');
+    const skipEncryption = document.getElementById('skip-encryption');
+    const uploadProcessInfo = document.getElementById('upload-process-info');
     const uploadForm = document.getElementById('upload-form');
     const duplicateModal = document.getElementById('duplicate-modal');
     const duplicateMessage = document.getElementById('duplicate-modal-message');
     let duplicateContracts = [];
     let duplicateCheckComplete = false;
+
+    function updateUploadModeLabel() {
+        if (!uploadBtnLabel || !skipEncryption) return;
+        uploadBtnLabel.textContent = skipEncryption.checked ? 'Upload without encryption' : 'Upload & Encrypt';
+        if (uploadProcessInfo) {
+            uploadProcessInfo.textContent = skipEncryption.checked
+                ? 'The PDF will be stored with its SHA-256 canonical fingerprint only. You can encrypt it later from the Contracts page.'
+                : 'After uploading, the system will automatically generate a SHA-256 canonical fingerprint, encrypt it with AES-256-CBC, embed it into the digital seal via LSB steganography, and stamp the authenticated seal onto your contract.';
+        }
+    }
+    skipEncryption?.addEventListener('change', updateUploadModeLabel);
 
     function formatBytes(bytes) {
         if (bytes < 1024) return bytes + ' B';
@@ -457,6 +495,7 @@
     }
 
     function handleFile(file) {
+        duplicateCheckComplete = false;
         if (!file) return;
         if (!isPdf(file)) {
             showWarning();
@@ -507,12 +546,14 @@
             showWarning();
             return;
         }
-        if (uploadForm.dataset.isRevision !== 'true' && !duplicateCheckComplete) {
+        if (!duplicateCheckComplete) {
             e.preventDefault();
             uploadBtn.disabled = true;
             uploadBtn.textContent = 'Checking for duplicates...';
             const formData = new FormData();
             formData.append('file', file);
+            const titleField = uploadForm.querySelector('[name="title"]');
+            if (titleField) formData.append('title', titleField.value);
             const csrfToken = uploadForm.querySelector('[name=csrfmiddlewaretoken]').value;
             try {
                 const response = await fetch('{% url "check_duplicate_upload" %}', {
@@ -522,21 +563,41 @@
                 });
                 const result = await response.json();
                 if (!response.ok || !result.success) throw new Error('duplicate check failed');
+                if (result.already_authenticated) {
+                    const existing = result.already_authenticated;
+                    document.getElementById('authenticated-message').textContent = `This document is already authenticated as ${existing.title}, version ${existing.version}.`;
+                    document.getElementById('authenticated-view').href = existing.url;
+                    const modal = document.getElementById('authenticated-modal');
+                    modal.classList.add('open');
+                    modal.setAttribute('aria-hidden', 'false');
+                    uploadBtn.disabled = false;
+                    updateUploadModeLabel();
+                    return;
+                }
+                if (uploadForm.dataset.isRevision === 'true') {
+                    duplicateCheckComplete = true;
+                    uploadForm.submit();
+                    return;
+                }
                 duplicateContracts = result.duplicates || [];
                 if (duplicateContracts.length) {
                     const duplicate = duplicateContracts[0];
-                    duplicateMessage.textContent = `${file.name} appears to be a duplicate of ${duplicate.filename || duplicate.title}. Add it as a revision?`;
+                    if (duplicate.match_type === 'same_name') {
+                        duplicateMessage.textContent = `This document has been detected as a duplicate of ${duplicate.title || duplicate.filename}. Add it as a new document or add it as revision v${duplicate.next_version}?`;
+                    } else {
+                        duplicateMessage.textContent = `${file.name} appears to be a duplicate of ${duplicate.filename || duplicate.title}. Add it as a new document or add it as a revision?`;
+                    }
                     duplicateModal.classList.add('open');
                     duplicateModal.setAttribute('aria-hidden', 'false');
                     uploadBtn.disabled = false;
-                    uploadBtn.innerHTML = 'Upload & Encrypt';
+                    updateUploadModeLabel();
                     return;
                 }
                 duplicateCheckComplete = true;
                 uploadForm.submit();
             } catch (error) {
                 uploadBtn.disabled = false;
-                uploadBtn.innerHTML = 'Upload & Encrypt';
+                updateUploadModeLabel();
                 uploadForm.submit();
             }
             return;
@@ -558,9 +619,19 @@
         duplicateModal.setAttribute('aria-hidden', 'true');
     }
 
+    document.getElementById('authenticated-cancel').addEventListener('click', function() {
+        const modal = document.getElementById('authenticated-modal');
+        modal.classList.remove('open');
+        modal.setAttribute('aria-hidden', 'true');
+        duplicateCheckComplete = false;
+        clearFile();
+    });
+
     document.getElementById('duplicate-revision-btn').addEventListener('click', function() {
         const duplicate = duplicateContracts[0];
         if (!duplicate) return;
+        const forceNew = uploadForm.querySelector('[name="force_new"]');
+        if (forceNew) forceNew.remove();
         uploadForm.action = `/contract/${duplicate.id}/add-revision/`;
         duplicateCheckComplete = true;
         closeDuplicateModal();
@@ -569,6 +640,14 @@
 
     document.getElementById('duplicate-new-btn').addEventListener('click', function() {
         uploadForm.action = '{% url "upload_contract" %}';
+        let forceNew = uploadForm.querySelector('[name="force_new"]');
+        if (!forceNew) {
+            forceNew = document.createElement('input');
+            forceNew.type = 'hidden';
+            forceNew.name = 'force_new';
+            uploadForm.appendChild(forceNew);
+        }
+        forceNew.value = '1';
         duplicateCheckComplete = true;
         closeDuplicateModal();
         uploadForm.submit();

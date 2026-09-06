@@ -1,0 +1,44 @@
+[
+  {
+    "test": "PERF-09",
+    "band": "1mb",
+    "users": 10,
+    "repetition": 1,
+    "requests": 40,
+    "failures": 0,
+    "failure_rate": 0.0,
+    "average_ms": 468.2669874997373,
+    "p95_ms": 1200.0,
+    "p99_ms": 1200.0,
+    "throughput_rps": 3.676463782181189,
+    "completed_at": "2026-09-06T05:23:58.6547780+08:00"
+  },
+  {
+    "test": "PERF-09",
+    "band": "5mb",
+    "users": 10,
+    "repetition": 1,
+    "requests": 40,
+    "failures": 0,
+    "failure_rate": 0.0,
+    "average_ms": 475.41204249901057,
+    "p95_ms": 1100.0,
+    "p99_ms": 1200.0,
+    "throughput_rps": 3.7077420201477396,
+    "completed_at": "2026-09-06T05:24:58.7989960+08:00"
+  },
+  {
+    "test": "PERF-09",
+    "band": "near_limit",
+    "users": 10,
+    "repetition": 1,
+    "requests": 40,
+    "failures": 0,
+    "failure_rate": 0.0,
+    "average_ms": 833.873257500818,
+    "p95_ms": 2700.0,
+    "p99_ms": 2700.0,
+    "throughput_rps": 3.014802368654998,
+    "completed_at": "2026-09-06T05:25:58.9457928+08:00"
+  }
+]

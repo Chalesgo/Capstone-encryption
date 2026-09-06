@@ -393,6 +393,32 @@
         border-radius: 0 0 12px 12px;
         display: block;
     }
+    .doc-preview-mobile-link {
+        display: none;
+    }
+    @media (max-width: 900px) {
+        .doc-preview-body {
+            position: relative;
+        }
+        .doc-preview-mobile-link {
+            display: inline-flex;
+            position: absolute;
+            left: 50%;
+            bottom: 16px;
+            transform: translateX(-50%);
+            z-index: 2;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 16px;
+            border-radius: 8px;
+            background: #3b5bdb;
+            color: #fff;
+            font-size: 13px;
+            font-weight: 600;
+            text-decoration: none;
+            box-shadow: 0 3px 12px rgba(26, 54, 120, .25);
+        }
+    }
     .status-panel {
         flex: 1;
         background: white;
@@ -862,6 +888,7 @@
                 </div>
                 <div class="doc-preview-body">
                     <iframe id="doc-preview-frame" title="Uploaded document preview"></iframe>
+                    <a class="doc-preview-mobile-link" id="doc-preview-open-link" href="#" target="_blank" rel="noopener noreferrer">Open PDF in browser</a>
                 </div>
             </div>
 
@@ -978,18 +1005,12 @@
             </div>
             <div>
                 <div class="result-title">
-                    {% if filename_hint == 'tampered' %}Document Tampered
-                    {% elif filename_hint == 'unknown' %}Unknown Document
-                    {% else %}Document Not Authentic{% endif %}
+                    Possible Modification
                 </div>
                 <div class="result-desc">
-                    {% if filename_hint == 'tampered' %}
-                        This document has been modified from its original authenticated form.
-                    {% elif filename_hint == 'unknown' %}
-                        This document could not be matched to any official record in the system.
-                    {% else %}
-                        This document does not match any official record or has been modified after authentication.
-                    {% endif %}
+                    This document differs from its official authenticated record.
+                    Was it opened or re-saved using a PDF editor? Some editors can alter
+                    protected PDF data even when no visible changes were intentionally made.
                 </div>
             </div>
         </div>
@@ -1163,6 +1184,7 @@ let currentPublicContractId = null;
 function openPublicPdfPreview(el) {
   closePublicDocsDrawer();
   currentPublicContractId = el.dataset.contractId;
+  if (openPdfInMobileViewer(el.dataset.url)) return;
   document.getElementById('public-pdf-frame').src = el.dataset.url;
   document.getElementById('public-pdf-title').textContent = el.dataset.title;
   document.getElementById('public-pdf-download-btn').href = el.dataset.downloadUrl;
@@ -1291,7 +1313,9 @@ document.getElementById('verify-form').addEventListener('submit', function(e) {
 
         // Preview the uploaded document (the "working contract") while verification runs
         verificationObjectUrl = URL.createObjectURL(file);
-        document.getElementById('doc-preview-frame').src = verificationObjectUrl + '#toolbar=0&navpanes=0&scrollbar=1&view=FitH';
+        const previewFrameUrl = verificationObjectUrl + '#toolbar=0&navpanes=0&scrollbar=1&view=FitH';
+        document.getElementById('doc-preview-frame').src = previewFrameUrl;
+        document.getElementById('doc-preview-open-link').href = verificationObjectUrl;
         document.getElementById('doc-page-count').textContent =
             estimatedPages + (estimatedPages === 1 ? ' Page' : ' Pages');
 
@@ -1416,6 +1440,7 @@ if (hasResult) {
     const resultPreviewUrl = "{{ verify_preview_url|default:''|escapejs }}";
     if (resultPreviewUrl) {
         document.getElementById('doc-preview-frame').src = resultPreviewUrl + '#toolbar=0&navpanes=0&scrollbar=1&view=FitH';
+        document.getElementById('doc-preview-open-link').href = resultPreviewUrl;
     }
 }
 </script>

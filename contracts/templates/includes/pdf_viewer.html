@@ -13,23 +13,24 @@
       <iframe class="pdf-frame{% if viewer_show_verification %} audit-pdf-frame{% endif %}" id="{{ viewer_prefix }}-frame" src="" title="PDF preview"></iframe>
       {% if viewer_show_unavailable %}
       <div class="pdf-unavailable audit-pdf-unavailable" id="{{ viewer_prefix }}-unavailable">
-        <div><strong>PDF not retained</strong>Authentic and unknown uploads are removed after verification.</div>
+        <div class="pdf-unavailable-card" role="alert">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="19"/><line x1="15" y1="13" x2="9" y2="19"/></svg>
+          <strong>PDF can't be viewed</strong>
+          <span id="{{ viewer_prefix }}-unavailable-reason">Reason: This PDF is no longer retained.</span>
+        </div>
       </div>
       {% endif %}
     </div>
     <aside class="pdf-sidebar{% if viewer_show_verification %} audit-pdf-sidebar{% endif %}">
       <p class="pdf-sidebar-title{% if viewer_show_verification %} audit-pdf-title{% endif %}" id="{{ viewer_prefix }}-panel-title">Document</p>
       {% if viewer_show_verification %}
-      <p class="sidebar-section-label">Verification Details</p>
+      <p class="sidebar-section-label">Activity Summary</p>
       <div class="meta-list audit-meta-list">
         <div class="meta-row audit-meta-row"><span class="meta-row-label audit-meta-label">Source</span><span class="meta-row-value audit-meta-value" id="{{ viewer_prefix }}-source">—</span></div>
         <div class="meta-row audit-meta-row"><span class="meta-row-label audit-meta-label">Result</span><span class="meta-row-value audit-meta-value" id="{{ viewer_prefix }}-result">—</span></div>
         <div class="meta-row audit-meta-row"><span class="meta-row-label audit-meta-label">Integrity</span><span class="meta-row-value audit-meta-value" id="{{ viewer_prefix }}-integrity">—</span></div>
         <div class="meta-row audit-meta-row"><span class="meta-row-label audit-meta-label">Activity time</span><span class="meta-row-value audit-meta-value" id="{{ viewer_prefix }}-time">—</span></div>
         <div class="meta-row audit-meta-row"><span class="meta-row-label audit-meta-label">Version</span><span class="meta-row-value audit-meta-value" id="{{ viewer_prefix }}-version">Current</span></div>
-      </div>
-      <p class="sidebar-section-label">Document Info</p>
-      <div class="meta-list audit-meta-list">
         <div class="meta-row audit-meta-row"><span class="meta-row-label audit-meta-label">File Size</span><span class="meta-row-value audit-meta-value" id="{{ viewer_prefix }}-size">—</span></div>
         <div class="meta-row audit-meta-row"><span class="meta-row-label audit-meta-label">Evidence</span><span class="meta-row-value audit-meta-value" id="{{ viewer_prefix }}-retention">—</span></div>
       </div>
@@ -47,6 +48,10 @@
       {% if viewer_show_verification %}
       <p class="sidebar-section-label">Activity Note</p>
       <p class="pdf-viewer-note" id="{{ viewer_prefix }}-note">No additional activity note.</p>
+      <p class="sidebar-section-label">Verification History</p>
+      <div class="verification-history-list" id="{{ viewer_prefix }}-verification-history">
+        <div class="audit-version-loading">Select an activity to load verification history.</div>
+      </div>
       {% endif %}
     </aside>
   </div>

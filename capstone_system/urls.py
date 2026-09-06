@@ -1,7 +1,7 @@
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from django.conf import settings
-from django.conf.urls.static import static
+from django.views.static import serve
 from django.shortcuts import redirect
 from django.contrib.auth.views import LoginView
 from contracts.forms import SealGuardAuthenticationForm
@@ -19,5 +19,13 @@ urlpatterns = [
     path('', include('contracts.urls')),
 ]
 
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# This project uses Django's runserver for the local/staging deployment. The
+# convenience static() helper disables itself when DEBUG=False, so use an
+# explicit route to keep uploaded PDFs and seal thumbnails available during
+# staging/performance tests. Production hosting should route MEDIA_URL through
+# its dedicated web server or storage service instead.
+urlpatterns += [
+    re_path(r'^media/(?P<path>.*)$', serve, {
+        'document_root': settings.MEDIA_ROOT,
+    }),
+]

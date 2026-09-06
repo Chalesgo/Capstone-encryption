@@ -7,6 +7,7 @@ from .forms import ContractForm, TutorialForm, sanitize_tutorial_html
 from .utils import (
     generate_file_hash,
     generate_canonical_fingerprint,
+    generate_vector_fingerprint,
     encrypt_cf,
     decrypt_cf,
     embed_data_in_image,
@@ -27,6 +28,8 @@ from .utils import generate_qr_code
 import base64
 import json
 import csv
+import io
+import zipfile
 from PIL import Image
 from hmac import compare_digest
 from django.http import JsonResponse, FileResponse, Http404, HttpResponse
@@ -46,6 +49,41 @@ from .physical_verification import (
 
 TRASH_RETENTION_DAYS = 15
 logger = logging.getLogger(__name__)
+
+
+def _document_name_stem(value):
+    """Return a case-insensitive document name without its path or PDF suffix."""
+    name = os.path.basename(str(value or '')).strip()
+    if name.lower().endswith('.pdf'):
+        name = name[:-4]
+    return name.strip()
+
+
+def _same_name_contract(uploaded_name, submitted_title=''):
+    names = {
+        name.casefold()
+        for name in (
+            _document_name_stem(uploaded_name),
+            _document_name_stem(submitted_title),
+        )
+        if name
+    }
+    if not names:
+        return None
+
+    query = Q()
+    for name in names:
+        query |= Q(base_filename__iexact=name) | Q(title__iexact=name) | Q(title__iexact=f'{name}.pdf')
+    return Contract.objects.filter(query, is_trashed=False).order_by('id').first()
+
+
+def _contract_pdf_filename(contract, version_number):
+    """Build the browser download name from the system title and version."""
+    title = _document_name_stem(contract.title)
+    title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', title).rstrip('. ')
+    if not title:
+        title = f'contract_{contract.id}'
+    return f'{title[:220]}_v{version_number}.pdf'
 
 
 def _process_log(process, stage, *, contract=None, request=None, level='info', **details):
@@ -183,6 +221,43 @@ def delete_tutorial(request, pk):
     tutorial.delete()
     return redirect('help_tutorials')
 
+def _existing_sealed_upload(uploaded_file):
+    """Recognize issued copies by their marker and exact stored PDF bytes."""
+    import hashlib
+    uploaded_file.seek(0)
+    contents = uploaded_file.read()
+    uploaded_file.seek(0)
+    try:
+        with fitz.open(stream=contents, filetype='pdf') as document:
+            keywords = document.metadata.get('keywords', '') or ''
+    except Exception:
+        return None
+    if not keywords.startswith('SEALGUARD:'):
+        return None
+    marker = keywords[len('SEALGUARD:'):]
+    if not marker:
+        return None
+    digest = hashlib.sha256(contents).digest()
+    versions = ContractVersion.objects.select_related('contract').filter(
+        encrypted_cf=marker, contract__is_trashed=False,
+    )
+    for version in versions:
+        try:
+            with version.file.open('rb') as stored:
+                stored_digest = hashlib.sha256()
+                for chunk in iter(lambda: stored.read(65536), b''):
+                    stored_digest.update(chunk)
+            if digest == stored_digest.digest():
+                return {
+                    'title': version.contract.title,
+                    'version': version.version_number,
+                    'url': reverse('preview_contract_version', args=[version.id]),
+                }
+        except OSError:
+            continue
+    return None
+
+
 @login_required
 def check_duplicate_upload(request):
     if request.method != 'POST':
@@ -191,6 +266,24 @@ def check_duplicate_upload(request):
     uploaded_file = request.FILES.get('file')
     if not uploaded_file:
         return JsonResponse({'success': False, 'error': 'missing_file'}, status=400)
+
+    existing = _existing_sealed_upload(uploaded_file)
+    if existing:
+        return JsonResponse({'success': True, 'already_authenticated': existing, 'duplicates': []})
+
+    same_name = _same_name_contract(uploaded_file.name, request.POST.get('title', ''))
+    if same_name:
+        latest = same_name.versions.order_by('-version_number').first()
+        return JsonResponse({
+            'success': True,
+            'duplicates': [{
+                'id': same_name.id,
+                'title': same_name.title,
+                'filename': os.path.basename(same_name.file.name),
+                'match_type': 'same_name',
+                'next_version': (latest.version_number + 1) if latest else 1,
+            }],
+        })
 
     temp_path = os.path.join(
         settings.MEDIA_ROOT, 'temp', 'duplicate-check', f'{uuid.uuid4().hex}.pdf'
@@ -208,7 +301,16 @@ def check_duplicate_upload(request):
         return JsonResponse({
             'success': True,
             'duplicates': [
-                {'id': contract.id, 'title': contract.title, 'filename': os.path.basename(contract.file.name)}
+                {
+                    'id': contract.id,
+                    'title': contract.title,
+                    'filename': os.path.basename(contract.file.name),
+                    'match_type': 'same_content',
+                    'next_version': (
+                        (contract.versions.order_by('-version_number').first().version_number + 1)
+                        if contract.versions.exists() else 1
+                    ),
+                }
                 for contract in duplicates
             ],
         })
@@ -224,6 +326,16 @@ def upload_contract(request):
     if request.method == 'POST':
         form = ContractForm(request.POST, request.FILES)
         if form.is_valid():
+            existing = _existing_sealed_upload(request.FILES['file'])
+            if existing:
+                return render(request, 'upload.html', {'form': form, 'already_authenticated': existing})
+            existing_name_match = _same_name_contract(
+                request.FILES['file'].name,
+                request.POST.get('title', ''),
+            )
+            if existing_name_match and request.POST.get('force_new') != '1':
+                return add_revision(request, existing_name_match.id)
+
             started_at = time.perf_counter()
             contract = form.save(commit=False)
             contract.recipient = request.user
@@ -233,6 +345,38 @@ def upload_contract(request):
             pdf_path = contract.file.path
             original_filename_only = os.path.splitext(os.path.basename(pdf_path))[0]
             contract.base_filename = original_filename_only
+
+            # Encrypted upload remains the default.  The explicit opt-out is
+            # useful for staging/importing a PDF before sealing it later.
+            if request.POST.get('skip_encryption') == '1':
+                original_cf = generate_canonical_fingerprint(pdf_path)
+                vector_cf = generate_vector_fingerprint(pdf_path)
+                contract.original_fingerprint = original_cf
+                contract.fingerprint = original_cf
+                contract.vector_fingerprint = vector_cf
+                contract.save(update_fields=[
+                    'base_filename', 'original_fingerprint', 'fingerprint',
+                    'vector_fingerprint', 'modified_at',
+                ])
+                ContractVersion.objects.create(
+                    contract=contract,
+                    version_number=1,
+                    source='upload-unencrypted',
+                    file=contract.file.name,
+                    fingerprint=original_cf,
+                    vector_fingerprint=vector_cf,
+                    previous_fingerprint='',
+                    created_by=request.user,
+                )
+                log_activity(
+                    request, 'added', contract=contract,
+                    note='Initial upload stored without encryption',
+                )
+                _process_log(
+                    'initial_upload', 'completed_without_encryption',
+                    contract=contract, request=request, version=1,
+                )
+                return redirect('contract_list')
 
             default_seal = os.path.join(settings.MEDIA_ROOT, 'seals', 'default_seal.png')
             stamped_seal = os.path.join(settings.MEDIA_ROOT, 'seals', f'seal_{contract.id}.png')
@@ -272,6 +416,7 @@ def upload_contract(request):
 
             # ── Step 6: Generate CF from SEALED pdf ──
             sealed_cf = generate_canonical_fingerprint(final_pdf_path)
+            vector_cf = generate_vector_fingerprint(final_pdf_path)
             _process_log('initial_encryption', 'sealed_fingerprint_generated', contract=contract, request=request)
             contract.fingerprint = sealed_cf
             contract.original_fingerprint = original_cf
@@ -295,6 +440,7 @@ def upload_contract(request):
                 source='upload',
                 file=contract.file.name,
                 fingerprint=sealed_cf,
+                vector_fingerprint=vector_cf,
                 previous_fingerprint='',
                 encrypted_cf=encrypted,
                 hmac_value=hmac_value,
@@ -362,7 +508,9 @@ def encrypt_contract(request, contract_id):
 
     sealed_cf = generate_canonical_fingerprint(final_pdf_path)
     version_cf = generate_canonical_fingerprint(final_pdf_path, previous_cf=previous_cf)
+    vector_cf = generate_vector_fingerprint(final_pdf_path)
     contract.fingerprint = sealed_cf
+    contract.vector_fingerprint = vector_cf
     contract.original_fingerprint = original_cf
     contract.encrypted_cf = encrypted
     contract.hmac_value = hmac_value
@@ -380,6 +528,7 @@ def encrypt_contract(request, contract_id):
         source='reencrypt',
         file=contract.file.name,
         fingerprint=version_cf,
+        vector_fingerprint=vector_cf,
         previous_fingerprint=previous_cf or '',
         encrypted_cf=encrypted,
         hmac_value=hmac_value,
@@ -410,6 +559,12 @@ def add_revision(request, contract_id):
         uploaded_file = request.FILES.get('file')
         if not uploaded_file:
             return redirect('contract_list')
+
+        existing = _existing_sealed_upload(uploaded_file)
+        if existing:
+            return render(request, 'upload.html', {
+                'is_revision': True, 'contract': contract, 'already_authenticated': existing,
+            })
 
         # ── Validate it's actually a PDF (mirrors validate_pdf_signature) ──
         header = uploaded_file.read(5)
@@ -464,8 +619,10 @@ def add_revision(request, contract_id):
 
         sealed_cf = generate_canonical_fingerprint(final_pdf_path)
         version_cf = generate_canonical_fingerprint(final_pdf_path, previous_cf=previous_cf)
+        vector_cf = generate_vector_fingerprint(final_pdf_path)
 
         contract.fingerprint = sealed_cf
+        contract.vector_fingerprint = vector_cf
         contract.original_fingerprint = original_cf
         contract.encrypted_cf = encrypted
         contract.hmac_value = hmac_value
@@ -485,6 +642,7 @@ def add_revision(request, contract_id):
             source='revision',
             file=contract.file.name,
             fingerprint=version_cf,
+            vector_fingerprint=vector_cf,
             previous_fingerprint=previous_cf or '',
             encrypted_cf=encrypted,
             hmac_value=hmac_value,
@@ -586,6 +744,147 @@ def bulk_delete_contracts(request):
         log_activity(request, 'deleted', contract=contract, note=f'Moved to trash: {contract.title}')
         moved += 1
     return JsonResponse({'success': True, 'moved': moved, 'skipped_public': skipped_public})
+
+
+def _bulk_contract_ids(request):
+    """Return unique numeric contract IDs submitted by the bulk-action toolbar."""
+    seen = set()
+    ids = []
+    for value in request.POST.getlist('ids'):
+        try:
+            contract_id = int(value)
+        except (TypeError, ValueError):
+            continue
+        if contract_id > 0 and contract_id not in seen:
+            seen.add(contract_id)
+            ids.append(contract_id)
+    return ids
+
+
+@login_required
+def bulk_assign_folder(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'invalid_method'}, status=405)
+
+    ids = _bulk_contract_ids(request)
+    folder_id = request.POST.get('folder_id', '').strip()
+    folder = None
+    if folder_id:
+        folder = Folder.objects.filter(pk=folder_id).first()
+        if not folder:
+            return JsonResponse({'success': False, 'error': 'folder_not_found'}, status=404)
+
+    contracts = Contract.objects.filter(id__in=ids, is_trashed=False)
+    updated = 0
+    for contract in contracts:
+        if contract.folder_id == (folder.id if folder else None):
+            continue
+        contract.folder = folder
+        contract.save(update_fields=['folder', 'modified_at'])
+        destination = folder.name if folder else 'No folder'
+        log_activity(request, 'edited', contract=contract, note=f'Moved to folder: {destination}')
+        updated += 1
+    return JsonResponse({'success': True, 'updated': updated, 'requested': len(ids)})
+
+
+@login_required
+def bulk_update_status(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'invalid_method'}, status=405)
+
+    status = request.POST.get('status', '').strip()
+    status_labels = dict(Contract.STATUS_CHOICES)
+    if status not in status_labels:
+        return JsonResponse({'success': False, 'error': 'invalid_status'}, status=400)
+
+    ids = _bulk_contract_ids(request)
+    contracts = Contract.objects.filter(id__in=ids, is_trashed=False)
+    updated = 0
+    for contract in contracts:
+        if contract.status == status:
+            continue
+        contract.status = status
+        contract.save(update_fields=['status', 'modified_at'])
+        action = 'approved' if status == 'approved' else 'edited'
+        log_activity(
+            request, action, contract=contract,
+            note=f'Status changed to {status_labels[status]}',
+        )
+        updated += 1
+    return JsonResponse({'success': True, 'updated': updated, 'requested': len(ids)})
+
+
+@login_required
+def bulk_encrypt_contracts(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'invalid_method'}, status=405)
+
+    ids = _bulk_contract_ids(request)
+    contracts = list(Contract.objects.filter(id__in=ids, is_trashed=False).order_by('id'))
+    encrypted = 0
+    already_encrypted = 0
+    failed = []
+    for contract in contracts:
+        if contract.encrypted_cf:
+            already_encrypted += 1
+            continue
+        try:
+            # Reuse the established single-document encryption pipeline so a
+            # bulk operation creates the same seal, version, and audit data.
+            encrypt_contract(request, contract.id)
+            encrypted += 1
+        except Exception:
+            logger.exception('Bulk encryption failed for contract %s', contract.id)
+            failed.append(contract.id)
+
+    return JsonResponse({
+        'success': not failed,
+        'encrypted': encrypted,
+        'already_encrypted': already_encrypted,
+        'failed': failed,
+        'requested': len(ids),
+    }, status=207 if failed else 200)
+
+
+@login_required
+def bulk_download_contracts(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'invalid_method'}, status=405)
+
+    ids = _bulk_contract_ids(request)
+    contracts = Contract.objects.filter(id__in=ids, is_trashed=False).order_by('id')
+    archive_buffer = io.BytesIO()
+    added = 0
+    used_names = set()
+    with zipfile.ZipFile(archive_buffer, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+        for contract in contracts:
+            if not contract.file:
+                continue
+            try:
+                latest_version = contract.versions.order_by('-version_number').first()
+                version_number = latest_version.version_number if latest_version else 1
+                filename = _contract_pdf_filename(contract, version_number)
+                if filename.casefold() in used_names:
+                    stem, extension = os.path.splitext(filename)
+                    filename = f'{stem}_{contract.id}{extension}'
+                used_names.add(filename.casefold())
+                with contract.file.open('rb') as pdf_file:
+                    archive.writestr(filename, pdf_file.read())
+                log_activity(
+                    request, 'downloaded', contract=contract,
+                    note='Downloaded current contract PDF in bulk ZIP',
+                    version_number=version_number,
+                )
+                added += 1
+            except (FileNotFoundError, OSError):
+                logger.warning('Skipped missing contract file during bulk download: %s', contract.id)
+
+    if not added:
+        return JsonResponse({'success': False, 'error': 'no_files_available'}, status=404)
+    response = HttpResponse(archive_buffer.getvalue(), content_type='application/zip')
+    response['Content-Disposition'] = 'attachment; filename="SealGuard_selected_documents.zip"'
+    response['X-SealGuard-File-Count'] = str(added)
+    return response
 
 @login_required
 def trash_list(request):
@@ -833,12 +1132,14 @@ def upload_signed_scan(request, contract_id):
             )
             sealed_cf = generate_canonical_fingerprint(final_path)
             version_cf = generate_canonical_fingerprint(final_path, previous_cf=previous_cf)
+            vector_cf = generate_vector_fingerprint(final_path)
             version = ContractVersion.objects.create(
                 contract=contract,
                 version_number=next_version_number,
                 source='physical_scan',
                 file=f'contracts/{final_filename}',
                 fingerprint=version_cf,
+                vector_fingerprint=vector_cf,
                 previous_fingerprint=previous_cf or '',
                 encrypted_cf=encrypted,
                 hmac_value=hmac_value,
@@ -850,6 +1151,7 @@ def upload_signed_scan(request, contract_id):
             contract.status = 'approved'
             contract.file = f'contracts/{final_filename}'
             contract.fingerprint = sealed_cf
+            contract.vector_fingerprint = vector_cf
             contract.original_fingerprint = source_cf
             contract.encrypted_cf = encrypted
             contract.hmac_value = hmac_value
@@ -1044,7 +1346,25 @@ def _attach_verification_evidence(audit_log, temp_path, original_name):
         audit_log.evidence_file.save(safe_name, File(evidence_handle), save=True)
 
 
-def _log_public_verification(request, uploaded_file, result, *, contract=None, note=''):
+def _serialize_verification_debug_log(debug_log):
+    """Store the user-facing, secret-safe verification trace with a size cap."""
+    clean_lines = []
+    for entry in debug_log or []:
+        clean_entry = str(entry).replace('\x00', '').replace('\r', ' ').strip()
+        if clean_entry:
+            clean_lines.append(clean_entry[:1000])
+    return '\n'.join(clean_lines)[:20000]
+
+
+def _log_public_verification(
+    request,
+    uploaded_file,
+    result,
+    *,
+    contract=None,
+    note='',
+    debug_log=None,
+):
     """Record verification details without retaining the uploaded PDF itself."""
     detail_map = {
         'authentic': ('Authentic', 'Complete'),
@@ -1066,7 +1386,46 @@ def _log_public_verification(request, uploaded_file, result, *, contract=None, n
         verification_result=verification_result,
         integrity_check=integrity_check,
         document_size=uploaded_file.size,
+        verification_debug_log=_serialize_verification_debug_log(debug_log),
     )
+
+
+@login_required
+def audit_verification_history(request, log_id):
+    selected_log = get_object_or_404(
+        AuditLog.objects.select_related('contract'),
+        pk=log_id,
+    )
+    history = AuditLog.objects.filter(verification_result__gt='')
+    if selected_log.contract_id:
+        history = history.filter(contract_id=selected_log.contract_id)
+    elif selected_log.document_title:
+        history = history.filter(document_title=selected_log.document_title)
+    else:
+        history = history.none()
+
+    events = [
+        {
+            'id': entry.id,
+            'verified_at': timezone.localtime(entry.timestamp).strftime('%b %d, %Y · %I:%M %p'),
+            'result': entry.inspection_result or 'Unknown',
+            'integrity': entry.inspection_integrity or 'Unknown',
+            'is_selected': entry.id == selected_log.id,
+            'has_debug_log': bool(entry.verification_debug_log),
+        }
+        for entry in history.order_by('-timestamp', '-id')
+    ]
+    return JsonResponse({'success': True, 'events': events})
+
+
+@login_required
+def audit_verification_log_detail(request, log_id):
+    entry = get_object_or_404(AuditLog, pk=log_id, verification_result__gt='')
+    return JsonResponse({
+        'success': True,
+        'note': entry.note,
+        'debug_log': entry.verification_debug_log,
+    })
 
 
 def public_verify(request):
@@ -1129,6 +1488,7 @@ def public_verify(request):
             _log_public_verification(
                 request, uploaded_file, 'authentic',
                 note=f"Public verification: authentic ({uploaded_file.name})",
+                debug_log=debug_log,
             )
             request.session['verify_result'] = 'authentic'
             request.session['verify_debug_log'] = debug_log
@@ -1151,6 +1511,7 @@ def public_verify(request):
             tampering_log = _log_public_verification(
                 request, uploaded_file, 'tampered',
                 note=f"Public verification: tampered ({uploaded_file.name}); fingerprint mismatch",
+                debug_log=debug_log,
             )
             _attach_verification_evidence(tampering_log, temp_path, uploaded_file.name)
             request.session['verify_result'] = 'tampered'
@@ -1173,6 +1534,7 @@ def public_verify(request):
             _log_public_verification(
                 request, uploaded_file, 'error',
                 note=f"Public verification: unknown origin ({uploaded_file.name}); no official record matched",
+                debug_log=debug_log,
             )
             request.session['verify_result'] = 'error'
             request.session['verify_debug_log'] = debug_log
@@ -1198,7 +1560,9 @@ def public_verify(request):
                 debug_log.append("[WARN] Footer check: No barangay footer found")
 
             current_cf = generate_canonical_fingerprint(temp_path)
+            current_vector_cf = generate_vector_fingerprint(temp_path)
             debug_log.append("[PASS] Sealed PDF fingerprint recomputed")
+            debug_log.append("[PASS] Vector drawing fingerprint recomputed")
             _process_log('verification', 'sealed_fingerprint_generated', request=request)
 
             matched_contract = Contract.objects.filter(
@@ -1207,7 +1571,34 @@ def public_verify(request):
             ).first()
             debug_log.append("[INFO] Active contract fingerprint lookup completed")
 
+            expected_vector_cf = ''
+            if matched_contract:
+                expected_vector_cf = matched_contract.vector_fingerprint
+                if not expected_vector_cf:
+                    latest_version = matched_contract.versions.order_by('-version_number').first()
+                    expected_vector_cf = latest_version.vector_fingerprint if latest_version else ''
+                if not expected_vector_cf and matched_contract.file:
+                    try:
+                        expected_vector_cf = generate_vector_fingerprint(matched_contract.file.path)
+                        debug_log.append("[INFO] Legacy vector baseline recovered from the official stored PDF")
+                    except (FileNotFoundError, OSError, ValueError, RuntimeError):
+                        debug_log.append("[WARN] No vector baseline is available for this legacy record")
+
             extracted_encrypted = extract_cf_from_metadata(temp_path)
+            embedded_lsb_matches = bool(
+                matched_contract
+                and extract_lsb_marker_from_pdf(temp_path, matched_contract.encrypted_cf)
+            )
+            enrollment_seal_lsb_matches = False
+            if matched_contract and not embedded_lsb_matches and matched_contract.seal_image:
+                try:
+                    enrollment_seal_marker = extract_data_from_image(matched_contract.seal_image.path)
+                    enrollment_seal_lsb_matches = compare_digest(
+                        enrollment_seal_marker,
+                        matched_contract.encrypted_cf,
+                    )
+                except (FileNotFoundError, OSError, ValueError):
+                    enrollment_seal_lsb_matches = False
 
             if not matched_contract:
                 marker_owner_exists = bool(
@@ -1226,6 +1617,17 @@ def public_verify(request):
                     failure_reason = 'no active database record matched'
                     filename_hint = 'unknown'
                     result = 'not_found'
+            elif expected_vector_cf and not compare_digest(current_vector_cf, expected_vector_cf):
+                debug_log.append("[FAIL] Vector drawing fingerprint differs from the official record")
+                debug_log.append(
+                    "[WARN] This PDF may have been edited or re-saved with a PDF editor. "
+                    "Even without a visible change, editor processing can alter protected vector data."
+                )
+                failure_reason = (
+                    'vector drawing data changed; the PDF may have been edited or re-saved '
+                    'with a PDF editor'
+                )
+                result = 'tampered'
             elif not extracted_encrypted:
                 debug_log.append("[FAIL] Metadata marker is missing from the matched sealed document")
                 failure_reason = 'metadata marker missing'
@@ -1238,7 +1640,7 @@ def public_verify(request):
                 debug_log.append("[FAIL] Metadata marker does not belong to the matched contract")
                 failure_reason = 'metadata marker ownership mismatch'
                 result = 'tampered'
-            elif not extract_lsb_marker_from_pdf(temp_path, matched_contract.encrypted_cf):
+            elif not embedded_lsb_matches and not enrollment_seal_lsb_matches:
                 debug_log.append("[FAIL] Digital seal LSB marker is missing or inconsistent")
                 failure_reason = 'digital seal LSB marker mismatch'
                 result = 'tampered'
@@ -1254,6 +1656,10 @@ def public_verify(request):
             else:
                 debug_log.append(f"[PASS] Sealed fingerprint matched active contract [{matched_contract.id}]")
                 debug_log.append("[PASS] Metadata marker belongs to the matched contract")
+                if embedded_lsb_matches:
+                    debug_log.append("[PASS] Digital seal LSB marker recovered from the PDF")
+                else:
+                    debug_log.append("[PASS] Legacy enrollment seal LSB marker validated")
                 _process_log('verification', 'marker_ownership_validated', contract=matched_contract, request=request)
 
                 try:
@@ -1317,22 +1723,26 @@ def public_verify(request):
             _log_public_verification(
                 request, uploaded_file, 'authentic', contract=matched_contract,
                 note=f"Public verification: authentic ({uploaded_file.name})",
+                debug_log=debug_log,
             )
         elif result == 'tampered':
             tampering_log = _log_public_verification(
                 request, uploaded_file, 'tampered', contract=matched_contract,
                 note=f"Public verification: tampered ({uploaded_file.name}); {failure_reason or 'integrity check failed'}",
+                debug_log=debug_log,
             )
             _attach_verification_evidence(tampering_log, temp_path, uploaded_file.name)
         elif result == 'not_found':
             _log_public_verification(
                 request, uploaded_file, 'not_found',
                 note=f"Public verification: no SealGuard record ({uploaded_file.name})",
+                debug_log=debug_log,
             )
         else:
             _log_public_verification(
                 request, uploaded_file, 'error',
                 note=f"Public verification: unable to verify ({uploaded_file.name}); {failure_reason or 'operational error'}",
+                debug_log=debug_log,
             )
 
         request.session['verify_result'] = result
@@ -1381,10 +1791,12 @@ def preview_contract(request, contract_id):
         return redirect(f"{reverse('login')}?next={request.path}")
     if not contract.file:
         raise Http404
+    latest_version = contract.versions.order_by('-version_number').first()
+    version_number = latest_version.version_number if latest_version else 1
     return FileResponse(
         contract.file.open('rb'),
         content_type='application/pdf',
-        filename=os.path.basename(contract.file.name),
+        filename=_contract_pdf_filename(contract, version_number),
     )
 
 
@@ -1401,7 +1813,7 @@ def preview_contract_version(request, version_id):
     return FileResponse(
         version.file.open('rb'),
         content_type='application/pdf',
-        filename=os.path.basename(version.file.name),
+        filename=_contract_pdf_filename(version.contract, version.version_number),
     )
 
 
@@ -1425,7 +1837,10 @@ def download_contract(request, contract_id):
     return FileResponse(
         contract.file.open('rb'),
         content_type='application/pdf',
-        filename=os.path.basename(contract.file.name),
+        filename=_contract_pdf_filename(
+            contract,
+            latest_version.version_number if latest_version else 1,
+        ),
     )
 
 
@@ -1447,7 +1862,7 @@ def download_contract_version(request, version_id):
     return FileResponse(
         version.file.open('rb'),
         content_type='application/pdf',
-        filename=os.path.basename(version.file.name),
+        filename=_contract_pdf_filename(version.contract, version.version_number),
     )
 
 # New rename view

@@ -825,6 +825,15 @@
     </div>
 </footer>
 <script>
+// Mobile browsers often cannot render PDFs inside an iframe. Let them use
+// their native PDF viewer instead; desktop keeps the in-page preview panels.
+function openPdfInMobileViewer(url) {
+    if (!url || !window.matchMedia('(max-width: 900px)').matches) return false;
+    const popup = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!popup) window.location.href = url;
+    return true;
+}
+
 function toggleProfilePopover() {
     const modal = document.getElementById('profile-modal');
     if (!modal) return;

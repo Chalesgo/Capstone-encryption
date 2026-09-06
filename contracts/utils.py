@@ -3,6 +3,7 @@ import hmac as hmac_lib
 import fitz
 import base64
 import os
+import json
 from io import BytesIO
 from PIL import Image
 from Crypto.Cipher import AES, PKCS1_OAEP
@@ -55,6 +56,42 @@ def generate_canonical_fingerprint(pdf_path, previous_cf=None):
     cf = hashlib.sha256(combined.encode()).hexdigest()
     return cf
 
+
+def _normalize_vector_value(value):
+    """Convert PyMuPDF drawing values into deterministic JSON-safe data."""
+    if isinstance(value, float):
+        return round(value, 4)
+    if isinstance(value, (int, str, bool)) or value is None:
+        return value
+    if isinstance(value, fitz.Point):
+        return [round(value.x, 4), round(value.y, 4)]
+    if isinstance(value, fitz.Rect):
+        return [round(value.x0, 4), round(value.y0, 4), round(value.x1, 4), round(value.y1, 4)]
+    if isinstance(value, fitz.Quad):
+        return [_normalize_vector_value(point) for point in value]
+    if isinstance(value, dict):
+        return {
+            str(key): _normalize_vector_value(item)
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+        }
+    if isinstance(value, (list, tuple)):
+        return [_normalize_vector_value(item) for item in value]
+    return str(value)
+
+
+def generate_vector_fingerprint(pdf_path):
+    """Hash normalized vector drawing commands for strict editor/tamper detection."""
+    document = fitz.open(pdf_path)
+    try:
+        pages = []
+        for page_number, page in enumerate(document):
+            drawings = [_normalize_vector_value(drawing) for drawing in page.get_drawings()]
+            pages.append({'page': page_number, 'drawings': drawings})
+        serialized = json.dumps(pages, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+        return hashlib.sha256(serialized.encode('utf-8')).hexdigest()
+    finally:
+        document.close()
+
 def verify_version_chain(contract):
     """
     Walks a contract's full version history and recomputes each version's
@@ -76,7 +113,13 @@ def verify_version_chain(contract):
                 version.file.path,
                 previous_cf=expected_previous or None,
             )
-            valid = link_valid and recomputed == version.fingerprint
+            vector_valid = True
+            if version.vector_fingerprint:
+                vector_valid = hmac_lib.compare_digest(
+                    generate_vector_fingerprint(version.file.path),
+                    version.vector_fingerprint,
+                )
+            valid = link_valid and recomputed == version.fingerprint and vector_valid
         except Exception:
             valid = False
 
@@ -173,7 +216,11 @@ def decrypt_cf(encrypted_b64: str, wrapped_key_b64: str, iv_b64: str,
 def embed_data_in_image(input_image_path, output_image_path, data: str):
     """
     Embeds encrypted CF string into seal image via LSB.
-    Preserves alpha (transparency) channel.
+    Preserves alpha (transparency) and writes only to fully opaque pixels.
+
+    PyMuPDF stores a transparent PNG's RGB data separately from its alpha mask
+    and may premultiply the RGB values of translucent pixels.  Restricting the
+    payload to opaque pixels keeps the LSB values stable after PDF embedding.
     """
     img = Image.open(input_image_path).convert('RGBA')
     pixels = list(img.getdata())
@@ -182,7 +229,8 @@ def embed_data_in_image(input_image_path, output_image_path, data: str):
     binary_data = ''.join(format(ord(c), '08b') for c in data_with_delim)
     data_len = len(binary_data)
 
-    if data_len > len(pixels) * 3:
+    writable_pixels = sum(1 for _r, _g, _b, alpha in pixels if alpha == 255)
+    if data_len > writable_pixels * 3:
         raise ValueError("Data too large to embed in this image.")
 
     new_pixels = []
@@ -191,13 +239,13 @@ def embed_data_in_image(input_image_path, output_image_path, data: str):
     for pixel in pixels:
         r, g, b, a = pixel
 
-        if data_index < data_len:
+        if a == 255 and data_index < data_len:
             r = (r & ~1) | int(binary_data[data_index])
             data_index += 1
-        if data_index < data_len:
+        if a == 255 and data_index < data_len:
             g = (g & ~1) | int(binary_data[data_index])
             data_index += 1
-        if data_index < data_len:
+        if a == 255 and data_index < data_len:
             b = (b & ~1) | int(binary_data[data_index])
             data_index += 1
 
@@ -207,31 +255,34 @@ def embed_data_in_image(input_image_path, output_image_path, data: str):
     img.save(output_image_path, "PNG")
     return output_image_path
 
+
+def _extract_lsb_data(pixels, *, opaque_only=False):
+    """Extract one delimited LSB payload from an RGBA pixel sequence."""
+    bits = []
+    chars = []
+    delimiter = "||END||"
+
+    for red, green, blue, alpha in pixels:
+        if opaque_only and alpha != 255:
+            continue
+        bits.extend((str(red & 1), str(green & 1), str(blue & 1)))
+        while len(bits) >= 8:
+            chars.append(chr(int(''.join(bits[:8]), 2)))
+            del bits[:8]
+            if ''.join(chars[-len(delimiter):]) == delimiter:
+                return ''.join(chars[:-len(delimiter)])
+    return None
+
+
 def extract_data_from_image(image_path: str):
     """
     Extracts the hidden encrypted CF from the seal image.
     """
     img = Image.open(image_path).convert('RGBA')
     pixels = list(img.getdata())
-
-    binary_data = ""
-    for pixel in pixels:
-        r, g, b, a = pixel
-        binary_data += str(r & 1)
-        binary_data += str(g & 1)
-        binary_data += str(b & 1)
-
-    chars = []
-    for i in range(0, len(binary_data), 8):
-        byte = binary_data[i:i+8]
-        if len(byte) < 8:
-            break
-        chars.append(chr(int(byte, 2)))
-        if ''.join(chars[-7:]) == "||END||":
-            break
-
-    result = ''.join(chars)
-    return result.replace("||END||", "")
+    # New transparent seals use opaque pixels so the payload survives
+    # PyMuPDF's alpha handling. Fall back to the legacy all-pixel layout.
+    return _extract_lsb_data(pixels, opaque_only=True) or _extract_lsb_data(pixels) or ''
 
 
 def extract_lsb_marker_from_pdf(pdf_path: str, expected_marker: str):
@@ -246,19 +297,23 @@ def extract_lsb_marker_from_pdf(pdf_path: str, expected_marker: str):
                         continue
                     seen.add(xref)
                     image_bytes = document.extract_image(xref)['image']
-                    image = Image.open(BytesIO(image_bytes)).convert('RGBA')
-                    bits = []
-                    chars = []
-                    for red, green, blue, _alpha in image.getdata():
-                        bits.extend((str(red & 1), str(green & 1), str(blue & 1)))
-                        while len(bits) >= 8:
-                            chars.append(chr(int(''.join(bits[:8]), 2)))
-                            del bits[:8]
-                            if ''.join(chars[-7:]) == '||END||':
-                                value = ''.join(chars[:-7])
-                                if hmac_lib.compare_digest(value, expected_marker):
-                                    return value
-                                break
+                    image = Image.open(BytesIO(image_bytes)).convert('RGB')
+                    smask_xref = image_info[1]
+                    if smask_xref:
+                        mask_bytes = document.extract_image(smask_xref)['image']
+                        alpha = Image.open(BytesIO(mask_bytes)).convert('L')
+                        if alpha.size == image.size:
+                            image.putalpha(alpha)
+                        else:
+                            image = image.convert('RGBA')
+                    else:
+                        image = image.convert('RGBA')
+
+                    pixels = list(image.getdata())
+                    for opaque_only in (False, True):
+                        value = _extract_lsb_data(pixels, opaque_only=opaque_only)
+                        if value and hmac_lib.compare_digest(value, expected_marker):
+                            return value
     except Exception:
         return None
     return None
@@ -580,6 +635,7 @@ def log_activity(
     integrity_check='',
     document_size=None,
     version_number=None,
+    verification_debug_log='',
 ):
     return AuditLog.objects.create(
         contract=contract,
@@ -593,4 +649,5 @@ def log_activity(
         verification_result=verification_result,
         integrity_check=integrity_check,
         document_size=document_size,
+        verification_debug_log=verification_debug_log,
     )

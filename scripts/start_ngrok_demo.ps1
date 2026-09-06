@@ -90,6 +90,12 @@ try {
     $env:ALLOWED_HOSTS = "localhost,127.0.0.1,$publicHost"
     $env:CSRF_TRUSTED_ORIGINS = $publicUrl
 
+    Write-Host 'Applying database migrations...'
+    & $pythonExe $managePy migrate --noinput
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Database migrations failed. Django was not started.'
+    }
+
     Write-Host 'Starting the Django development server...'
     $djangoProcess = Start-Process `
         -FilePath $pythonExe `
