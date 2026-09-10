@@ -637,6 +637,13 @@ def log_activity(
     version_number=None,
     verification_debug_log='',
 ):
+    if document_size is None and contract and contract.file:
+        try:
+            document_size = contract.file.size
+        except (OSError, ValueError):
+            # A deleted or unavailable file should not prevent the audit
+            # event from being recorded.
+            document_size = None
     return AuditLog.objects.create(
         contract=contract,
         document_title=contract.title if contract else document_title,

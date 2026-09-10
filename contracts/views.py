@@ -949,6 +949,65 @@ def empty_trash(request):
         return JsonResponse({'success': True, 'count': count})
     return JsonResponse({'success': False}, status=400)
 
+def verify_physical_qr(request):
+    """Validate a scanned page token before the full physical-page comparison."""
+    if request.method != 'POST':
+        return JsonResponse({'valid': False, 'message': 'Invalid request method.'}, status=405)
+
+    token = request.POST.get('qr_token', '').strip()
+    if not token:
+        return JsonResponse({'valid': False, 'message': 'No QR code was received.'}, status=400)
+
+    try:
+        payload = decode_page_token(token)
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return JsonResponse({
+            'valid': False,
+            'message': 'This is not a valid SealGuard physical-page QR code.',
+        }, status=400)
+
+    manifest_record = PhysicalVerificationManifest.objects.select_related(
+        'version__contract'
+    ).filter(manifest_id=payload['m']).first()
+    if not manifest_record:
+        return JsonResponse({
+            'valid': False,
+            'message': 'No registered SealGuard document was found for this QR code.',
+        }, status=404)
+
+    if not verify_manifest_signature(
+        manifest_record.manifest,
+        manifest_record.signature,
+        settings.RSA_PUBLIC_KEY_PATH,
+    ) or not validate_token_membership(payload, manifest_record.manifest):
+        return JsonResponse({
+            'valid': False,
+            'message': 'The QR code does not match the signed document manifest.',
+        }, status=422)
+
+    contract = manifest_record.version.contract
+    if contract.is_trashed:
+        return JsonResponse({
+            'valid': False,
+            'message': 'This QR belongs to a document currently in the trash.',
+        }, status=410)
+
+    page_number = int(payload['p'])
+    total_pages = int(payload['n'])
+    return JsonResponse({
+        'valid': True,
+        'contract_id': contract.id,
+        'title': contract.title,
+        'version': manifest_record.version.version_number,
+        'page': page_number,
+        'total_pages': total_pages,
+        'message': (
+            f'Registered QR confirmed: page {page_number} of {total_pages}. '
+            'Capture the complete page content to finish verification.'
+        ),
+    })
+
+
 def verify_physical(request):
     result = None
     details = {}

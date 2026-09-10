@@ -3,7 +3,8 @@
 {% block content %}
 <div class="physical-shell">
   <header class="physical-header"><h1>Physical Document Verification</h1><p>Scan each page QR in page order, then upload one PDF containing the same scanned pages.</p></header>
-  {% if result %}<section class="result result-{{ result }}" role="status">
+  {% if result %}<section class="result result-{{ result }}" id="result-sheet" role="status" aria-live="polite">
+    <button type="button" class="sheet-close" id="result-close" aria-label="Close">&times;</button>
     <strong>{% if result == 'verified' %}Verified{% elif result == 'differences' %}Differences Detected{% elif result == 'manual_review' %}Manual Review Required{% elif result == 'invalid' %}Incomplete / Invalid Document{% else %}Verification Error{% endif %}</strong>
     <p>{{ details.message }}</p>
     {% if details.contract %}<p>{{ details.contract.title }} | Version {{ details.version }}</p>{% endif %}
@@ -15,25 +16,400 @@
   </section>{% endif %}
   <div class="physical-grid">
     <section class="scanner-panel">
-      <video id="preview" autoplay playsinline></video><canvas id="scan-canvas" hidden></canvas>
-      <p id="status">Starting camera...</p><div id="token-list" class="token-list">No page codes scanned.</div>
-      <button type="button" class="btn btn-outline" id="remove-token" disabled>Remove last</button>
+      <div class="camera-stage">
+        <video id="preview" autoplay playsinline></video><canvas id="scan-canvas" hidden></canvas>
+        <div class="scan-guide"><span>Step 1 of 3</span><strong>Point the camera at the page QR code</strong></div>
+        <div class="page-capture-guide" id="page-capture-guide" hidden><span>Page ready</span><strong>Move back until the complete page is visible, then tap the camera button</strong></div>
+        <div class="camera-overlay"><span class="camera-live">Live scanner</span><p id="status">Starting camera...</p></div>
+      </div>
+      <div id="token-list" class="token-list">No page codes scanned.</div>
+      <div id="qr-check-result" class="qr-check-result" hidden role="status" aria-live="polite"></div>
+      <div class="camera-actions">
+        <button type="button" class="btn btn-outline" id="camera-expand" aria-pressed="false">Open full camera</button>
+        <button type="button" class="btn btn-outline" id="remove-token" disabled>Remove last</button>
+      </div>
     </section>
     <form method="post" enctype="multipart/form-data" id="physical-form" class="upload-panel">
+      <button type="button" class="sheet-close" id="upload-close" aria-label="Close">&times;</button>
       {% csrf_token %}<input type="hidden" name="page_tokens" id="page-tokens" value="[]">
-      <label for="physical-file">Scanned PDF or page photographs</label><input id="physical-file" name="physical_file" type="file" accept="application/pdf,image/*" multiple required>
-      <button type="submit" class="btn btn-primary">Verify all pages</button><a href="{% url 'public_verify' %}" class="btn btn-outline">Upload a digital PDF</a>
+      <div class="upload-step-heading">
+        <span>File alternative</span>
+        <h2>Use an existing scan</h2>
+        <p>On a phone, tap the floating file button to choose complete page images or one scanned PDF instead of taking photos with the live camera.</p>
+      </div>
+      <label for="physical-file">Choose full-page photo(s) or one scanned PDF</label>
+      <input id="physical-file" name="physical_file" type="file" accept="application/pdf,image/*" multiple required>
+      <small id="selected-file-summary">Keep multiple pages in the same order in which their QR codes were scanned.</small>
+      <button type="submit" class="btn btn-primary" id="physical-submit">Verify uploaded pages</button><a href="{% url 'public_verify' %}" class="btn btn-outline">I have a digital PDF instead</a>
     </form>
   </div>
+  <div class="physical-sheet-backdrop" id="sheet-backdrop"></div>
+  <div class="physical-fabs">
+    <button type="button" class="fab fab-tokens" id="fab-tokens" aria-label="View scanned pages"><svg class="fab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3h11a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M3 7v12a2 2 0 0 0 2 2"/><path d="M10 8h7M10 12h7M10 16h4"/></svg><span class="fab-badge" id="fab-tokens-badge" hidden>0</span></button>
+    <button type="button" class="fab fab-capture" id="fab-capture" aria-label="Photograph complete page" hidden><svg class="fab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4 16 6h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l1.5-2z"/><circle cx="12" cy="12.5" r="3.5"/></svg></button>
+    <button type="button" class="fab fab-files" id="fab-files" aria-label="Choose existing page images or PDF"><svg class="fab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3-3 3 3"/></svg></button>
+    {% if result %}<button type="button" class="fab fab-result" id="fab-result" aria-label="View result"><span aria-hidden="true">&#10003;</span></button>{% endif %}
+  </div>
+  <section id="physical-loading" class="physical-loading" hidden role="status" aria-live="polite" aria-label="Physical verification in progress">
+    <div class="physical-loading-card">
+      <div class="physical-spinner" aria-hidden="true"></div>
+      <span class="loading-step">Step 3 of 3</span>
+      <strong id="physical-loading-title">Verifying physical document...</strong>
+      <p id="physical-loading-message">Checking page identities and registered document content.</p>
+      <div class="physical-loading-track"><span id="physical-loading-bar"></span></div>
+    </div>
+  </section>
 </div>
 <style>
-.physical-shell{max-width:980px;margin:0 auto}.physical-header{margin-bottom:20px}.physical-header h1{font-size:26px;color:#1a1a2e;margin:0 0 6px}.physical-header p,#status{color:#667788}.physical-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr);gap:20px}.scanner-panel,.upload-panel{border:1px solid #dfe3e8;padding:18px;background:#fff;border-radius:6px}#preview{width:100%;aspect-ratio:4/3;object-fit:cover;background:#111827}.upload-panel{display:flex;flex-direction:column;gap:14px;align-self:start}.upload-panel input{border:1px solid #cbd2d9;padding:10px}.token-list{min-height:44px;padding:10px;background:#f5f7f9;margin:10px 0}.result{padding:16px;border-left:4px solid #6b7280;background:#f7f8fa;margin-bottom:18px}.result-verified{border-color:#15803d}.result-differences{border-color:#b91c1c}.result-manual_review{border-color:#b7791f}.result-invalid,.result-error{border-color:#6b7280}.result p{margin:5px 0 0}.page-result{margin-top:8px;font-size:13px}@media(max-width:760px){.physical-grid{grid-template-columns:1fr}}
+.physical-shell{max-width:980px;margin:0 auto}.physical-header{margin-bottom:20px}.physical-header h1{font-size:26px;color:#1a1a2e;margin:0 0 6px}.physical-header p{color:#667788}.physical-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr);gap:20px}.scanner-panel,.upload-panel{border:1px solid #dfe3e8;padding:18px;background:#fff;border-radius:12px}.camera-stage{position:relative;overflow:hidden;border-radius:10px;background:#111827}#preview{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;background:#111827}.scan-guide,.page-capture-guide{position:absolute;top:12px;left:12px;right:12px;z-index:2;display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:10px;background:rgba(15,23,42,.78);color:#fff;backdrop-filter:blur(5px)}.page-capture-guide[hidden]{display:none}.scan-guide span,.page-capture-guide span,.upload-step-heading>span,.loading-step{flex:0 0 auto;padding:4px 8px;border-radius:999px;background:#e9edff;color:#3349bf;font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase}.scan-guide strong,.page-capture-guide strong{font-size:13px}.scanner-panel.page-capture-mode .scan-guide{display:none}.scanner-panel.page-capture-mode .camera-stage:after{content:"";position:absolute;inset:17% 8%;border:2px solid rgba(255,255,255,.88);border-radius:8px;box-shadow:0 0 0 999px rgba(15,23,42,.18);pointer-events:none}.scanner-panel.page-capture-mode .page-capture-guide,.scanner-panel.page-capture-mode .camera-overlay{z-index:3}.camera-overlay{position:absolute;inset:auto 12px 12px;display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:10px;background:rgba(15,23,42,.78);backdrop-filter:blur(5px);color:#fff}.camera-overlay #status{margin:0;color:#fff;font-size:13px;line-height:1.35}.camera-live{flex:0 0 auto;padding:4px 7px;border-radius:999px;background:#dc2626;color:#fff;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}.camera-actions{display:flex;gap:9px;justify-content:flex-end}.camera-actions .btn{margin:0}#camera-expand{display:none}.upload-panel{display:flex;flex-direction:column;gap:14px;align-self:start}.upload-step-heading{padding-right:30px}.upload-step-heading h2{margin:10px 0 6px;color:#1a1a2e;font-size:20px}.upload-step-heading p{margin:0;color:#667085;font-size:13px;line-height:1.55}.upload-panel label{color:#263746;font-size:13px;font-weight:700}.upload-panel input{border:1px solid #cbd2d9;padding:10px;border-radius:8px;background:#f8fafc}.upload-panel small{color:#667085;line-height:1.45}.token-list{min-height:44px;padding:10px;background:#f5f7f9;margin:10px 0}.qr-check-result{margin:-2px 0 10px;padding:11px 12px;border-radius:9px;font-size:13px;line-height:1.4}.qr-check-result.valid{color:#166534;background:#dcfce7}.qr-check-result.invalid{color:#991b1b;background:#fee2e2}.result{padding:16px;border-left:4px solid #6b7280;background:#f7f8fa;margin-bottom:18px}.result-verified{border-color:#15803d;background:#f0fdf4}.result-differences{border-color:#b91c1c;background:#fff7f7}.result-manual_review{border-color:#b7791f;background:#fffbeb}.result-invalid,.result-error{border-color:#6b7280}.result p{margin:5px 0 0}.page-result{margin-top:8px;font-size:13px}.physical-loading{position:fixed;inset:0;z-index:1300;display:grid;place-items:center;padding:20px;background:rgba(15,23,42,.62)}.physical-loading[hidden]{display:none}.physical-loading-card{width:min(440px,100%);padding:30px 28px;border-radius:18px;background:#fff;box-shadow:0 22px 60px rgba(15,23,42,.28);text-align:center;color:#172033}.physical-loading-card strong{display:block;font-size:19px;margin-top:12px}.physical-loading-card p{margin:9px 0 20px;color:#667085;font-size:14px}.physical-spinner{width:42px;height:42px;margin:0 auto 18px;border:4px solid #dbe4ff;border-top-color:#3f5bd8;border-radius:50%;animation:physical-spin .85s linear infinite}.physical-loading-track{height:6px;border-radius:999px;background:#e8edf7;overflow:hidden}.physical-loading-track span{display:block;width:12%;height:100%;border-radius:inherit;background:#3f5bd8;transition:width .35s ease}@keyframes physical-spin{to{transform:rotate(360deg)}}
+@media(max-width:760px){
+body.camera-view-active{overflow:hidden}
+.physical-shell{width:100%;max-width:none;padding:0}
+.physical-header{display:none}
+.physical-grid{display:block;gap:0}
+.scanner-panel{position:fixed;inset:0;z-index:100;padding:0;border:0;border-radius:0;background:#0f172a}
+.camera-stage{position:absolute;inset:0;width:100%;height:100dvh;border-radius:0}
+#preview{height:100%;aspect-ratio:auto}
+.scanner-panel.page-capture-mode #preview{object-fit:contain}
+.camera-overlay{inset:auto 16px calc(88px + env(safe-area-inset-bottom)) 16px}
+.token-list,.camera-actions{display:none}
+.token-list.floating-visible{display:block;position:fixed;left:16px;right:88px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:215;box-shadow:0 8px 20px rgba(15,23,42,.35);border-radius:10px}
+.qr-check-result{position:fixed;left:16px;right:16px;bottom:calc(160px + env(safe-area-inset-bottom));margin:0;z-index:110;border-radius:10px;box-shadow:0 8px 20px rgba(15,23,42,.35)}
+.physical-sheet-backdrop{position:fixed;inset:0;z-index:200;background:rgba(15,23,42,.5);opacity:0;pointer-events:none;transition:opacity .25s ease}
+.physical-sheet-backdrop.visible{opacity:1;pointer-events:auto}
+.upload-panel{position:fixed!important;width:1px!important;height:1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;white-space:nowrap!important;padding:0!important;border:0!important}
+.result{position:fixed;left:0;right:0;bottom:0;z-index:210;max-height:80dvh;overflow:auto;border-radius:20px 20px 0 0;transform:translateY(105%);transition:transform .28s ease;box-shadow:0 -12px 30px rgba(15,23,42,.35);margin:0}
+.result.sheet-open{transform:translateY(0)}
+.sheet-close{display:flex;align-items:center;justify-content:center;position:absolute;top:10px;right:10px;width:32px;height:32px;border-radius:50%;border:0;background:#e5e7eb;color:#111827;font-size:16px;cursor:pointer;z-index:2}
+.physical-fabs{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:220;display:flex;flex-direction:column;gap:12px}
+.fab{position:relative;width:56px;height:56px;border-radius:50%;border:0;background:#3f5bd8;color:#fff;font-size:22px;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(15,23,42,.35)}
+.fab[hidden]{display:none}
+.fab-icon{width:25px;height:25px}
+.fab-capture{width:68px;height:68px;background:#fff;color:#263746;border:5px solid rgba(63,91,216,.72)}
+.fab-files{background:#263746}
+.fab-badge{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.fab-result{background:#15803d}
+.physical-loading{z-index:1300}
+}
+@media(min-width:761px){
+.physical-fabs,.physical-sheet-backdrop,.sheet-close{display:none}
+}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
 <script>
-const video=document.getElementById('preview'),canvas=document.getElementById('scan-canvas'),statusNode=document.getElementById('status'),tokenInput=document.getElementById('page-tokens'),tokenList=document.getElementById('token-list'),removeButton=document.getElementById('remove-token'),tokens=[];let lastValue='',lastSeenAt=0;
-function renderTokens(){tokenInput.value=JSON.stringify(tokens);tokenList.textContent=tokens.length?`${tokens.length} page code(s) scanned in order.`:'No page codes scanned.';removeButton.disabled=tokens.length===0}removeButton.addEventListener('click',()=>{tokens.pop();renderTokens()});
-navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}).then(stream=>{video.srcObject=stream;statusNode.textContent='Camera ready. Scan page 1, then continue in page order.';requestAnimationFrame(scanFrame)}).catch(error=>{statusNode.textContent=`Camera unavailable: ${error.message}`});
-function scanFrame(now){if(video.readyState===video.HAVE_ENOUGH_DATA){canvas.width=video.videoWidth;canvas.height=video.videoHeight;const context=canvas.getContext('2d');context.drawImage(video,0,0,canvas.width,canvas.height);const image=context.getImageData(0,0,canvas.width,canvas.height);const code=jsQR(image.data,image.width,image.height,{inversionAttempts:'attemptBoth'});if(code&&code.data.startsWith('SGP1.')&&(code.data!==lastValue||now-lastSeenAt>2500)){tokens.push(code.data);lastValue=code.data;lastSeenAt=now;statusNode.textContent=`Captured page code ${tokens.length}.`;renderTokens()}}requestAnimationFrame(scanFrame)}
+const video = document.getElementById('preview');
+const canvas = document.getElementById('scan-canvas');
+const statusNode = document.getElementById('status');
+const tokenInput = document.getElementById('page-tokens');
+const tokenList = document.getElementById('token-list');
+const qrResult = document.getElementById('qr-check-result');
+const removeButton = document.getElementById('remove-token');
+const expandButton = document.getElementById('camera-expand');
+const scannerPanel = document.querySelector('.scanner-panel');
+const physicalForm = document.getElementById('physical-form');
+const physicalFile = document.getElementById('physical-file');
+const physicalSubmit = document.getElementById('physical-submit');
+const loading = document.getElementById('physical-loading');
+const loadingTitle = document.getElementById('physical-loading-title');
+const loadingMessage = document.getElementById('physical-loading-message');
+const loadingBar = document.getElementById('physical-loading-bar');
+const csrfToken = physicalForm.querySelector('[name="csrfmiddlewaretoken"]').value;
+const qrCheckUrl = "{% url 'verify_physical_qr' %}";
+const sheetBackdrop = document.getElementById('sheet-backdrop');
+const fabTokens = document.getElementById('fab-tokens');
+const fabTokensBadge = document.getElementById('fab-tokens-badge');
+const fabCapture = document.getElementById('fab-capture');
+const fabFiles = document.getElementById('fab-files');
+const fabResult = document.getElementById('fab-result');
+const pageCaptureGuide = document.getElementById('page-capture-guide');
+const uploadClose = document.getElementById('upload-close');
+const resultClose = document.getElementById('result-close');
+const resultSheet = document.getElementById('result-sheet');
+
+function closeAllSheets() {
+  physicalForm.classList.remove('sheet-open');
+  if (resultSheet) resultSheet.classList.remove('sheet-open');
+  tokenList.classList.remove('floating-visible');
+  sheetBackdrop.classList.remove('visible');
+}
+function openSheet(el) {
+  closeAllSheets();
+  if (!el) return;
+  el.classList.add('sheet-open');
+  sheetBackdrop.classList.add('visible');
+}
+if (fabTokens) fabTokens.addEventListener('click', () => {
+  const willShow = !tokenList.classList.contains('floating-visible');
+  closeAllSheets();
+  if (willShow) tokenList.classList.add('floating-visible');
+});
+if (fabResult) fabResult.addEventListener('click', () => openSheet(resultSheet));
+if (uploadClose) uploadClose.addEventListener('click', closeAllSheets);
+if (resultClose) resultClose.addEventListener('click', closeAllSheets);
+if (sheetBackdrop) sheetBackdrop.addEventListener('click', closeAllSheets);
+if (resultSheet) openSheet(resultSheet);
+const tokens = [];
+let lastValue = '';
+let lastSeenAt = 0;
+let lastFrameAt = 0;
+let expectedTotal = null;
+let submitted = false;
+let scannerBusy = false;
+let nativeQrDetector = null;
+let awaitingPageCapture = false;
+let capturedPageFiles = [];
+
+if ('BarcodeDetector' in window) {
+  try { nativeQrDetector = new BarcodeDetector({formats: ['qr_code']}); } catch (error) { nativeQrDetector = null; }
+}
+
+function renderTokens() {
+  tokenInput.value = JSON.stringify(tokens);
+  const suffix = expectedTotal ? ` of ${expectedTotal}` : '';
+  tokenList.textContent = tokens.length ? `${tokens.length}${suffix} page code(s) scanned in order.` : 'No page codes scanned.';
+  removeButton.disabled = tokens.length === 0;
+  if (fabTokensBadge) {
+    if (tokens.length) { fabTokensBadge.hidden = false; fabTokensBadge.textContent = String(tokens.length); }
+    else { fabTokensBadge.hidden = true; }
+  }
+  maybeAutoSubmit();
+}
+
+function setQrResult(valid, message) {
+  qrResult.hidden = false;
+  qrResult.className = `qr-check-result ${valid ? 'valid' : 'invalid'}`;
+  qrResult.textContent = message;
+}
+
+function showQrLoading() {
+  loadingTitle.textContent = 'Checking QR code...';
+  loadingMessage.textContent = 'Validating this page against the signed SealGuard manifest.';
+  loadingBar.style.width = '55%';
+  loading.hidden = false;
+}
+
+function hideQrLoading() {
+  loading.hidden = true;
+  loadingTitle.textContent = 'Verifying physical document...';
+  loadingMessage.textContent = 'Checking page identities and registered document content.';
+  loadingBar.style.width = '12%';
+}
+
+async function validateScannedCode(value) {
+  if (tokens.includes(value)) {
+    statusNode.textContent = 'This page QR code has already been scanned.';
+    return;
+  }
+  showQrLoading();
+  const body = new URLSearchParams({qr_token: value, csrfmiddlewaretoken: csrfToken});
+  try {
+    const request = fetch(qrCheckUrl, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'},
+      body,
+      credentials: 'same-origin',
+    });
+    const [response] = await Promise.all([request, new Promise(resolve => window.setTimeout(resolve, 450))]);
+    const result = await response.json();
+    hideQrLoading();
+    if (!result.valid) {
+      statusNode.textContent = result.message || 'This QR code could not be verified.';
+      setQrResult(false, statusNode.textContent);
+      return;
+    }
+    expectedTotal = Number(result.total_pages);
+    tokens.push(value);
+    statusNode.textContent = `Registered page ${result.page} of ${result.total_pages}.`;
+    setQrResult(true, `${result.title} - Version ${result.version}. ${result.message}`);
+    renderTokens();
+  } catch (error) {
+    hideQrLoading();
+    statusNode.textContent = 'The QR code was read, but the server check could not be completed.';
+    setQrResult(false, statusNode.textContent);
+  }
+}
+
+function maybeAutoSubmit() {
+  if (!submitted && expectedTotal && tokens.length >= expectedTotal && physicalFile.files.length) {
+    statusNode.textContent = 'QR codes and complete pages captured. Starting verification...';
+    window.setTimeout(() => physicalForm.requestSubmit(), 250);
+  } else if (expectedTotal && tokens.length >= expectedTotal && !physicalFile.files.length) {
+    if (window.matchMedia('(max-width: 760px)').matches) {
+      enterPageCaptureMode();
+    } else {
+      statusNode.textContent = 'QR identity confirmed. Choose the complete scanned PDF or page photographs.';
+      physicalForm.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    }
+  }
+}
+
+function enterPageCaptureMode() {
+  if (awaitingPageCapture) return;
+  awaitingPageCapture = true;
+  scannerPanel.classList.add('page-capture-mode');
+  pageCaptureGuide.hidden = false;
+  fabCapture.hidden = false;
+  qrResult.hidden = true;
+  statusNode.textContent = `QR identity confirmed. Frame the complete page ${capturedPageFiles.length + 1} of ${expectedTotal}.`;
+}
+
+function leavePageCaptureMode() {
+  awaitingPageCapture = false;
+  scannerPanel.classList.remove('page-capture-mode');
+  pageCaptureGuide.hidden = true;
+  fabCapture.hidden = true;
+}
+
+function assignCapturedFiles() {
+  const transfer = new DataTransfer();
+  capturedPageFiles.forEach(file => transfer.items.add(file));
+  physicalFile.files = transfer.files;
+  document.getElementById('selected-file-summary').textContent =
+    `${capturedPageFiles.length} full-page photo(s) captured with the camera.`;
+}
+
+function captureCompletePage() {
+  if (!awaitingPageCapture || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+  fabCapture.disabled = true;
+  statusNode.textContent = 'Capturing the complete page...';
+  const captureCanvas = document.createElement('canvas');
+  const scale = Math.min(1, 1800 / video.videoWidth);
+  captureCanvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+  captureCanvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+  captureCanvas.getContext('2d').drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+  captureCanvas.toBlob(blob => {
+    fabCapture.disabled = false;
+    if (!blob) {
+      statusNode.textContent = 'The page photo could not be captured. Please try again or use Files.';
+      return;
+    }
+    const pageNumber = capturedPageFiles.length + 1;
+    capturedPageFiles.push(new File([blob], `physical-page-${pageNumber}.jpg`, {type: 'image/jpeg'}));
+    assignCapturedFiles();
+    if (capturedPageFiles.length >= expectedTotal) {
+      leavePageCaptureMode();
+      statusNode.textContent = 'All complete pages captured. Starting verification...';
+      maybeAutoSubmit();
+    } else {
+      statusNode.textContent = `Page ${pageNumber} captured. Frame complete page ${pageNumber + 1} of ${expectedTotal}.`;
+    }
+  }, 'image/jpeg', 0.92);
+}
+
+removeButton.addEventListener('click', () => {
+  tokens.pop();
+  if (!tokens.length) expectedTotal = null;
+  capturedPageFiles = [];
+  physicalFile.value = '';
+  leavePageCaptureMode();
+  qrResult.hidden = !tokens.length;
+  renderTokens();
+});
+physicalFile.addEventListener('change', () => {
+  const selectedSummary = document.getElementById('selected-file-summary');
+  if (physicalFile.files.length) {
+    selectedSummary.textContent = physicalFile.files.length === 1
+      ? `${physicalFile.files[0].name} selected. Verification will begin now.`
+      : `${physicalFile.files.length} page images selected. Verification will begin now.`;
+  }
+  if (physicalFile.files.length) leavePageCaptureMode();
+  maybeAutoSubmit();
+});
+if (fabCapture) fabCapture.addEventListener('click', captureCompletePage);
+if (fabFiles) fabFiles.addEventListener('click', () => physicalFile.click());
+expandButton.addEventListener('click', () => {
+  const expanded = scannerPanel.classList.toggle('camera-expanded');
+  document.body.classList.toggle('camera-view-active', expanded);
+  expandButton.setAttribute('aria-pressed', String(expanded));
+  expandButton.textContent = expanded ? 'Close full camera' : 'Open full camera';
+});
+
+navigator.mediaDevices.getUserMedia({
+  video: {facingMode: {ideal: 'environment'}, width: {ideal: 1280}, height: {ideal: 720}},
+}).then(stream => {
+  video.srcObject = stream;
+  statusNode.textContent = 'Camera ready. Hold a page QR steadily inside the view.';
+  requestAnimationFrame(scanFrame);
+}).catch(error => {
+  statusNode.textContent = `Camera unavailable: ${error.message}`;
+});
+
+function beginPhysicalVerification() {
+  if (submitted) return;
+  submitted = true;
+  scannerPanel.classList.remove('camera-expanded');
+  document.body.classList.remove('camera-view-active');
+  if (video.srcObject) video.srcObject.getTracks().forEach(track => track.stop());
+  loading.hidden = false;
+  document.body.classList.add('verification-active');
+  physicalSubmit.disabled = true;
+  physicalSubmit.textContent = 'Verifying...';
+  loadingTitle.textContent = 'Verifying physical document...';
+  loadingMessage.textContent = 'Checking page identities and registered document content.';
+  let progress = 12;
+  loadingBar.style.width = `${progress}%`;
+  const messages = ['Reading scanned pages...', 'Validating QR page identities...', 'Comparing against the registered document...', 'Finalizing verification result...'];
+  let index = 0;
+  window.setInterval(() => {
+    if (!submitted) return;
+    index = Math.min(index + 1, messages.length - 1);
+    loadingMessage.textContent = messages[index];
+    progress = Math.min(progress + 20, 88);
+    loadingBar.style.width = `${progress}%`;
+  }, 900);
+}
+
+physicalForm.addEventListener('submit', event => {
+  if (submitted) { event.preventDefault(); return; }
+  if (!tokens.length) {
+    event.preventDefault();
+    statusNode.textContent = 'Scan at least one page QR code before verifying.';
+    return;
+  }
+  beginPhysicalVerification();
+});
+
+async function detectQrValue() {
+  if (nativeQrDetector) {
+    try {
+      const codes = await nativeQrDetector.detect(canvas);
+      if (codes.length) return codes[0].rawValue || '';
+    } catch (error) { nativeQrDetector = null; }
+  }
+  if (typeof jsQR === 'function') {
+    const context = canvas.getContext('2d', {willReadFrequently: true});
+    const image = context.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(image.data, image.width, image.height, {inversionAttempts: 'attemptBoth'});
+    return code ? code.data : '';
+  }
+  return '';
+}
+
+async function scanFrame(now) {
+  if (!submitted && !awaitingPageCapture && (!expectedTotal || tokens.length < expectedTotal) && !scannerBusy && now - lastFrameAt >= 220 && video.readyState === video.HAVE_ENOUGH_DATA) {
+    scannerBusy = true;
+    lastFrameAt = now;
+    const scale = Math.min(1, 960 / video.videoWidth);
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    try {
+      const value = await detectQrValue();
+      if (value && value !== lastValue || value && now - lastSeenAt > 2500) {
+        lastValue = value;
+        lastSeenAt = now;
+        if (!value.startsWith('SGP1.')) {
+          statusNode.textContent = 'QR detected, but it is not a SealGuard physical-page code.';
+          setQrResult(false, statusNode.textContent);
+        } else {
+          await validateScannedCode(value);
+        }
+      }
+    } finally {
+      scannerBusy = false;
+    }
+  }
+  requestAnimationFrame(scanFrame);
+}
 </script>
 {% endblock %}

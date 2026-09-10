@@ -89,7 +89,7 @@
     display: none;
   }
   
-    .context-menu {
+  .context-menu {
     display: none;
     position: fixed;
     background: #fff;
@@ -102,6 +102,9 @@
   }
   .context-menu.active { display: block; }
   .context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     padding: 8px 12px;
     font-size: 13px;
     color: #2d3a47;
@@ -138,6 +141,7 @@
     .mobile-contract-panel-overlay.open { display: block; }
     .container { margin-left: 0; }
   }
+  .context-menu-item svg { width: 15px; height: 15px; flex: 0 0 auto; }
   .contracts-header {
     display: flex;
     align-items: center;
@@ -254,7 +258,8 @@
   .contracts-table td.contract-document-cell { cursor: pointer; }
 
   .mobile-contract-sheet-overlay,
-  .mobile-contract-action-sheet { display: none; }
+  .mobile-contract-action-sheet,
+  .mobile-contract-edit-sheet { display: none; }
 
   @media (max-width: 900px) {
     .contracts-header { display: block; }
@@ -333,6 +338,21 @@
       transition: transform 0.25s ease;
     }
     .mobile-contract-action-sheet.open { transform: translateY(0); }
+    .mobile-contract-edit-sheet {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 1320;
+      display: block;
+      padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
+      border-radius: 18px 18px 0 0;
+      background: #ffffff;
+      box-shadow: 0 -8px 30px rgba(30, 40, 50, 0.18);
+      transform: translateY(110%);
+      transition: transform 0.25s ease;
+    }
+    .mobile-contract-edit-sheet.open { transform: translateY(0); }
     .mobile-sheet-header {
       display: flex;
       align-items: center;
@@ -903,16 +923,34 @@
 </aside>
 
 <div id="folder-context-menu" class="context-menu">
-  <div class="context-menu-item" onclick="contextMenuRename()">Rename</div>
-  <div class="context-menu-item danger" onclick="contextMenuDelete()">Delete</div>
+  <div class="context-menu-item" onclick="contextMenuRename()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
+    <span>Rename</span>
+  </div>
+  <div class="context-menu-item danger" onclick="contextMenuDelete()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+    <span>Delete</span>
+  </div>
 </div>
 
 <div id="contract-context-menu" class="context-menu">
-  <div class="context-menu-item" onclick="contractContextMenuRename()">Rename</div>
-  <div class="context-menu-item" onclick="contractContextMenuAddRevision()">Add Revision</div>
-  <div class="context-menu-item" onclick="contractContextMenuAddToFolder()">Add to Folder</div>
+  <div class="context-menu-item" onclick="contractContextMenuRename()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
+    <span>Rename</span>
+  </div>
+  <div class="context-menu-item" onclick="contractContextMenuAddRevision()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M12 11v6M9 14h6"/></svg>
+    <span>Add Revision</span>
+  </div>
+  <div class="context-menu-item" onclick="contractContextMenuAddToFolder()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M12 10v6M9 13h6"/></svg>
+    <span>Add to Folder</span>
+  </div>
   {% if perms.contracts.change_contract %}
-  <div class="context-menu-item" id="contract-publish-toggle" onclick="contractContextMenuTogglePublic()">Add to Public Verified Contracts</div>
+  <div class="context-menu-item" id="contract-publish-toggle" onclick="contractContextMenuTogglePublic()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+    <span>Add to Public Verified Contracts</span>
+  </div>
   {% endif %}
 </div>
 
@@ -955,6 +993,35 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/>
       </svg>
+      <span>Public</span>
+    </button>
+    {% endif %}
+  </div>
+</div>
+
+<div class="mobile-contract-edit-sheet" id="mobile-contract-edit-sheet"
+     role="dialog" aria-modal="true" aria-labelledby="mobile-edit-sheet-title" aria-hidden="true">
+  <div class="mobile-sheet-header">
+    <span class="mobile-sheet-title" id="mobile-edit-sheet-title">Edit contract</span>
+    <button type="button" class="mobile-sheet-close" aria-label="Close edit actions"
+            onclick="closeMobileEditSheet()">&times;</button>
+  </div>
+  <div class="mobile-sheet-actions">
+    <button type="button" class="mobile-sheet-action" onclick="mobileEditRename()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
+      <span>Rename</span>
+    </button>
+    <button type="button" class="mobile-sheet-action" onclick="mobileEditAddRevision()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M12 11v6M9 14h6"/></svg>
+      <span>Add Revision</span>
+    </button>
+    <button type="button" class="mobile-sheet-action" onclick="mobileEditAddToFolder()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M12 10v6M9 13h6"/></svg>
+      <span>Add to Folder</span>
+    </button>
+    {% if perms.contracts.change_contract %}
+    <button type="button" class="mobile-sheet-action" id="mobile-edit-public" onclick="mobileEditTogglePublic()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
       <span>Public</span>
     </button>
     {% endif %}
@@ -1814,13 +1881,59 @@ function mobileSheetEdit() {
   const row = document.getElementById('row-' + id);
   if (!row) return;
   closeMobileContractSheet();
-  const rect = row.getBoundingClientRect();
-  showContractContextMenu({
-    preventDefault() {},
-    stopPropagation() {},
-    clientX: Math.min(Math.max(12, rect.left + 12), window.innerWidth - 170),
-    clientY: Math.min(Math.max(12, rect.top + 12), window.innerHeight - 160)
-  }, id);
+  openMobileEditSheet(id);
+}
+
+let mobileContractEditId = null;
+
+function openMobileEditSheet(contractId) {
+  const row = document.getElementById('row-' + contractId);
+  const sheet = document.getElementById('mobile-contract-edit-sheet');
+  const overlay = document.getElementById('mobile-contract-sheet-overlay');
+  if (!row || !sheet || !overlay) return;
+
+  mobileContractEditId = contractId;
+  document.getElementById('mobile-edit-sheet-title').textContent = row.dataset.contractTitle || 'Edit contract';
+  const publicButton = document.getElementById('mobile-edit-public');
+  if (publicButton) {
+    publicButton.classList.toggle('public-on', row.dataset.public === '1');
+    publicButton.querySelector('span').textContent = row.dataset.public === '1' ? 'Remove Public' : 'Public';
+  }
+  sheet.classList.add('open');
+  overlay.classList.add('open');
+  sheet.setAttribute('aria-hidden', 'false');
+}
+
+function closeMobileEditSheet() {
+  const sheet = document.getElementById('mobile-contract-edit-sheet');
+  const overlay = document.getElementById('mobile-contract-sheet-overlay');
+  if (sheet) { sheet.classList.remove('open'); sheet.setAttribute('aria-hidden', 'true'); }
+  if (overlay) overlay.classList.remove('open');
+  mobileContractEditId = null;
+}
+
+function mobileEditRename() {
+  const id = mobileContractEditId;
+  closeMobileEditSheet();
+  if (id) startRename(id);
+}
+
+function mobileEditAddRevision() {
+  const id = mobileContractEditId;
+  closeMobileEditSheet();
+  if (id) window.location.href = '/contract/' + id + '/add-revision/';
+}
+
+function mobileEditAddToFolder() {
+  const id = mobileContractEditId;
+  closeMobileEditSheet();
+  if (id) openFolderAssignModal(id);
+}
+
+function mobileEditTogglePublic() {
+  const id = mobileContractEditId;
+  closeMobileEditSheet();
+  if (id) openPublishModal(id);
 }
 
 function mobileSheetEncrypt() {
@@ -2313,6 +2426,10 @@ function positionContextMenu(menu, event) {
 function showContractContextMenu(event, contractId) {
   event.preventDefault();
   event.stopPropagation();
+  if (window.matchMedia('(max-width: 900px)').matches) {
+    openMobileEditSheet(contractId);
+    return;
+  }
   contextMenuContractId = contractId;
 
   const toggleEl = document.getElementById('contract-publish-toggle');

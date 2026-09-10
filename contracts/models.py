@@ -219,6 +219,18 @@ class AuditLog(models.Model):
             return 'Failed'
         return ''
 
+    @property
+    def display_document_size(self):
+        """Return the recorded size, or derive it for older audit rows."""
+        if self.document_size is not None:
+            return self.document_size
+        if self.contract and self.contract.file:
+            try:
+                return self.contract.file.size
+            except (OSError, ValueError):
+                pass
+        return None
+
     class Meta:
         ordering = ['-timestamp']
         indexes = [

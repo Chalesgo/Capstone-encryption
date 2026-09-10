@@ -13,6 +13,7 @@ from unittest.mock import patch
 import fitz
 from Crypto.PublicKey import RSA
 from django.contrib.auth.models import Permission, User
+from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.cache import cache
 from django.http import HttpResponse
@@ -49,7 +50,10 @@ from .utils import (
 class AuditLogTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_superuser('admin', 'admin@example.com', 'password')
-        self.contract = Contract.objects.create(title='Senior Assistance Form', file='contracts/test.pdf')
+        self.contract = Contract.objects.create(title='Senior Assistance Form')
+        self.contract.file.save(
+            'test.pdf', ContentFile(b'%PDF-SealGuard audit test fixture'), save=True
+        )
 
     def test_admin_uses_sealguard_branding(self):
         self.client.force_login(self.user)
@@ -108,6 +112,12 @@ class AuditLogTests(TestCase):
         viewed_event = AuditLog.objects.get(action='viewed')
         self.assertEqual(viewed_event.contract, self.contract)
         self.assertEqual(viewed_event.user, self.user)
+        self.assertEqual(viewed_event.document_size, self.contract.file.size)
+
+        downloaded = self.client.get(reverse('download_contract', args=[self.contract.id]))
+        downloaded.close()
+        downloaded_event = AuditLog.objects.get(action='downloaded')
+        self.assertEqual(downloaded_event.document_size, self.contract.file.size)
 
     def test_dashboard_filters_activity_and_sorts_oldest_first(self):
         added = AuditLog.objects.create(action='added', document_title='First')
@@ -182,6 +192,19 @@ class AuditLogTests(TestCase):
         self.assertContains(response, 'This document is in the trash.')
         self.assertContains(response, 'data-preview-url=""')
 
+    def test_dashboard_mobile_pdf_action_sheet_preserves_details_access(self):
+        AuditLog.objects.create(action='viewed', contract=self.contract, document_title=self.contract.title)
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('dashboard'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="audit-mobile-action-sheet"')
+        self.assertContains(response, '>View PDF</span>')
+        self.assertContains(response, '>Details</span>')
+        self.assertContains(response, 'openAuditMobileSheet(row)')
+        self.assertContains(response, 'openAuditPdfDetails(row)')
+
     def test_document_search_is_debounced_in_the_browser(self):
         self.client.force_login(self.user)
 
@@ -207,6 +230,11 @@ class AuditLogTests(TestCase):
         self.assertContains(response, 'openPdfPreview(contractId, row.dataset.fileUrl, row.dataset.contractTitle)')
         self.assertContains(response, 'id="contracts-doc-panel"')
         self.assertContains(response, 'id="mobile-contract-action-sheet"')
+        self.assertContains(response, 'id="mobile-contract-edit-sheet"')
+        self.assertContains(response, 'function openMobileEditSheet(contractId)')
+        self.assertContains(response, 'function mobileEditAddRevision()')
+        self.assertContains(response, 'class="context-menu-item"')
+        self.assertContains(response, 'class="context-menu-item danger"')
         self.assertContains(response, 'function handleDocumentCellClick(event, contractId)')
         self.assertContains(response, 'function getLiveFolderChoices()')
         self.assertContains(response, "document.querySelectorAll('#folder-list .folder-item')")
@@ -498,6 +526,7 @@ class AuditLogTests(TestCase):
         self.assertContains(response, '+ Add Tutorial')
         self.assertContains(response, 'id="tutorial-icon-lock"')
         self.assertContains(response, 'contenteditable="true"')
+        self.assertContains(response, 'How to verify a physical document')
 
     def test_tutorial_inline_icons_are_whitelisted_and_sanitized(self):
         content = (
@@ -2375,6 +2404,50 @@ class PhysicalVerificationTests(TestCase):
             'physical_file': upload,
             'page_tokens': json.dumps(tokens or self.tokens),
         })
+
+    def test_physical_verification_page_has_loading_state_and_scan_submit_flow(self):
+        response = self.client.get(reverse('verify_physical'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="physical-loading"')
+        self.assertContains(response, 'Checking page identities and registered document content.')
+        self.assertContains(response, 'physicalForm.requestSubmit()')
+        self.assertContains(response, 'QR codes and complete pages captured.')
+        self.assertContains(response, 'Physical verification in progress')
+        self.assertContains(response, 'id="camera-expand"')
+        self.assertContains(response, 'camera-expanded')
+        self.assertContains(response, 'body.camera-view-active')
+        self.assertContains(response, 'id="qr-check-result"')
+        self.assertContains(response, reverse('verify_physical_qr'))
+        self.assertContains(response, 'Step 1 of 3')
+        self.assertContains(response, 'Step 3 of 3')
+        self.assertContains(response, 'id="page-capture-guide"')
+        self.assertContains(response, 'id="fab-capture"')
+        self.assertContains(response, 'id="fab-files"')
+        self.assertContains(response, "captureCanvas.toBlob")
+        self.assertContains(response, "physicalFile.click()")
+        self.assertNotContains(response, 'openSheet(physicalForm)')
+        self.assertContains(response, 'class="fab-icon"')
+        self.assertNotContains(response, '&#128247;')
+
+    def test_physical_qr_check_confirms_registered_page_before_full_verification(self):
+        response = self.client.post(reverse('verify_physical_qr'), {
+            'qr_token': self.tokens[0],
+        })
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload['valid'])
+        self.assertEqual(payload['contract_id'], self.contract.id)
+        self.assertEqual(payload['version'], 1)
+        self.assertEqual(payload['page'], 1)
+        self.assertEqual(payload['total_pages'], 3)
+        self.assertIn('Capture the complete page content', payload['message'])
+
+    def test_physical_qr_check_rejects_invalid_code_safely(self):
+        response = self.client.post(reverse('verify_physical_qr'), {
+            'qr_token': 'not-a-sealguard-code',
+        })
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()['valid'])
 
     def mutate_pdf(self, callback):
         document = fitz.open(stream=self.pdf_bytes, filetype='pdf')
