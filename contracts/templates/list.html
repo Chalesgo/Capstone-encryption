@@ -201,6 +201,11 @@
     font-weight: 600;
   }
   .list-pagination a:hover { background: #f8fafc; }
+  .list-pagination .pagination-icon {
+    width: 16px;
+    height: 16px;
+    display: block;
+  }
   .list-pagination label {
     color: #889aab;
     font-size: 12px;
@@ -221,6 +226,38 @@
   }
   .list-pagination select:hover { border-color: #94a3b8; }
   .list-pagination select:focus { outline: none; border-color: #3b5bdb; box-shadow: 0 0 0 3px rgba(59, 91, 219, .12); }
+  .list-pagination form {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .list-pagination input[type="number"] {
+    width: 58px;
+    min-height: 34px;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    color: #2d3a47;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+  }
+  .list-pagination input[type="number"]:focus { outline: none; border-color: #3b5bdb; box-shadow: 0 0 0 3px rgba(59, 91, 219, .12); }
+  .list-pagination .pagination-submit {
+    min-height: 34px;
+    padding: 6px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    background: #fff;
+    color: #2d3a47;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .list-pagination .pagination-submit:hover { background: #f8fafc; }
   .bulk-actions {
     display: flex;
     flex-wrap: wrap;
@@ -246,6 +283,7 @@
   .bulk-clear-button { min-height: 34px; padding: 7px 11px; border-radius: 7px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
   .bulk-action-button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #dbe2ea; background: #f8fafc; color: #40566b; }
   .bulk-action-button:hover { border-color: #b9c8d6; background: #eef3f7; }
+  .bulk-create-folder { margin-top: 8px; }
   .bulk-action-button.danger { border-color: #fbd5d5; background: #fff0f0; color: #e53e3e; }
   .bulk-action-button.danger:hover { background: #ffe4e4; }
   .bulk-action-button:disabled { opacity: .55; cursor: wait; }
@@ -297,7 +335,7 @@
       padding: 4px 0 9px !important;
       border-bottom: 1px solid #eef0f4;
     }
-    .contracts-table tr[data-status] > td:nth-child(3)::before { content: 'Recipient'; }
+    .contracts-table tr[data-status] > td:nth-child(3)::before { content: 'Uploaded by'; }
     .contracts-table tr[data-status] > td:nth-child(4)::before { content: 'Created'; }
     .contracts-table tr[data-status] > td:nth-child(5)::before { content: 'Status'; }
     .contracts-table tr[data-status] > td:nth-child(6)::before { content: 'Modified'; }
@@ -338,6 +376,8 @@
       transition: transform 0.25s ease;
     }
     .mobile-contract-action-sheet.open { transform: translateY(0); }
+    .mobile-contract-action-sheet .mobile-sheet-actions { flex-wrap: wrap; }
+    .mobile-contract-action-sheet .mobile-sheet-action { flex: 1 1 28%; }
     .mobile-contract-edit-sheet {
       position: fixed;
       left: 0;
@@ -801,8 +841,17 @@
   }
   .version-chain-icon.valid { background: #27c485; }
   .version-chain-icon.invalid { background: #e53e3e; }
+  .version-chain-icon.pending { background: #889aab; }
+  .version-chain-icon.pending { line-height: 1; padding-bottom: 2px; box-sizing: border-box; }
   .version-item-title { font-size: 12.5px; font-weight: 500; color: #2d3a47; }
   .version-item-date { font-size: 11px; color: #889aab; margin-top: 1px; }
+  .version-item-account { font-size: 11px; color: #60758a; margin-top: 2px; }
+  .folder-page-heading { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .folder-page-heading svg { flex-shrink: 0; color: #3b5bdb; }
+  .folder-page-heading svg[hidden] { display: none; }
+  #contracts-title { overflow-wrap: anywhere; }
+  #contracts-title[tabindex="0"] { cursor: text; }
+  #contracts-title[contenteditable="plaintext-only"] { outline: none; background: transparent; box-shadow: 0 2px #3b5bdb; }
 
   @media (max-width: 900px) {
     .pdf-panel {
@@ -836,7 +885,8 @@
     .version-item { min-width: 0; }
     .version-item > div { min-width: 0; overflow: hidden; }
     .version-item-title,
-    .version-item-date { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .version-item-date,
+    .version-item-account { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   }
 </style>
 
@@ -970,6 +1020,12 @@
       </svg>
       <span>View PDF</span>
     </button>
+    <button type="button" class="mobile-sheet-action" onclick="mobileSheetDetails()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"/><line x1="12" y1="10" x2="12" y2="16"/><line x1="12" y1="7" x2="12.01" y2="7"/>
+      </svg>
+      <span>Details</span>
+    </button>
     <button type="button" class="mobile-sheet-action" onclick="mobileSheetEdit()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"/>
@@ -1041,10 +1097,11 @@
 
 <div class="modal-overlay" id="folder-assign-modal">
   <div class="modal">
-    <h3>Add to Folder</h3>
+    <h3>Move to Folder</h3>
     <p>Choose a folder for <strong id="folder-assign-contract-name"></strong>.</p>
     <ul class="folder-assign-list" id="folder-assign-list"></ul>
     <div class="modal-actions">
+      <button type="button" class="btn btn-outline" id="folder-assign-create">Create a new folder</button>
       <button class="btn btn-outline" onclick="closeFolderAssignModal()">Cancel</button>
     </div>
   </div>
@@ -1076,7 +1133,7 @@
 
 <div class="contracts-header">
   <div>
-    <h1 id="contracts-title">Contracts</h1>
+    <div class="folder-page-heading"><svg id="folder-page-icon" hidden width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7V4h6l2 3h10v13H3z"/></svg><h1 id="contracts-title" onclick="editFolderHeading()" onkeydown="folderHeadingKey(event)" onblur="saveFolderHeading()">All Documents</h1></div>
     <p>Manage and view all uploaded procurement contracts</p>
   </div>
   <div style="display:flex; align-items:center; gap:12px;">
@@ -1085,7 +1142,7 @@
         <circle cx="11" cy="11" r="8"/>
         <line x1="21" y1="21" x2="16.65" y2="16.65"/>
       </svg>
-      <input type="text" id="doc-search" class="search-input" value="{{ search_query }}" placeholder="Search title or uploader..." oninput="scheduleSearchFilter()">
+      <input type="search" id="doc-search" class="search-input" value="{{ search_query }}" placeholder="Search title or uploader..." aria-label="Search documents" onkeydown="if(event.key==='Enter' && !event.isComposing) { event.preventDefault(); submitSearchFilter(); }">
     </div>
     <a href="/upload/" class="btn btn-primary">+ Upload Contract</a>
   </div>
@@ -1107,7 +1164,7 @@
     <tr>
       <th style="width:28px;"><input type="checkbox" id="select-all"></th>
       <th>Document Name</th>
-      <th>Recipient</th>
+      <th>Uploaded by</th>
       <th>Date Created ↑</th>
       <th style="width:120px;">Status</th>
       <th>Modified</th>
@@ -1118,7 +1175,8 @@
     {% for contract in contracts %}
         <tr id="row-{{ contract.id }}" data-status="{{ contract.status }}" data-folder="{{ contract.folder_id|default:'' }}"
         data-public="{{ contract.is_public|yesno:'1,0' }}"
-        data-file-url="{% url 'download_contract' contract.id %}"
+        data-file-url="{% url 'preview_contract' contract.id %}"
+        data-download-url="{% url 'download_contract' contract.id %}"
         data-contract-title="{{ contract.title|escapejs }}"
         data-encrypted="{% if contract.encrypted_cf %}1{% else %}0{% endif %}"
         data-search="{{ contract.title|lower }} {{ contract.recipient.username|default:''|lower }}"
@@ -1129,7 +1187,7 @@
       <td><input type="checkbox" class="row-check" value="{{ contract.id }}" aria-label="Select {{ contract.title|escapejs }}"></td>
 
       <!-- Document Name -->
-      <td class="contract-document-cell" onclick="handleDocumentCellClick(event, {{ contract.id }})">
+      <td class="contract-document-cell" onclick="handleDocumentCellClick(event, {{ contract.id }})" oncontextmenu="if(window.matchMedia('(min-width: 901px)').matches) showContractContextMenu(event, {{ contract.id }})">
         <div class="contract-name-cell">
           {% if contract.seal_image %}
             <img src="{{ contract.seal_image.url }}" class="contract-seal-thumb">
@@ -1173,7 +1231,7 @@
         </div>
       </td>
 
-      <!-- Recipient -->
+      <!-- Uploaded by -->
       <td style="color:#667788;">
         {{ contract.recipient.username|default:"—" }}
       </td>
@@ -1223,7 +1281,7 @@
 
           <!-- View PDF -->
           <button class="icon-btn" title="View PDF"
-                  onclick="openPdfPreview({{ contract.id }}, '{% url 'download_contract' contract.id %}', '{{ contract.title|escapejs }}')">
+                  onclick="openPdfPreview({{ contract.id }}, '{% url 'preview_contract' contract.id %}', '{{ contract.title|escapejs }}', false, '{% url 'download_contract' contract.id %}')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
@@ -1297,9 +1355,20 @@
       <option value="25" {% if per_page == 25 %}selected{% endif %}>25</option>
       <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
     </select>
-    {% if page_obj.has_previous %}<a href="?q={{ search_query|urlencode }}&amp;status={{ status_filter|urlencode }}&amp;folder={{ folder_filter|urlencode }}&amp;per_page={{ per_page }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+    {% if page_obj.has_previous %}<a href="?q={{ search_query|urlencode }}&amp;status={{ status_filter|urlencode }}&amp;folder={{ folder_filter|urlencode }}&amp;per_page={{ per_page }}&amp;page=1" aria-label="First page" title="First page"><svg class="pagination-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 17 6 12l5-5"/><path d="m18 17-5-5 5-5"/></svg></a>{% endif %}
+    {% if page_obj.has_previous %}<a href="?q={{ search_query|urlencode }}&amp;status={{ status_filter|urlencode }}&amp;folder={{ folder_filter|urlencode }}&amp;per_page={{ per_page }}&amp;page={{ page_obj.previous_page_number }}" aria-label="Previous page" title="Previous page"><svg class="pagination-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></a>{% endif %}
     <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
-    {% if page_obj.has_next %}<a href="?q={{ search_query|urlencode }}&amp;status={{ status_filter|urlencode }}&amp;folder={{ folder_filter|urlencode }}&amp;per_page={{ per_page }}&amp;page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+    <form method="get" aria-label="Go to contract page">
+      <label for="contracts-page-number">Go to</label>
+      <input id="contracts-page-number" type="number" name="page" min="1" max="{{ page_obj.paginator.num_pages }}" value="{{ page_obj.number }}" inputmode="numeric" aria-label="Contract page number">
+      <input type="hidden" name="q" value="{{ search_query }}">
+      <input type="hidden" name="status" value="{{ status_filter }}">
+      <input type="hidden" name="folder" value="{{ folder_filter }}">
+      <input type="hidden" name="per_page" value="{{ per_page }}">
+      <button type="submit" class="pagination-submit">Go</button>
+    </form>
+    {% if page_obj.has_next %}<a href="?q={{ search_query|urlencode }}&amp;status={{ status_filter|urlencode }}&amp;folder={{ folder_filter|urlencode }}&amp;per_page={{ per_page }}&amp;page={{ page_obj.next_page_number }}" aria-label="Next page" title="Next page"><svg class="pagination-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></a>{% endif %}
+    {% if page_obj.has_next %}<a href="?q={{ search_query|urlencode }}&amp;status={{ status_filter|urlencode }}&amp;folder={{ folder_filter|urlencode }}&amp;per_page={{ per_page }}&amp;page={{ page_obj.paginator.num_pages }}" aria-label="Last page" title="Last page"><svg class="pagination-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 17 5-5-5-5"/><path d="m6 17 5-5-5-5"/></svg></a>{% endif %}
   </span>
 </nav>
 {% endif %}
@@ -1387,6 +1456,7 @@
     <h3 id="bulk-choice-title">Bulk action</h3>
     <p id="bulk-choice-message"></p>
     <select class="bulk-operation-select" id="bulk-choice-select"></select>
+    <button type="button" class="btn btn-outline bulk-create-folder" id="bulk-create-folder" hidden>Create a new folder</button>
     <div class="modal-actions">
       <button type="button" class="btn btn-outline" id="bulk-choice-cancel">Cancel</button>
       <button type="button" class="btn btn-primary" id="bulk-choice-confirm">Apply</button>
@@ -1419,24 +1489,19 @@
 // @ts-nocheck
 // Panel status filter + search (combined)
 let currentStatusFilter = null;
-let searchFilterTimer = null;
-let lastAppliedSearchQuery = '';
+let currentFolderFilter = null;
+let headingOriginalName = null;
+const submittedSearchQuery = document.getElementById('doc-search').value.trim().toLowerCase();
 const versionHistoryRequests = new Map();
 let activePdfContractId = null;
 
-function scheduleSearchFilter() {
-  clearTimeout(searchFilterTimer);
+function submitSearchFilter() {
   const query = document.getElementById('doc-search').value.trim().toLowerCase();
-  if (query === lastAppliedSearchQuery) return;
-
-  searchFilterTimer = setTimeout(() => {
-    lastAppliedSearchQuery = query;
     const url = new URL(window.location.href);
     if (query) url.searchParams.set('q', query);
     else url.searchParams.delete('q');
     url.searchParams.delete('page');
     window.location.href = url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '');
-  }, 350);
 }
 
 function changeContractsPerPage(value) {
@@ -1446,7 +1511,15 @@ function changeContractsPerPage(value) {
   window.location.href = url.pathname + '?' + url.searchParams.toString();
 }
 
-function setStatusFilter(status, el) {
+function setStatusFilter(status, el, initializing = false) {
+  if (!initializing) {
+    const url = new URL(window.location.href);
+    if (status) url.searchParams.set('status', status); else url.searchParams.delete('status');
+    url.searchParams.delete('folder');
+    url.searchParams.delete('page');
+    window.location.href = url.href;
+    return;
+  }
   closeContractsDocPanel();
   document.querySelectorAll('.doc-panel .panel-item').forEach(item => item.classList.remove('active'));
   el.classList.add('active');
@@ -1455,7 +1528,8 @@ function setStatusFilter(status, el) {
 }
 
 function applyFilters() {
-  const query = document.getElementById('doc-search').value.trim().toLowerCase();
+  updateFolderHeading();
+  const query = submittedSearchQuery;
   const rows = document.querySelectorAll('.contracts-table tbody tr[data-status]');
   let visibleCount = 0;
 
@@ -1487,6 +1561,7 @@ function applyFilters() {
   const choiceTitle = document.getElementById('bulk-choice-title');
   const choiceMessage = document.getElementById('bulk-choice-message');
   const choiceSelect = document.getElementById('bulk-choice-select');
+  const createFolderButton = document.getElementById('bulk-create-folder');
   const choiceConfirm = document.getElementById('bulk-choice-confirm');
   const confirmModal = document.getElementById('bulk-confirm-modal');
   const confirmTitle = document.getElementById('bulk-confirm-title');
@@ -1497,6 +1572,7 @@ function applyFilters() {
   let choiceAction = null;
   let confirmAction = null;
   let reloadAfterResult = false;
+  let lastCheckedIndex = -1;
   if (!selectAll || !bulkActions || !count) return;
   const rowChecks = () => Array.from(document.querySelectorAll('.row-check'));
   const selectedIds = () => rowChecks().filter(cb => cb.checked).map(cb => cb.value);
@@ -1545,6 +1621,7 @@ function applyFilters() {
       option.textContent = choice.label;
       choiceSelect.appendChild(option);
     });
+    createFolderButton.hidden = type !== 'folder';
     choiceModal.classList.add('active');
     choiceSelect.focus();
   }
@@ -1594,18 +1671,54 @@ function applyFilters() {
     rowChecks().forEach(cb => { cb.checked = selectAll.checked; });
     updateSelectionState();
   });
-  rowChecks().forEach(cb => cb.addEventListener('change', updateSelectionState));
+  rowChecks().forEach(function(cb, index) {
+    cb.addEventListener('click', function(event) {
+      if (event.shiftKey && lastCheckedIndex >= 0) {
+        const checks = rowChecks();
+        const start = Math.min(lastCheckedIndex, index);
+        const end = Math.max(lastCheckedIndex, index);
+        const targetState = cb.checked;
+        for (let i = start; i <= end; i += 1) checks[i].checked = targetState;
+      }
+      lastCheckedIndex = index;
+      updateSelectionState();
+    });
+    cb.addEventListener('change', updateSelectionState);
+  });
   clear?.addEventListener('click', function() {
     rowChecks().forEach(cb => { cb.checked = false; });
     selectAll.checked = false;
     selectAll.indeterminate = false;
+    lastCheckedIndex = -1;
     updateSelectionState();
   });
 
-  folderButton?.addEventListener('click', function() { openChoiceModal('folder', getLiveFolderChoices()); });
+  folderButton?.addEventListener('click', function() {
+    const ids = selectedIds();
+    if (!ids.length) return;
+    openFolderAssignModal(null, function(folderId) {
+      return postBulk('{% url "bulk_assign_folder" %}', {folder_id: folderId || ''}).then(function(data) {
+        closeFolderAssignModal();
+        showResult(data.updated + ' document(s) updated.', true);
+      });
+    }, ids.length + ' selected document(s)');
+  });
   statusButton?.addEventListener('click', function() { openChoiceModal('status', statusChoices); });
   deleteButton?.addEventListener('click', function() { openConfirmModal('delete'); });
   encryptButton?.addEventListener('click', function() { openConfirmModal('encrypt'); });
+
+  createFolderButton?.addEventListener('click', function() {
+    const name = window.prompt('Name for the new folder:');
+    if (name === null || !name.trim()) return;
+    createFolder(name.trim(), function(folder) {
+      const option = document.createElement('option');
+      option.value = folder.id;
+      option.textContent = folder.name;
+      choiceSelect.appendChild(option);
+      choiceSelect.value = String(folder.id);
+      choiceSelect.focus();
+    });
+  });
 
   document.getElementById('bulk-choice-cancel')?.addEventListener('click', closeChoiceModal);
   choiceConfirm?.addEventListener('click', function() {
@@ -1710,7 +1823,7 @@ function cancelRename(id) {
 
   if (statusParam) {
     const el = document.querySelector('.doc-panel .panel-item[data-filter="' + statusParam + '"]');
-    if (el) setStatusFilter(statusParam, el);
+    if (el) setStatusFilter(statusParam, el, true);
   } else if (folderParam) {
     const el = document.getElementById('folder-' + folderParam);
     if (el) {
@@ -1719,9 +1832,6 @@ function cancelRename(id) {
     }
   }
 
-  if (statusParam || folderParam) {
-    history.replaceState(null, '', window.location.pathname);
-  }
 })();
 
 function getVersionHistory(contractId) {
@@ -1732,17 +1842,23 @@ function getVersionHistory(contractId) {
   return versionHistoryRequests.get(key);
 }
 
-function openPdfPreview(contractId, url, title) {
+function escapeVersionHistoryText(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, function(character) {
+    return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[character];
+  });
+}
+
+function openPdfPreview(contractId, url, title, forceDetails = false, downloadUrl = '') {
   activePdfContractId = String(contractId);
   fetch('/contract/' + contractId + '/mark-viewed/', {
     method: 'POST',
     headers: { 'X-CSRFToken': '{{ csrf_token }}' }
   }).catch(function() {});
-  if (openPdfInMobileViewer(url)) return;
+  if (openPdfInMobileViewer(url, contractId, title, forceDetails)) return;
   const previewUrl = url + (url.includes('#') ? '&' : '#') + 'toolbar=0&navpanes=0&scrollbar=1&view=FitH';
-  document.getElementById('pdf-frame').src = previewUrl;
+  document.getElementById('pdf-frame').src = sealGuardPdfFrameUrl(previewUrl, contractId, title);
   document.getElementById('pdf-panel-title').textContent = title;
-  document.getElementById('pdf-download-btn').href = url;
+  document.getElementById('pdf-download-btn').href = downloadUrl || url;
   document.getElementById('pdf-download-btn').removeAttribute('download');
   document.getElementById('pdf-panel').classList.add('open');
   document.getElementById('pdf-overlay').classList.add('open');
@@ -1752,6 +1868,7 @@ function openPdfPreview(contractId, url, title) {
   document.getElementById('pdf-meta-encrypted').textContent = '—';
   document.getElementById('pdf-meta-verified').textContent = '—';
   document.getElementById('pdf-meta-version').textContent = '—';
+  document.getElementById('pdf-meta-uploader').textContent = '—';
   document.getElementById('pdf-version-list').innerHTML = '<div class="version-list-loading">Loading version history…</div>';
 
   getVersionHistory(contractId)
@@ -1762,6 +1879,8 @@ function openPdfPreview(contractId, url, title) {
       document.getElementById('pdf-meta-encrypted').textContent = data.encrypted || '—';
       document.getElementById('pdf-meta-verified').textContent = data.verified;
       document.getElementById('pdf-meta-version').textContent = 'v' + data.version_count;
+      const selected = data.versions.find(v => v.is_current);
+      document.getElementById('pdf-meta-uploader').textContent = selected ? selected.created_by : 'Unknown account';
 
       const listEl = document.getElementById('pdf-version-list');
       listEl.innerHTML = '';
@@ -1770,14 +1889,19 @@ function openPdfPreview(contractId, url, title) {
         const item = document.createElement('div');
         item.className = 'version-item' + (v.is_current ? ' active' : '');
         const downloadName = document.getElementById('pdf-panel-title').textContent.trim() + '_v' + v.version_number + '.pdf';
-        item.onclick = function() { viewPdfVersion(v.file_url, item, downloadName); };
+        item.onclick = function() {
+          document.getElementById('pdf-meta-uploader').textContent = v.created_by || 'Unknown account';
+          document.getElementById('pdf-meta-version').textContent = 'v' + v.version_number;
+          viewPdfVersion(v.preview_url, item, downloadName, v.file_url);
+        };
         item.innerHTML = `
-          <span class="version-chain-icon ${v.valid ? 'valid' : 'invalid'}" title="${v.valid ? 'Chain verified' : 'Chain broken — this version does not match the expected fingerprint'}">
-            ${v.valid ? '✓' : '✕'}
+          <span class="version-chain-icon ${v.valid === true ? 'valid' : v.valid === false ? 'invalid' : 'pending'}" title="${v.valid === true ? 'Chain verified' : v.valid === false ? 'Chain broken — this version does not match the expected fingerprint' : 'Integrity not checked yet, please wait for the integrity scan to finish'}">
+            ${v.valid === true ? '✓' : v.valid === false ? '✕' : '…'}
           </span>
           <div>
             <div class="version-item-title">v${v.version_number} — ${v.source}${v.is_current ? ' (Current)' : ''}</div>
             <div class="version-item-date">${v.created_at}</div>
+            <div class="version-item-account">Added by ${escapeVersionHistoryText(v.created_by)}</div>
           </div>
         `;
         listEl.appendChild(item);
@@ -1797,18 +1921,18 @@ function handleDocumentCellClick(event, contractId) {
   }
 
   const row = document.getElementById('row-' + contractId);
-  if (row) openPdfPreview(contractId, row.dataset.fileUrl, row.dataset.contractTitle);
+  if (row) openPdfPreview(contractId, row.dataset.fileUrl, row.dataset.contractTitle, false, row.dataset.downloadUrl);
 }
 
-function viewPdfVersion(url, el, versionLabel) {
-  if (openPdfInMobileViewer(url)) return;
+function viewPdfVersion(url, el, versionLabel, downloadUrl = '') {
+  if (openPdfInMobileViewer(url, activePdfContractId, document.getElementById('pdf-panel-title').textContent)) return;
   const previewUrl = url + (url.includes('#') ? '&' : '#') + 'toolbar=0&navpanes=0&scrollbar=1&view=FitH';
-  document.getElementById('pdf-frame').src = previewUrl;
+  document.getElementById('pdf-frame').src = sealGuardPdfFrameUrl(previewUrl, activePdfContractId, document.getElementById('pdf-panel-title').textContent);
   document.querySelectorAll('.version-item').forEach(i => i.classList.remove('active'));
   el.classList.add('active');
 
   const downloadBtn = document.getElementById('pdf-download-btn');
-  downloadBtn.href = url;
+  downloadBtn.href = downloadUrl || url;
   downloadBtn.removeAttribute('download');
 }
 
@@ -1873,7 +1997,15 @@ function mobileSheetViewPdf() {
   const row = document.getElementById('row-' + id);
   if (!row) return;
   closeMobileContractSheet();
-  openPdfPreview(id, row.dataset.fileUrl, row.dataset.contractTitle);
+  openPdfPreview(id, row.dataset.fileUrl, row.dataset.contractTitle, false, row.dataset.downloadUrl);
+}
+
+function mobileSheetDetails() {
+  const id = mobileContractActionId;
+  const row = document.getElementById('row-' + id);
+  if (!row) return;
+  closeMobileContractSheet();
+  openPdfPreview(id, row.dataset.fileUrl, row.dataset.contractTitle, true, row.dataset.downloadUrl);
 }
 
 function mobileSheetEdit() {
@@ -2034,12 +2166,62 @@ function closePublicBlockModal() {
 }
 
 // ── Folders ──
-let currentFolderFilter = null;
+function updateFolderHeading() {
+  const title = document.getElementById('contracts-title');
+  const folder = document.getElementById('folder-name-' + currentFolderFilter);
+  document.getElementById('folder-page-icon').toggleAttribute('hidden', !folder);
+  title.tabIndex = folder ? 0 : -1;
+  title.title = folder ? 'Rename folder' : '';
+  if (headingOriginalName === null) title.textContent = folder ? folder.textContent.trim() : 'All Documents';
+}
+function editFolderHeading() {
+  if (!currentFolderFilter || headingOriginalName !== null) return;
+  const title = document.getElementById('contracts-title');
+  headingOriginalName = title.textContent;
+  title.contentEditable = 'plaintext-only';
+  title.focus();
+  const range = document.createRange();
+  range.selectNodeContents(title);
+  const selection = window.getSelection();
+  selection.removeAllRanges(); selection.addRange(range);
+}
+function folderHeadingKey(event) {
+  if (event.isComposing) return;
+  if (event.key === 'Enter') { event.preventDefault(); if (headingOriginalName === null) editFolderHeading(); else event.currentTarget.blur(); }
+  if (event.key === 'Escape' && headingOriginalName !== null) {
+    event.currentTarget.textContent = headingOriginalName;
+    headingOriginalName = null;
+    event.currentTarget.contentEditable = 'false';
+    event.currentTarget.blur();
+  }
+}
+async function saveFolderHeading() {
+  if (headingOriginalName === null) return;
+  const id = currentFolderFilter;
+  const title = document.getElementById('contracts-title');
+  const name = title.textContent.trim().slice(0, 100);
+  headingOriginalName = null;
+  title.contentEditable = 'false';
+  updateFolderHeading();
+  if (!name) return;
+  try {
+    const response = await fetch('/folder/rename/' + id + '/', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'}, body: JSON.stringify({name})});
+    const data = await response.json();
+    if (!response.ok || !data.success) throw new Error();
+    document.getElementById('folder-name-' + id).textContent = data.name;
+    document.getElementById('folder-rename-input-' + id).value = data.name;
+    updateFolderHeading();
+  } catch (_) { alert('The folder could not be renamed. Please try again.'); }
+}
 
-function createFolder() {
+function createFolder(folderName = '', onCreated = null) {
+  const request = { method: 'POST', headers: { 'X-CSRFToken': '{{ csrf_token }}' } };
+  if (folderName) {
+    request.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+    request.body = new URLSearchParams({ name: folderName }).toString();
+  }
   fetch('/folder/create/', {
-    method: 'POST',
-    headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+    ...request
   })
   .then(r => r.json())
   .then(data => {
@@ -2060,14 +2242,15 @@ function createFolder() {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
       </svg>
-      <span class="folder-name-text" id="folder-name-${data.id}">${data.name}</span>
-      <input class="folder-rename-input" id="folder-rename-input-${data.id}" value="${data.name}"
+      <span class="folder-name-text" id="folder-name-${data.id}">${escapeVersionHistoryText(data.name)}</span>
+      <input class="folder-rename-input" id="folder-rename-input-${data.id}" value="${escapeVersionHistoryText(data.name)}"
              onclick="event.stopPropagation()"
              onblur="submitFolderRename(${data.id})"
              onkeydown="if(event.key==='Enter') submitFolderRename(${data.id}); if(event.key==='Escape') cancelFolderRename(${data.id});">
     `;
     document.getElementById('folder-list').appendChild(li);
-    startFolderRename(data.id);
+    if (onCreated) onCreated(data);
+    else startFolderRename(data.id);
   });
 }
 
@@ -2124,19 +2307,27 @@ function contractContextMenuAddToFolder() {
   openFolderAssignModal(id);
 }
 
-function openFolderAssignModal(contractId) {
+function openFolderAssignModal(contractId, onSelect = null, selectionLabel = '') {
+  const choose = onSelect || (folderId => assignContractToFolder(contractId, folderId));
+  const selectFolder = async folderId => {
+    const list = document.getElementById('folder-assign-list');
+    if (list.getAttribute('aria-busy') === 'true') return;
+    list.setAttribute('aria-busy', 'true');
+    try { await choose(folderId); } catch (_) { alert('The documents could not be moved. Please try again.'); }
+    finally { list.removeAttribute('aria-busy'); }
+  };
   const row = document.getElementById('row-' + contractId);
   const titleEl = document.getElementById('title-text-' + contractId);
   const currentFolder = row ? row.dataset.folder : '';
 
   document.getElementById('folder-assign-contract-name').textContent =
-    titleEl ? titleEl.dataset.fullTitle : '';
+    selectionLabel || (titleEl ? titleEl.dataset.fullTitle : '');
 
   const listEl = document.getElementById('folder-assign-list');
   listEl.innerHTML = '';
 
   const noFolderLi = document.createElement('li');
-  noFolderLi.className = 'folder-assign-item' + (!currentFolder ? ' current' : '');
+  noFolderLi.className = 'folder-assign-item' + (contractId && !currentFolder ? ' current' : '');
   noFolderLi.innerHTML = `
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -2144,7 +2335,7 @@ function openFolderAssignModal(contractId) {
     No Folder
     <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
   `;
-  noFolderLi.onclick = () => assignContractToFolder(contractId, null);
+  noFolderLi.onclick = () => selectFolder(null);
   listEl.appendChild(noFolderLi);
 
   const folderItems = document.querySelectorAll('#folder-list .folder-item');
@@ -2159,10 +2350,10 @@ function openFolderAssignModal(contractId) {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
       </svg>
-      ${name}
+      ${escapeVersionHistoryText(name)}
       <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
     `;
-    li.onclick = () => assignContractToFolder(contractId, folderId);
+    li.onclick = () => selectFolder(folderId);
     listEl.appendChild(li);
   });
 
@@ -2174,6 +2365,17 @@ function openFolderAssignModal(contractId) {
   }
 
   document.getElementById('folder-assign-modal').classList.add('active');
+  listEl.querySelectorAll('.folder-assign-item').forEach(item => {
+    item.tabIndex = 0;
+    item.setAttribute('role', 'button');
+    item.onkeydown = event => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); item.click(); }
+    };
+  });
+  document.getElementById('folder-assign-create').onclick = () => {
+    const name = window.prompt('Name for the new folder:');
+    if (name && name.trim()) createFolder(name.trim(), () => openFolderAssignModal(contractId, onSelect, selectionLabel));
+  };
 }
 
 function closeFolderAssignModal() {
@@ -2181,7 +2383,7 @@ function closeFolderAssignModal() {
 }
 
 function assignContractToFolder(contractId, folderId) {
-  fetch('/folder/assign/' + contractId + '/', {
+  return fetch('/folder/assign/' + contractId + '/', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -2191,6 +2393,7 @@ function assignContractToFolder(contractId, folderId) {
   })
   .then(r => r.json())
   .then(data => {
+    if (!data.success) throw new Error('Folder assignment failed');
     if (data.success) {
       const row = document.getElementById('row-' + contractId);
       if (row) row.dataset.folder = folderId || '';
@@ -2267,7 +2470,11 @@ syncMobileContractDragging();
 
 function handleFolderClick(folderId, el) {
   if (suppressFolderClick) return;
-  setFolderFilter(folderId, el);
+  const url = new URL(window.location.href);
+  url.searchParams.set('folder', folderId);
+  url.searchParams.delete('status');
+  url.searchParams.delete('page');
+  window.location.href = url.href;
 }
 
 function folderDragStart(event, folderId) {

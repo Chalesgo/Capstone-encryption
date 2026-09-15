@@ -157,6 +157,7 @@ class AuditLog(models.Model):
         ('rejected', 'Rejected Document'),
         ('deleted', 'Deleted Document'),
         ('reported_tampering', 'Reported Tampering'),
+        ('integrity_scan', 'Integrity Scan'),
         ('verification', 'Verification Attempt'),
         ('failed_login', 'Failed Login Attempt'),
         ('login', 'Successful Login'),

@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SealGuard PDF viewer</title>
+  <style>
+    :root { color-scheme:light; --accent:#3b5bdb; --text:#243443; --muted:#6b7a8d; }
+    * { box-sizing:border-box; }
+    [hidden] { display:none !important; }
+    body { margin:0; height:100dvh; overflow:hidden; font:14px/1.4 system-ui,sans-serif; color:var(--text); background:#e9edf2; }
+    button { font:inherit; color:inherit; border:0; cursor:pointer; min-height:44px; min-width:44px; background:transparent; border-radius:50%; }
+    button:disabled { opacity:.4; cursor:default; }
+    button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    button:hover:not(:disabled) { background:#edf1fd; }
+    svg { width:20px; height:20px; vertical-align:middle; }
+    #pages { position:absolute; inset:0; overflow:auto; overscroll-behavior:contain; touch-action:pan-x pan-y; padding:64px 12px 130px; }
+    #page-stack { position:relative; margin:0 auto; }
+    .pdf-page { position:relative; margin:0 0 14px; background:white; box-shadow:0 2px 12px #24344320; overflow:hidden; }
+    .pdf-page::before { content:attr(aria-label); position:absolute; top:16px; left:16px; font-size:12px; color:#6b7a8d; }
+    .pdf-page canvas { display:block; width:100%; height:100%; position:relative; background:white; }
+    .corner-actions { position:fixed; top:max(10px, env(safe-area-inset-top)); right:12px; z-index:2; display:flex; gap:6px; }
+    .corner-actions button { background:#fffffff2; box-shadow:0 2px 12px #24344318; }
+    #status { position:fixed; top:64px; left:20px; right:20px; margin:0; padding:8px 12px; background:#fff; border-radius:10px; text-align:center; z-index:2; }
+    #status:empty { display:none; }
+    .floating-controls { position:fixed; bottom:calc(16px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); z-index:3; width:max-content; max-width:calc(100% - 24px); display:flex; align-items:center; gap:4px; padding:6px; background:#fffffff5; border:1px solid white; box-shadow:0 5px 28px #1c2b3833; border-radius:40px; backdrop-filter:blur(12px); }
+    .document-label { min-width:0; max-width:220px; text-align:center; padding:0 6px; }
+    #document-title { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; font-weight:600; }
+    #page-label { display:block; color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
+    #versions-toggle { flex-shrink:0; padding:0 10px; border-radius:18px; color:var(--accent); font-weight:600; font-size:12px; }
+    #previous, #next { flex-shrink:0; }
+    #version-backdrop { position:fixed; inset:0; background:#14202d66; opacity:0; visibility:hidden; transition:opacity .22s,visibility .22s; z-index:4; }
+    #version-sheet { position:fixed; bottom:0; left:0; right:0; z-index:5; max-height:50dvh; display:flex; flex-direction:column; background:#fff; border-radius:22px 22px 0 0; padding:8px 16px max(16px,env(safe-area-inset-bottom)); box-shadow:0 -6px 30px #18253326; transform:translateY(105%); visibility:hidden; transition:transform .22s ease,visibility .22s; }
+    body.versions-open #version-backdrop { opacity:1; visibility:visible; }
+    body.versions-open #version-sheet { transform:translateY(0); visibility:visible; }
+    .sheet-handle { width:36px; height:4px; margin:0 auto 4px; border-radius:4px; background:#d5dbe2; flex-shrink:0; }
+    .sheet-heading { display:flex; justify-content:space-between; align-items:center; flex-shrink:0; }
+    .sheet-heading h2 { font-size:16px; margin:8px 0; }
+    #version-list { overflow-y:auto; overscroll-behavior:contain; min-height:0; }
+    .version-option { display:flex; align-items:center; gap:9px; width:100%; border-radius:7px; padding:10px 8px; text-align:left; border:0; margin:3px 0; }
+    .version-option[aria-current="true"] { background:#edf1fd; border-color:#cbd5fa; }
+    .version-option-details { min-width:0; }
+    .version-option-details strong { display:block; font-size:12.5px; font-weight:500; overflow-wrap:anywhere; }
+    .version-option-details span { display:block; font-size:11px; overflow-wrap:anywhere; margin-top:2px; }
+    .version-option-date { color:#889aab; }
+    .version-option-account { color:#60758a; }
+    .version-integrity-icon { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; flex-shrink:0; color:white; font-size:11px; font-weight:700; }
+    .version-integrity-icon.valid { background:#27c485; }
+    .version-integrity-icon.invalid { background:#e53e3e; }
+    .version-integrity-icon.pending { background:#889aab; line-height:1; padding-bottom:2px; box-sizing:border-box; }
+    #version-message { margin:8px 0; color:var(--muted); }
+    #retry-versions { border-radius:8px; color:var(--accent); }
+    .integrity-help { display:flex; justify-content:flex-end; margin:2px 14px 8px; }
+    #integrity-help-toggle { min-width:28px; min-height:28px; border:1px solid #dfe3e8; background:#fff; color:#7d8e9e; font-weight:700; }
+    #integrity-help-panel { margin:0 14px 8px; padding:8px 10px; border:1px solid #e3e9ef; border-radius:8px; background:#fff; color:#889aab; font-size:11px; line-height:1.5; }
+    #integrity-help-panel[hidden] { display:none; }
+    #version-content { display:flex; flex-direction:column; min-height:0; }
+    #sheet-versions { display:flex; flex-direction:column; min-height:0; }
+    #details-backdrop { position:fixed; inset:0; z-index:4; background:#14202d66; visibility:hidden; opacity:0; transition:opacity .22s,visibility .22s; }
+    #pdf-sidebar { position:fixed; right:0; top:0; bottom:0; z-index:5; width:min(360px,calc(100% - 24px)); min-width:0; background:#f7f6f4; border-left:1px solid #e5ebf0; padding:0 0 max(16px,env(safe-area-inset-bottom)); overflow-y:auto; overscroll-behavior:contain; transform:translateX(105%); visibility:hidden; transition:transform .22s,visibility .22s; font-family:'Segoe UI',system-ui,-apple-system,sans-serif; }
+    body.details-open #pdf-sidebar { transform:translateX(0); visibility:visible; }
+    body.details-open #details-backdrop { opacity:1; visibility:visible; }
+    .details-header { position:sticky; top:0; z-index:1; background:rgba(255,255,255,.96); }
+    #close-details { position:absolute; top:6px; right:6px; color:#667788; }
+    .pdf-sidebar-title { margin:0 0 4px; font-size:15px; font-weight:700; color:#243443; padding:17px 56px 17px 17px; border-bottom:1px solid #e5ebf0; line-height:1.35; word-break:break-word; }
+    .sidebar-section-label { margin:0; font-size:9.5px; font-weight:700; color:#7d8e9e; text-transform:uppercase; letter-spacing:.08em; padding:14px 14px 7px; }
+    .meta-list { margin:0 10px; border:1px solid #e3e9ef; border-radius:10px; padding:8px 12px; background:#fff; box-shadow:0 1px 2px rgba(28,43,56,.03); }
+    .meta-row { display:flex; justify-content:space-between; align-items:baseline; gap:12px; padding:5px 0; font-size:12.5px; }
+    .meta-row-label { color:#889aab; }
+    .meta-row-value { color:#2d3a47; font-weight:500; text-align:right; overflow-wrap:anywhere; min-width:0; }
+    #details-versions #version-list { margin:0 10px; overflow:hidden; border:1px solid #e3e9ef; border-radius:10px; background:#fff; }
+    #details-versions .version-option { gap:10px; padding:9px 16px; margin:0; border-radius:0; border-bottom:1px solid #f0f2f5; transition:background .15s; }
+    #details-versions .version-option:hover { background:#f0f2f5; }
+    #details-versions .version-option[aria-current="true"] { background:#eef2ff; }
+    #details-versions .version-option-details strong { color:#2d3a47; }
+    #details-versions .version-option-date { margin-top:1px; }
+    #details-versions .integrity-key { margin:0 14px 8px; }
+    #details-versions #version-message { margin:0 14px 8px; font-size:12.5px; }
+    #details-versions #version-message:empty { display:none; }
+    #details-versions #retry-versions { margin:0 10px 8px; }
+    @media(prefers-reduced-motion:reduce) { #version-sheet, #version-backdrop, #pdf-sidebar, #details-backdrop { transition:none; } }
+  </style>
+</head>
+<body>
+  <main id="pages" aria-label="Scrollable PDF pages" tabindex="0"><div id="page-stack"></div></main>
+  <div class="corner-actions" aria-label="Document actions">
+    <button id="details-toggle" title="Document details" aria-label="Document details" aria-controls="pdf-sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></svg></button>
+    <button id="download" title="Download PDF" aria-label="Download PDF" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg></button>
+    <button id="close" title="Close PDF" aria-label="Close PDF viewer">✕</button>
+  </div>
+  <p id="status" role="status">Opening document…</p>
+  <nav class="floating-controls" aria-label="PDF page controls">
+    <button id="previous" aria-label="Previous page" disabled>←</button>
+    <div class="document-label"><span id="document-title">Document</span><span id="page-label" aria-live="polite">Loading pages…</span></div>
+    <button id="versions-toggle" aria-label="Choose document version" aria-haspopup="dialog" aria-controls="version-sheet" aria-expanded="false">Versions</button>
+    <button id="next" aria-label="Next page" disabled>→</button>
+  </nav>
+  <div id="version-backdrop"></div>
+  <section id="version-sheet" role="dialog" aria-modal="true" aria-labelledby="version-heading" inert>
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <div class="sheet-heading"><h2 id="version-heading">Document versions</h2><button id="close-versions" aria-label="Close versions">✕</button></div>
+    <div id="sheet-versions"><div id="version-content">
+      <div class="integrity-help"><button id="integrity-help-toggle" type="button" aria-label="Explain integrity icons" aria-expanded="false">…</button></div>
+      <div id="integrity-help-panel" hidden>✓ Integrity passed · ✕ Check failed or file unreadable · … Not checked yet</div>
+      <p id="version-message" role="status"></p>
+      <button id="retry-versions" hidden>Retry</button>
+      <div id="version-list"></div>
+    </div></div>
+  </section>
+  <div id="details-backdrop"></div>
+  <aside id="pdf-sidebar" class="pdf-sidebar" role="dialog" aria-modal="true" aria-label="Document details" inert>
+    <div class="details-header"><p id="details-title" class="pdf-sidebar-title">Document</p><button id="close-details" aria-label="Close document details">✕</button></div>
+    <p class="sidebar-section-label">Document Info</p>
+    <div class="meta-list">
+      <div class="meta-row"><span class="meta-row-label">Created</span><span id="details-created" class="meta-row-value">—</span></div>
+      <div class="meta-row"><span class="meta-row-label">Last Encrypted</span><span id="details-encrypted" class="meta-row-value">—</span></div>
+      <div class="meta-row"><span class="meta-row-label">Last Verified</span><span id="details-verified" class="meta-row-value">—</span></div>
+      <div class="meta-row"><span class="meta-row-label">Version</span><span id="details-version" class="meta-row-value">—</span></div>
+      <div class="meta-row"><span class="meta-row-label">Uploaded by</span><span id="details-uploader" class="meta-row-value">—</span></div>
+    </div>
+    <p class="sidebar-section-label">Version History</p>
+    <div id="details-versions"></div>
+  </aside>
+  <script type="module" src="mobile-pdf.mjs?v=debug-5"></script>
+</body>
+</html>

@@ -111,3 +111,30 @@ Based on the evidence completed on 5 September 2026, SealGuard’s automated sec
 The assessment remains **partially complete** because several requested penetration-testing matrices and the automated staging scans were not performed. The most immediate configuration finding is that session and CSRF cookies are not marked Secure, and HTTPS redirect/HSTS protection is not enabled. These settings should be addressed or explicitly documented as development-only exceptions before deployment.
 
 Therefore, the appropriate manuscript conclusion is: **“The implemented automated security checks passed for the tested scenarios, while the complete penetration-testing scope remains in progress pending the outstanding SQL injection, XSS, expanded IDOR, browser-based upload, HTTPS session, and automated scanner tests.”**
+
+## 9. Follow-up automated matrix (12 September 2026)
+
+The previously incomplete application-boundary checks were automated in
+`contracts/security_tests.py` and run against Django's isolated test database
+with `DEBUG=False`:
+
+```text
+python manage.py test contracts.security_tests --verbosity 1
+Result: 4 test groups passed.
+```
+
+The run covered:
+
+| Area | Automated coverage | Result |
+|---|---:|---|
+| SQL injection safety | 20 database-related inputs × 5 harmless payloads = 100 requests | Pass; no server error, traceback, or database error disclosed |
+| XSS safety | 20 payloads × reflected, stored, and client-data contexts = 60 checks | Pass in server-side tests; dangerous HTML was not returned as executable markup |
+| Public object boundary | 10 private contracts × 4 unauthenticated actions = 40 requests | Pass; private objects were not exposed to the public client |
+| HTTP upload abuse | 30 invalid upload requests | Pass; no contract records were created |
+
+The IDOR test follows SealGuard's stated policy that authenticated staff may
+see shared system documents; it therefore verifies that unauthenticated users
+cannot access private objects. Browser execution of JavaScript, HTTPS cookie
+flags, and third-party scanner findings still require separate browser,
+HTTPS-staging, or scanner runs. No destructive SQL or external target testing
+was performed.

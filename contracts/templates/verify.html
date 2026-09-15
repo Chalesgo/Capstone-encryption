@@ -888,7 +888,7 @@
                 </div>
                 <div class="doc-preview-body">
                     <iframe id="doc-preview-frame" title="Uploaded document preview"></iframe>
-                    <a class="doc-preview-mobile-link" id="doc-preview-open-link" href="#" target="_blank" rel="noopener noreferrer">Open PDF in browser</a>
+                    <a class="doc-preview-mobile-link" id="doc-preview-open-link" href="#" target="_blank" rel="noopener noreferrer">Open PDF viewer</a>
                 </div>
             </div>
 
@@ -1185,7 +1185,7 @@ function openPublicPdfPreview(el) {
   closePublicDocsDrawer();
   currentPublicContractId = el.dataset.contractId;
   if (openPdfInMobileViewer(el.dataset.url)) return;
-  document.getElementById('public-pdf-frame').src = el.dataset.url;
+  document.getElementById('public-pdf-frame').src = sealGuardPdfFrameUrl(el.dataset.url);
   document.getElementById('public-pdf-title').textContent = el.dataset.title;
   document.getElementById('public-pdf-download-btn').href = el.dataset.downloadUrl;
   document.getElementById('public-pdf-download-btn').download = el.dataset.title;
@@ -1314,7 +1314,7 @@ document.getElementById('verify-form').addEventListener('submit', function(e) {
         // Preview the uploaded document (the "working contract") while verification runs
         verificationObjectUrl = URL.createObjectURL(file);
         const previewFrameUrl = verificationObjectUrl + '#toolbar=0&navpanes=0&scrollbar=1&view=FitH';
-        document.getElementById('doc-preview-frame').src = previewFrameUrl;
+        document.getElementById('doc-preview-frame').src = sealGuardPdfFrameUrl(previewFrameUrl);
         document.getElementById('doc-preview-open-link').href = verificationObjectUrl;
         document.getElementById('doc-page-count').textContent =
             estimatedPages + (estimatedPages === 1 ? ' Page' : ' Pages');
@@ -1439,7 +1439,7 @@ if (hasResult) {
     document.getElementById('doc-page-count').textContent = 'Uploaded document';
     const resultPreviewUrl = "{{ verify_preview_url|default:''|escapejs }}";
     if (resultPreviewUrl) {
-        document.getElementById('doc-preview-frame').src = resultPreviewUrl + '#toolbar=0&navpanes=0&scrollbar=1&view=FitH';
+        document.getElementById('doc-preview-frame').src = sealGuardPdfFrameUrl(resultPreviewUrl + '#toolbar=0&navpanes=0&scrollbar=1&view=FitH');
         document.getElementById('doc-preview-open-link').href = resultPreviewUrl;
     }
 }

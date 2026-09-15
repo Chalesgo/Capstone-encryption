@@ -162,6 +162,8 @@
   }
 
   .audit-filter-field select {
+    appearance: none;
+    -webkit-appearance: none;
     min-width: 180px;
     min-height: 42px;
     padding: 8px 34px 8px 11px;
@@ -175,7 +177,16 @@
     box-shadow: 0 1px 2px rgba(30, 40, 50, .04);
     cursor: pointer;
     transition: border-color .15s ease, box-shadow .15s ease;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='m1 1 4 4 4-4' fill='none' stroke='%232d3a47' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
   }
+  .integrity-status-banner { display: flex; align-items: center; gap: 9px; width: 100%; box-sizing: border-box; margin: 0 0 16px; padding: 10px 13px; border: 1px solid #f4c54d; border-radius: 9px; background: #fff8e6; color: #8a6200; cursor: pointer; font: inherit; font-size: 12px; text-align: left; }
+  .integrity-status-banner:hover { background: #fff1c7; }
+  .integrity-status-dot { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; background: #f4a340; box-shadow: 0 0 0 4px rgba(244, 163, 64, .16); animation: integrity-pulse 1.4s ease-in-out infinite; }
+  .integrity-status-timer { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 700; }
+  @keyframes integrity-pulse { 50% { opacity: .45; } }
+  .audit-filter-field select::-ms-expand { display: none; }
   .audit-filter-field input[type="date"],
   .audit-filter-field input[type="search"] {
     min-height: 42px;
@@ -192,13 +203,25 @@
   }
   .audit-filter-field input:focus { outline: none; border-color: #3b5bdb; box-shadow: 0 0 0 3px rgba(59, 91, 219, .12); }
   .audit-filters .audit-filter-field select { width: 100%; min-width: 0; }
+  .audit-filters .filter-document-search { order: 1; }
+  .audit-filters .filter-activity { order: 2; }
+  .audit-filters .filter-user { order: 3; }
+  .audit-filters .filter-sort { order: 4; }
+  .audit-filters .filter-date-from { order: 5; }
+  .audit-filters .filter-date-to { order: 6; }
+  .audit-filters .filter-status,
+  .audit-filters .filter-rows { display: none; }
+  .audit-filters .audit-filter-status { order: 7; }
+  .audit-filters .dashboard-apply-filters { order: 8; }
+  .audit-filters .audit-export-link { order: 9; }
+  .audit-filters noscript { order: 10; }
   .status-filter-select { font-weight: 600 !important; }
   .status-filter-select.status-pending { color: #667085; border-color: #cbd5e1; }
-  .status-filter-select.status-sent { color: #b7791f; border-color: #f4c54d; background: #fffdf4; }
-  .status-filter-select.status-approved { color: #16805a; border-color: #8bd8b5; background: #f3fcf7; }
+  .status-filter-select.status-sent { color: #b7791f; border-color: #f4c54d; background-color: #fffdf4; }
+  .status-filter-select.status-approved { color: #16805a; border-color: #8bd8b5; background-color: #f3fcf7; }
   .audit-filter-field select:hover { border-color: #94a3b8; }
   .audit-filter-field select:focus { outline: none; border-color: #3b5bdb; box-shadow: 0 0 0 3px rgba(59, 91, 219, .12); }
-  .activity-filter-control { position: relative; min-width: 240px; }
+  .activity-filter-control { position: relative; width: 100%; min-width: 0; }
   .activity-filter-native {
     position: absolute;
     width: 1px;
@@ -226,8 +249,8 @@
   }
   .activity-filter-trigger:focus-visible { outline: 2px solid #3b5bdb; outline-offset: 2px; }
   .activity-filter-trigger .action-badge { white-space: nowrap; }
-  .activity-filter-chevron { color: #667788; font-size: 16px; line-height: 1; transition: transform .15s ease; }
-  .activity-filter-control.open .activity-filter-chevron { transform: rotate(180deg); }
+  .activity-filter-chevron { width: 8px; height: 8px; margin: -4px 3px 0 8px; flex: 0 0 8px; border-right: 2px solid #2d3a47; border-bottom: 2px solid #2d3a47; font-size: 0; line-height: 0; transform: rotate(45deg); transition: transform .15s ease; }
+  .activity-filter-control.open .activity-filter-chevron { transform: rotate(225deg); }
   .activity-filter-menu {
     position: fixed;
     top: 0;
@@ -235,7 +258,7 @@
     z-index: 1400;
     display: none;
     box-sizing: border-box;
-    width: min(300px, calc(100vw - 16px));
+    width: min(270px, calc(100vw - 16px));
     max-width: calc(100vw - 16px);
     max-height: calc(100vh - 16px);
     overflow-y: auto;
@@ -268,6 +291,7 @@
   .activity-filter-actions button { flex: 1; padding: 6px 8px; border: 1px solid #dbe2ea; border-radius: 6px; background: #fff; color: #52606d; cursor: pointer; font: inherit; font-size: 12px; }
   .activity-filter-actions button[data-filter-done] { border-color: #3b5bdb; background: #3b5bdb; color: #fff; }
   .action-badge.all { background: #f3f4f6; color: #667085; }
+  .action-badge.integrity_scan { background: #eef2ff; color: #4657a8; }
   .audit-filter-status {
     align-self: center;
     margin-left: auto;
@@ -375,6 +399,7 @@
   .action-badge.rejected  { background: #fff0f0; color: #e53e3e; }
   .action-badge.deleted   { background: #fff0f0; color: #e53e3e; }
   .action-badge.reported_tampering { background: #fff0f0; color: #dc2626; }
+  .action-badge.integrity_scan { background: #eef2ff; color: #4657a8; }
   .action-badge.verification        { background: #fff8e6; color: #b45309; }
   .action-badge.failed_login       { background: #f3f4f6; color: #6b7280; }
   .action-badge.login              { background: #e8f5ef; color: #16805a; }
@@ -398,7 +423,7 @@
   .audit-pdf-action { width: 32px; height: 32px; border: 0; border-radius: 6px; display: grid; place-items: center; color: #667788; background: transparent; cursor: pointer; }
   .audit-pdf-action:hover { background: #f1f3f5; color: #1a1a2e; }
   .audit-pdf-action svg { width: 16px; height: 16px; }
-  .audit-pdf-sidebar { width: 320px; flex-shrink: 0; overflow-y: auto; padding-bottom: 18px; background: #f5f7fa; border-left: 1px solid #e5ebf0; }
+  .audit-pdf-sidebar { width: 320px; flex-shrink: 0; overflow-y: auto; padding-bottom: 18px; background: #f7f6f4; border-left: 1px solid #e5ebf0; }
   .audit-pdf-title { position: sticky; top: 0; z-index: 1; margin: 0 0 4px; padding: 18px; border-bottom: 1px solid #e5ebf0; background: rgba(255,255,255,.96); color: #243443; font-size: 15px; font-weight: 700; line-height: 1.4; overflow-wrap: anywhere; }
   .audit-pdf-sidebar .sidebar-section-label { margin: 0; padding: 14px 14px 7px; color: #7d8e9e; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
   .audit-meta-list { margin: 0 10px; padding: 8px 12px; border: 1px solid #e3e9ef; border-radius: 10px; background: #fff; box-shadow: 0 1px 2px rgba(28,43,56,.03); }
@@ -407,17 +432,20 @@
   .audit-meta-value { color: #2d3a47; font-weight: 500; text-align: right; overflow-wrap: anywhere; }
   .audit-meta-value.warning { color: #dc2626; }
   .pdf-viewer-note { margin: 0 10px; padding: 10px 12px; border: 1px solid #e3e9ef; border-radius: 10px; background: #fff; color: #52606d; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
-  .audit-version-list { margin: 0 10px; padding: 5px; border: 1px solid #e3e9ef; border-radius: 10px; background: #fff; }
+  .audit-version-list { max-height: 300px; margin: 0 10px; padding: 5px; overflow-y: auto; border: 1px solid #e3e9ef; border-radius: 10px; background: #fff; }
   .audit-version-item { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 6px; border: 0; border-radius: 7px; background: transparent; color: #2d3a47; text-align: left; font: inherit; cursor: pointer; }
   .audit-version-item:hover { background: #f0f2f5; }
   .audit-version-item.active { background: #eef2ff; color: #3b5bdb; }
   .audit-version-icon { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #27c485; color: #fff; font-size: 11px; font-weight: 700; flex-shrink: 0; }
   .audit-version-item.invalid .audit-version-icon { background: #e53e3e; }
+  .audit-version-item.pending .audit-version-icon { background: #889aab; }
+  .audit-version-item.pending .audit-version-icon { line-height: 1; padding-bottom: 2px; box-sizing: border-box; }
   .audit-version-meta { min-width: 0; }
   .audit-version-label { display: block; font-size: 12.5px; font-weight: 600; }
   .audit-version-date { display: block; margin-top: 1px; color: #889aab; font-size: 11px; }
+  .audit-version-account { display: block; margin-top: 2px; color: #60758a; font-size: 11px; }
   .audit-version-loading { padding: 0 6px 10px; color: #aabbcc; font-size: 12px; }
-  .verification-history-list { margin: 0 10px; border: 1px solid #e3e9ef; border-radius: 10px; overflow: hidden; background: #fff; }
+  .verification-history-list { max-height: 300px; margin: 0 10px; border: 1px solid #e3e9ef; border-radius: 10px; overflow-y: auto; background: #fff; }
   .verification-history-empty { padding: 13px; color: #8a99a8; font-size: 12px; line-height: 1.45; }
   .verification-history-item + .verification-history-item { border-top: 1px solid #edf1f4; }
   .verification-history-toggle { display: flex; align-items: center; gap: 9px; width: 100%; padding: 10px 11px; border: 0; background: #fff; color: #2d3a47; text-align: left; font: inherit; cursor: pointer; }
@@ -431,6 +459,17 @@
   .verification-history-detail { padding: 0 11px 11px; background: #f7f9fb; }
   .verification-history-note { margin: 0 0 8px; color: #607184; font-size: 11.5px; line-height: 1.45; }
   .verification-history-log { max-height: 230px; margin: 0; padding: 10px; overflow: auto; border: 1px solid #dfe6ed; border-radius: 7px; background: #fff; color: #334455; font-family: inherit; font-size: 11px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .integrity-log-overlay { position: fixed; inset: 0; z-index: 1500; display: none; background: rgba(15, 23, 42, .38); }
+  .integrity-log-overlay.open { display: block; }
+  .integrity-log-dialog { position: fixed; top: 50%; left: 50%; z-index: 1510; display: none; width: min(720px, calc(100vw - 32px)); max-height: min(620px, calc(100vh - 32px)); transform: translate(-50%, -50%); overflow: hidden; border: 1px solid #dbe2ea; border-radius: 12px; background: #fff; box-shadow: 0 20px 55px rgba(15, 23, 42, .22); }
+  .integrity-log-dialog.open { display: flex; flex-direction: column; }
+  .integrity-log-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 18px; border-bottom: 1px solid #e5ebf0; color: #243443; }
+  .integrity-log-header strong { font-size: 15px; }
+  .integrity-log-close { width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent; color: #667788; font-size: 22px; cursor: pointer; }
+  .integrity-log-close:hover { background: #f1f3f5; }
+  .integrity-log-body { overflow: auto; padding: 16px 18px 18px; background: #f5f7fa; }
+  .integrity-log-summary { margin: 0 0 10px; color: #52606d; font-size: 12px; line-height: 1.5; }
+  .integrity-log-body pre { height: min(52vh, 460px); min-height: 180px; box-sizing: border-box; margin: 0; padding: 13px; overflow-x: hidden; overflow-y: auto; border: 1px solid #dfe6ed; border-radius: 8px; background: #fff; color: #334455; font: 12px/1.55 Consolas, 'Courier New', monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
   .audit-mobile-sheet-overlay,
   .audit-mobile-action-sheet { display: none; }
   @media (max-width: 900px) { .audit-pdf-panel { width: 100%; right: -100%; min-width: 0; } .audit-pdf-body { flex-direction: column; } .audit-pdf-frame-wrap { min-height: 55vh; } .audit-pdf-sidebar { width: 100%; max-height: 45vh; border-left: 0; border-top: 1px solid #eef0f4; } }
@@ -448,6 +487,7 @@
     .audit-mobile-sheet-action:hover { background: #f7f6f4; color: #2d3a47; }
     .audit-mobile-sheet-action svg { width: 21px; height: 21px; }
     .audit-mobile-sheet-action:disabled { cursor: not-allowed; opacity: .45; }
+    .audit-mobile-sheet-action.disabled { cursor: not-allowed; opacity: .45; }
   }
 
   .empty-audit {
@@ -487,16 +527,73 @@
     text-decoration: none;
   }
   .pagination-link:hover { background: #f8fafc; }
+  .pagination-link .pagination-icon {
+    width: 16px;
+    height: 16px;
+    display: block;
+  }
+  .pagination-links form {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .pagination-links input[type="number"] {
+    width: 58px;
+    min-height: 38px;
+    box-sizing: border-box;
+    padding: 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    color: #2d3a47;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+  }
+  .pagination-links input[type="number"]:focus { outline: none; border-color: #3b5bdb; box-shadow: 0 0 0 3px rgba(59, 91, 219, .12); }
+  .pagination-submit { cursor: pointer; background: #fff; }
   .pagination-current {
     min-width: 90px;
     color: #52606d;
     font-size: 13px;
     text-align: center;
   }
+  /* Keep dashboard pagination identical to the contract list controls. */
+  .list-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 14px;
+    padding: 0 20px 14px;
+    color: #667788;
+    font-size: 13px;
+  }
+  .list-pagination .pagination-links { gap: 8px; }
+  .list-pagination .pagination-link {
+    min-height: 34px;
+    padding: 8px 12px;
+    border-radius: 6px;
+  }
+  .list-pagination .pagination-links input[type="number"] { min-height: 34px; padding: 6px 8px; border-radius: 7px; }
+  .list-pagination .pagination-current { min-width: auto; }
+  .list-pagination label { color: #889aab; font-size: 12px; font-weight: 600; }
+  .list-pagination select {
+    min-height: 34px;
+    padding: 6px 28px 6px 9px;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    background: #fff;
+    color: #2d3a47;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
   @media (max-width: 760px) {
     .stat-cards { grid-template-columns: 1fr; }
     .audit-panel { overflow: hidden; }
-    .activity-filter-menu { width: min(300px, calc(100vw - 32px)); }
+    .activity-filter-menu { width: min(270px, calc(100vw - 32px)); }
     .audit-filter-field, .audit-filter-field select { width: 100%; }
     .audit-filter-status { width: 100%; margin-left: 0; }
     .audit-table,
@@ -592,6 +689,13 @@
     <div class="stat-card-sub">Requires review</div>
   </div>
 </div>
+{% if latest_integrity_scan and latest_integrity_scan.verification_result == 'Running' %}
+{% if request.user.is_staff %}<button type="button" class="integrity-status-banner" role="status" aria-live="polite" data-integrity-started="{{ latest_integrity_scan.timestamp|date:'c' }}" data-log-id="{{ latest_integrity_scan.id }}" data-log-url="{% url 'audit_verification_log_detail' latest_integrity_scan.id %}" data-action="Integrity Scan" onclick="openIntegrityScanLog(this)">{% else %}<div class="integrity-status-banner" role="status" aria-live="polite">{% endif %}
+  <span class="integrity-status-dot" aria-hidden="true"></span>
+  <span>Integrity scan in progress</span>
+  {% if request.user.is_staff %}<span class="integrity-status-timer" data-integrity-timer>00:00</span>{% endif %}
+{% if request.user.is_staff %}</button>{% else %}</div>{% endif %}
+{% endif %}
 
 <div class="audit-panel">
   <div class="audit-panel-header">
@@ -608,7 +712,7 @@
         <span>Activity filters</span>
         <button type="button" class="dashboard-filter-close" id="dashboard-filter-close" aria-label="Close filters">&times;</button>
       </div>
-      <div class="audit-filter-field">
+      <div class="audit-filter-field filter-activity">
         <label for="activity-filter">Show activity</label>
         <div class="activity-filter-control" data-activity-dropdown>
            <select id="activity-filter" name="activity" class="activity-filter-native" multiple aria-label="Filter activities">
@@ -622,6 +726,7 @@
            <option value="rejected" {% if 'rejected' in activity_filters %}selected{% endif %}>Rejected Document</option>
            <option value="deleted" {% if 'deleted' in activity_filters %}selected{% endif %}>Deleted Document</option>
            <option value="reported_tampering" {% if 'reported_tampering' in activity_filters %}selected{% endif %}>Reported Tampering</option>
+           <option value="integrity_scan" {% if 'integrity_scan' in activity_filters %}selected{% endif %}>Integrity Scan</option>
            <option value="verification" {% if 'verification' in activity_filters %}selected{% endif %}>Verification Attempt</option>
            <option value="failed_login" {% if 'failed_login' in activity_filters %}selected{% endif %}>Failed Login Attempt</option>
            <option value="login" {% if 'login' in activity_filters %}selected{% endif %}>Successful Login</option>
@@ -643,6 +748,7 @@
              <button class="activity-filter-option" type="button" role="option" data-value="rejected" aria-selected="{% if 'rejected' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge rejected"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>Rejected Document</span></button>
              <button class="activity-filter-option" type="button" role="option" data-value="deleted" aria-selected="{% if 'deleted' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge deleted"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Deleted Document</span></button>
              <button class="activity-filter-option" type="button" role="option" data-value="reported_tampering" aria-selected="{% if 'reported_tampering' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge reported_tampering"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 9 17H3L12 3zM12 9v4M12 17h.01"/></svg>Reported Tampering</span></button>
+             <button class="activity-filter-option" type="button" role="option" data-value="integrity_scan" aria-selected="{% if 'integrity_scan' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge integrity_scan"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3z"/><path d="m9 12 2 2 4-4"/></svg>Integrity Scan</span></button>
              <button class="activity-filter-option" type="button" role="option" data-value="verification" aria-selected="{% if 'verification' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge verification"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3zM9 12l2 2 4-4"/></svg>Verification Attempt</span></button>
              <button class="activity-filter-option" type="button" role="option" data-value="failed_login" aria-selected="{% if 'failed_login' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge failed_login"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M9 14l6 4M15 14l-6 4"/></svg>Failed Login Attempt</span></button>
              <button class="activity-filter-option" type="button" role="option" data-value="login" aria-selected="{% if 'login' in activity_filters %}true{% else %}false{% endif %}"><span class="action-badge login"><svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M21 19V5a2 2 0 0 0-2-2h-6"/></svg>Successful Login</span></button>
@@ -652,15 +758,15 @@
           </div>
         </div>
       </div>
-      <div class="audit-filter-field">
+      <div class="audit-filter-field filter-date-from">
         <label for="report-date-from">Date from</label>
         <input id="report-date-from" type="date" name="date_from" value="{{ report_date_from }}">
       </div>
-      <div class="audit-filter-field">
+      <div class="audit-filter-field filter-date-to">
         <label for="report-date-to">Date to</label>
         <input id="report-date-to" type="date" name="date_to" value="{{ report_date_to }}">
       </div>
-      <div class="audit-filter-field">
+      <div class="audit-filter-field filter-user">
         <label for="report-user">User</label>
         <select id="report-user" name="user">
           <option value="">All users</option>
@@ -669,7 +775,7 @@
           {% endfor %}
         </select>
       </div>
-      <div class="audit-filter-field">
+      <div class="audit-filter-field filter-status">
         <label for="report-status">Document status</label>
         <select id="report-status" class="status-filter-select" name="status" onchange="styleDashboardStatusFilter(this)">
           <option value="">All statuses</option>
@@ -678,18 +784,18 @@
           <option value="approved" {% if report_status == 'approved' %}selected{% endif %}>Signed</option>
         </select>
       </div>
-      <div class="audit-filter-field">
-        <label for="report-document">Document</label>
+      <div class="audit-filter-field filter-document-search">
+        <label for="report-document">Document search</label>
         <input id="report-document" type="search" name="document" value="{{ report_document }}" placeholder="Search documents">
       </div>
-      <div class="audit-filter-field">
+      <div class="audit-filter-field filter-sort">
         <label for="sort-order">Sort by date</label>
         <select id="sort-order" name="sort">
           <option value="newest" {% if sort_order == 'newest' %}selected{% endif %}>Newest first</option>
           <option value="oldest" {% if sort_order == 'oldest' %}selected{% endif %}>Oldest first</option>
         </select>
       </div>
-      <div class="audit-filter-field">
+      <div class="audit-filter-field filter-rows">
         <label for="rows-per-page">Rows per page</label>
         <select id="rows-per-page" name="per_page">
           <option value="10" {% if rows_per_page == 10 %}selected{% endif %}>10 rows</option>
@@ -713,6 +819,7 @@
         <th>IP address</th>
         <th>User</th>
         <th>Timestamp</th>
+        <th>Version</th>
         <th>Action</th>
       </tr>
     </thead>
@@ -725,7 +832,7 @@
           data-preview-reason="{% if log.contract and log.contract.is_trashed %}This document is in the trash.{% elif log.contract and not log.contract.file %}The document file is missing.{% elif not log.evidence_file and not log.contract %}No document file is linked to this activity.{% else %}This PDF is no longer retained.{% endif %}"
           data-download-url="{% if log.contract and log.contract.file %}{% url 'download_contract' log.contract.id %}{% endif %}"
           data-contract-id="{% if log.contract %}{{ log.contract.id }}{% endif %}"
-          data-version="{% if log.version_number %}{{ log.version_number }}{% endif %}"
+          data-version="{% if log.display_version_number %}{{ log.display_version_number }}{% endif %}"
           data-title="{{ log.display_document_title|default:'Reported document' }}"
           data-action="{{ log.get_action_display }}"
           data-source="{{ log.inspection_source }}"
@@ -734,6 +841,7 @@
           data-verified-on="{{ log.timestamp|date:'Y-m-d H:i:s' }}"
           data-file-size="{% if log.display_document_size is not None %}{{ log.display_document_size|filesizeformat }}{% else %}—{% endif %}"
           data-note="{{ log.note|default:'This document has been reported to the admin for further investigation.' }}"
+          data-debug-log="{{ log.verification_debug_log|default:'No debug log was recorded for this activity.'|escapejs }}"
           onclick="openAuditPdfFromRow(this)"
           onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openAuditPdfFromRow(this); }"{% endif %}>
         <td>
@@ -749,12 +857,13 @@
         <td>
           <div class="audit-user-cell">
             <span class="user-avatar">
-              {% if log.user %}{{ log.user.username|slice:":2"|upper }}{% else %}NA{% endif %}
+              {% if log.action == 'integrity_scan' %}SY{% elif log.user %}{{ log.user.username|slice:":2"|upper }}{% else %}NA{% endif %}
             </span>
-            <span>{{ log.user.username|default:"N/A" }}</span>
+            <span>{% if log.action == 'integrity_scan' %}System{% else %}{{ log.user.username|default:"N/A" }}{% endif %}</span>
           </div>
         </td>
         <td style="color:#889aab; white-space:nowrap;">{{ log.timestamp|date:"Y-m-d H:i:s" }}</td>
+        <td style="color:#667788; white-space:nowrap;">{% if log.display_version_number %}v{{ log.display_version_number }}{% else %}—{% endif %}</td>
         <td>
           <span class="action-badge {{ log.action }}">
             {% if log.action == 'viewed' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.5"/></svg>
@@ -766,6 +875,7 @@
             {% elif log.action == 'rejected' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
             {% elif log.action == 'deleted' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
             {% elif log.action == 'reported_tampering' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 9 17H3L12 3zM12 9v4M12 17h.01"/></svg>
+            {% elif log.action == 'integrity_scan' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3z"/><path d="m9 12 2 2 4-4"/></svg>
             {% elif log.action == 'verification' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3zM9 12l2 2 4-4"/></svg>
              {% elif log.action == 'failed_login' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M9 14l6 4M15 14l-6 4"/></svg>
              {% elif log.action == 'login' %}<svg class="action-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M21 19V5a2 2 0 0 0-2-2h-6"/></svg>
@@ -782,17 +892,39 @@
   {% endif %}
 
   {% if page_obj.paginator.count %}
-  <nav class="audit-pagination" id="audit-pagination" aria-label="Document activity pages">
+  <nav class="list-pagination" id="audit-pagination" aria-label="Document activity pages">
     <div class="pagination-summary">
       Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} records
     </div>
     <div class="pagination-links">
+      <label for="dashboard-rows-per-page">Rows</label>
+      <select id="dashboard-rows-per-page" onchange="changeDashboardRowsPerPage(this.value)" aria-label="Activity rows per page">
+        <option value="10" {% if rows_per_page == 10 %}selected{% endif %}>10</option>
+        <option value="20" {% if rows_per_page == 20 %}selected{% endif %}>20</option>
+        <option value="50" {% if rows_per_page == 50 %}selected{% endif %}>50</option>
+        <option value="100" {% if rows_per_page == 100 %}selected{% endif %}>100</option>
+      </select>
       {% if page_obj.has_previous %}
-        <a class="pagination-link dashboard-page-link" href="?activity={{ activity_filter }}&amp;date_from={{ report_date_from|urlencode }}&amp;date_to={{ report_date_to|urlencode }}&amp;user={{ report_user|urlencode }}&amp;status={{ report_status|urlencode }}&amp;document={{ report_document|urlencode }}&amp;sort={{ sort_order }}&amp;per_page={{ rows_per_page }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>
+        <a class="pagination-link dashboard-page-link" href="?activity={{ activity_filter }}&amp;date_from={{ report_date_from|urlencode }}&amp;date_to={{ report_date_to|urlencode }}&amp;user={{ report_user|urlencode }}&amp;status={{ report_status|urlencode }}&amp;document={{ report_document|urlencode }}&amp;sort={{ sort_order }}&amp;per_page={{ rows_per_page }}&amp;page=1" aria-label="First page" title="First page"><svg class="pagination-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 17 6 12l5-5"/><path d="m18 17-5-5 5-5"/></svg></a>
+        <a class="pagination-link dashboard-page-link" href="?activity={{ activity_filter }}&amp;date_from={{ report_date_from|urlencode }}&amp;date_to={{ report_date_to|urlencode }}&amp;user={{ report_user|urlencode }}&amp;status={{ report_status|urlencode }}&amp;document={{ report_document|urlencode }}&amp;sort={{ sort_order }}&amp;per_page={{ rows_per_page }}&amp;page={{ page_obj.previous_page_number }}" aria-label="Previous page" title="Previous page"><svg class="pagination-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></a>
       {% endif %}
       <span class="pagination-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+      <form method="get" aria-label="Go to activity page">
+        <label for="activity-page-number">Go to</label>
+        <input id="activity-page-number" type="number" name="page" min="1" max="{{ page_obj.paginator.num_pages }}" value="{{ page_obj.number }}" inputmode="numeric" aria-label="Activity page number">
+        <input type="hidden" name="activity" value="{{ activity_filter }}">
+        <input type="hidden" name="date_from" value="{{ report_date_from }}">
+        <input type="hidden" name="date_to" value="{{ report_date_to }}">
+        <input type="hidden" name="user" value="{{ report_user }}">
+        <input type="hidden" name="status" value="{{ report_status }}">
+        <input type="hidden" name="document" value="{{ report_document }}">
+        <input type="hidden" name="sort" value="{{ sort_order }}">
+        <input type="hidden" name="per_page" value="{{ rows_per_page }}">
+        <button type="submit" class="pagination-link pagination-submit">Go</button>
+      </form>
       {% if page_obj.has_next %}
-        <a class="pagination-link dashboard-page-link" href="?activity={{ activity_filter }}&amp;date_from={{ report_date_from|urlencode }}&amp;date_to={{ report_date_to|urlencode }}&amp;user={{ report_user|urlencode }}&amp;status={{ report_status|urlencode }}&amp;document={{ report_document|urlencode }}&amp;sort={{ sort_order }}&amp;per_page={{ rows_per_page }}&amp;page={{ page_obj.next_page_number }}">Next</a>
+        <a class="pagination-link dashboard-page-link" href="?activity={{ activity_filter }}&amp;date_from={{ report_date_from|urlencode }}&amp;date_to={{ report_date_to|urlencode }}&amp;user={{ report_user|urlencode }}&amp;status={{ report_status|urlencode }}&amp;document={{ report_document|urlencode }}&amp;sort={{ sort_order }}&amp;per_page={{ rows_per_page }}&amp;page={{ page_obj.next_page_number }}" aria-label="Next page" title="Next page"><svg class="pagination-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></a>
+        <a class="pagination-link dashboard-page-link" href="?activity={{ activity_filter }}&amp;date_from={{ report_date_from|urlencode }}&amp;date_to={{ report_date_to|urlencode }}&amp;user={{ report_user|urlencode }}&amp;status={{ report_status|urlencode }}&amp;document={{ report_document|urlencode }}&amp;sort={{ sort_order }}&amp;per_page={{ rows_per_page }}&amp;page={{ page_obj.paginator.num_pages }}" aria-label="Last page" title="Last page"><svg class="pagination-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 17 5-5-5-5"/><path d="m6 17-5-5 5-5"/></svg></a>
       {% endif %}
     </div>
   </nav>
@@ -814,8 +946,23 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="10" x2="12" y2="16"/><line x1="12" y1="7" x2="12.01" y2="7"/></svg>
       <span>Details</span>
     </button>
+    <a class="audit-mobile-sheet-action" id="audit-mobile-download-pdf" href="#" download aria-label="Download PDF" onclick="auditMobileDownloadPdf(event)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
+      <span>Download PDF</span>
+    </a>
   </div>
 </div>
+<div class="integrity-log-overlay" id="integrity-log-overlay" onclick="closeIntegrityScanLog()"></div>
+<section class="integrity-log-dialog" id="integrity-log-dialog" role="dialog" aria-modal="true" aria-labelledby="integrity-log-title" aria-hidden="true">
+  <div class="integrity-log-header">
+    <strong id="integrity-log-title">Integrity Scan Debug Log</strong>
+    <button type="button" class="integrity-log-close" onclick="closeIntegrityScanLog()" aria-label="Close integrity scan log">&times;</button>
+  </div>
+  <div class="integrity-log-body">
+    <p class="integrity-log-summary" id="integrity-log-summary"></p>
+    <pre id="integrity-log-content">No debug log was recorded for this scan.</pre>
+  </div>
+</section>
 {% comment %}
 <div class="audit-pdf-overlay" id="audit-pdf-overlay" onclick="closeAuditPdf()"></div>
 <div class="audit-pdf-panel" id="audit-pdf-panel" aria-hidden="true">
@@ -862,6 +1009,45 @@
 </div>
 {% endcomment %}
 <script>
+ (function() {
+  window.integrityScanPolls = window.integrityScanPolls || {};
+  window.renderIntegrityTimer = function(elapsedMs) {
+    const timer = document.querySelector('[data-integrity-timer]');
+    if (!timer) return;
+    const elapsed = Math.max(0, Math.floor(Number(elapsedMs || 0) / 1000));
+    const minutes = String(Math.floor(elapsed / 60)).padStart(2, '0');
+    const seconds = String(elapsed % 60).padStart(2, '0');
+    timer.textContent = minutes + ':' + seconds;
+  };
+  window.startIntegrityScanPolling = function(url, onData) {
+    if (!url) return;
+    const poll = window.integrityScanPolls[url] || { active: false, listeners: [] };
+    window.integrityScanPolls[url] = poll;
+    if (onData && poll.listeners.indexOf(onData) === -1) poll.listeners.push(onData);
+    if (poll.active) return;
+    poll.active = true;
+    function refresh() {
+      fetch(url, { cache: 'no-store' })
+        .then(function(response) { if (!response.ok) throw new Error('Unable to load scan status'); return response.json(); })
+        .then(function(data) {
+          poll.listeners.forEach(function(listener) { listener(data); });
+          if (data.result === 'Running') {
+            window.setTimeout(refresh, 2000);
+          } else {
+            poll.active = false;
+          }
+        })
+        .catch(function() { window.setTimeout(refresh, 3000); });
+    }
+    refresh();
+  };
+  const banner = document.querySelector('[data-integrity-started][data-log-url]');
+  if (banner) {
+    window.startIntegrityScanPolling(banner.dataset.logUrl, function(data) {
+      if (data.elapsed_ms !== null && data.elapsed_ms !== undefined) window.renderIntegrityTimer(data.elapsed_ms);
+    });
+  }
+ })();
 function styleDashboardStatusFilter(select) {
   if (!select) return;
   select.classList.remove('status-pending', 'status-sent', 'status-approved');
@@ -869,21 +1055,55 @@ function styleDashboardStatusFilter(select) {
 }
 styleDashboardStatusFilter(document.getElementById('report-status'));
 function openAuditPdfFromRow(row) {
+  if (row.dataset.action === 'Integrity Scan') {
+    if (window.dashboardIsAdmin) openIntegrityScanLog(row);
+    return;
+  }
   if (window.matchMedia('(max-width: 900px)').matches) {
     openAuditMobileSheet(row);
     return;
   }
   openAuditPdfDetails(row);
 }
+window.dashboardIsAdmin = {% if request.user.is_staff %}true{% else %}false{% endif %};
+function openIntegrityScanLog(row) {
+  const overlay = document.getElementById('integrity-log-overlay');
+  const dialog = document.getElementById('integrity-log-dialog');
+  if (!overlay || !dialog) return;
+  document.getElementById('integrity-log-summary').textContent = row.dataset.note || 'Integrity scan details';
+  const content = document.getElementById('integrity-log-content');
+  content.textContent = 'Loading scan debug log...';
+  overlay.classList.add('open');
+  dialog.classList.add('open');
+  dialog.setAttribute('aria-hidden', 'false');
+  const logUrl = '/dashboard/activity/' + encodeURIComponent(row.dataset.logId) + '/verification-log/';
+  window.startIntegrityScanPolling(logUrl, function(data) {
+      document.getElementById('integrity-log-summary').textContent = data.note || 'Integrity scan details';
+      content.textContent = data.debug_log || 'No debug log was recorded for this scan.';
+      content.scrollTop = content.scrollHeight;
+      if (data.elapsed_ms !== null && data.elapsed_ms !== undefined && window.renderIntegrityTimer) {
+        window.renderIntegrityTimer(data.elapsed_ms);
+      }
+  });
+}
+function closeIntegrityScanLog() {
+  const overlay = document.getElementById('integrity-log-overlay');
+  const dialog = document.getElementById('integrity-log-dialog');
+  if (!overlay || !dialog) return;
+  overlay.classList.remove('open');
+  dialog.classList.remove('open');
+  dialog.setAttribute('aria-hidden', 'true');
+}
 function openAuditPdfDetails(row) {
   const url = row.dataset.previewUrl;
   const title = row.dataset.title;
+  if (url && openPdfInMobileViewer(url, row.dataset.contractId, title, true)) return;
   const frame = document.getElementById('audit-pdf-frame');
   const unavailable = document.getElementById('audit-pdf-unavailable');
   const unavailableReason = document.getElementById('audit-pdf-unavailable-reason');
   const download = document.getElementById('audit-pdf-download-btn');
 
-  frame.src = url || '';
+  frame.src = sealGuardPdfFrameUrl(url || '', row.dataset.contractId, row.dataset.title);
   frame.style.display = url ? 'block' : 'none';
   unavailable.classList.toggle('show', !url);
   unavailableReason.textContent = 'Reason: ' + (row.dataset.previewReason || 'This PDF is no longer retained.');
@@ -932,10 +1152,17 @@ function openAuditMobileSheet(row) {
   const sheet = document.getElementById('audit-mobile-action-sheet');
   const overlay = document.getElementById('audit-mobile-sheet-overlay');
   const viewButton = document.getElementById('audit-mobile-view-pdf');
+  const downloadButton = document.getElementById('audit-mobile-download-pdf');
   if (!sheet || !overlay) return;
   auditMobileRow = row;
   document.getElementById('audit-mobile-sheet-title').textContent = row.dataset.title || 'Document activity';
   if (viewButton) viewButton.disabled = !row.dataset.previewUrl;
+  if (downloadButton) {
+    const downloadUrl = row.dataset.downloadUrl || row.dataset.previewUrl || '';
+    downloadButton.href = downloadUrl || '#';
+    downloadButton.classList.toggle('disabled', !downloadUrl);
+    downloadButton.setAttribute('aria-disabled', String(!downloadUrl));
+  }
   sheet.classList.add('open');
   overlay.classList.add('open');
   sheet.setAttribute('aria-hidden', 'false');
@@ -951,7 +1178,7 @@ function auditMobileViewPdf() {
   const row = auditMobileRow;
   if (!row || !row.dataset.previewUrl) return;
   closeAuditMobileSheet();
-  openPdfInMobileViewer(row.dataset.previewUrl);
+  openPdfInMobileViewer(row.dataset.previewUrl, row.dataset.contractId, row.dataset.title);
 }
 function auditMobileViewDetails() {
   const row = auditMobileRow;
@@ -959,7 +1186,16 @@ function auditMobileViewDetails() {
   closeAuditMobileSheet();
   openAuditPdfDetails(row);
 }
+function auditMobileDownloadPdf(event) {
+  const button = document.getElementById('audit-mobile-download-pdf');
+  if (!button || button.getAttribute('aria-disabled') === 'true') {
+    event.preventDefault();
+    return;
+  }
+  closeAuditMobileSheet();
+}
 function loadAuditVersions(contractId, selectedVersion) {
+  document.getElementById('audit-pdf-activity-uploader').textContent = '—';
   const list = document.getElementById('audit-version-list');
   if (!list) return;
   if (!contractId) {
@@ -977,16 +1213,20 @@ function loadAuditVersions(contractId, selectedVersion) {
       }
       const current = data.versions.find(function(version) { return version.is_current; });
       const activeVersion = Number(selectedVersion) || (current && current.version_number);
+      const selected = data.versions.find(version => version.version_number === activeVersion);
+      document.getElementById('audit-pdf-activity-uploader').textContent = selected ? selected.created_by : 'Unknown account';
       if (activeVersion) document.getElementById('audit-pdf-version').textContent = 'v' + activeVersion;
       data.versions.forEach(function(version) {
         const item = document.createElement('button');
         item.type = 'button';
-        item.className = 'audit-version-item' + (version.valid === false ? ' invalid' : '') + (version.version_number === activeVersion ? ' active' : '');
-        item.innerHTML = '<span class="audit-version-icon">' + (version.valid === false ? '!' : '✓') + '</span><span class="audit-version-meta"><span class="audit-version-label">Version ' + version.version_number + (version.is_current ? ' · Current' : '') + '</span><span class="audit-version-date">' + version.created_at + '</span></span>';
+        item.className = 'audit-version-item' + (version.valid === false ? ' invalid' : version.valid === null ? ' pending' : '') + (version.version_number === activeVersion ? ' active' : '');
+        const integrityTitle = version.valid === true ? 'Integrity check passed' : version.valid === false ? 'Integrity check failed' : 'Integrity not checked yet, please wait for the integrity scan to finish';
+        item.innerHTML = '<span class="audit-version-icon" title="' + integrityTitle + '">' + (version.valid === true ? '✓' : version.valid === false ? '!' : '…') + '</span><span class="audit-version-meta"><span class="audit-version-label">Version ' + version.version_number + (version.is_current ? ' · Current' : '') + '</span><span class="audit-version-date">' + version.created_at + '</span><span class="audit-version-account">Added by ' + escapeAuditVersionHistoryText(version.created_by) + '</span></span>';
         item.addEventListener('click', function() {
+          document.getElementById('audit-pdf-activity-uploader').textContent = version.created_by || 'Unknown account';
           const versionUrl = version.preview_url || version.file_url;
-          if (openPdfInMobileViewer(versionUrl)) return;
-          document.getElementById('audit-pdf-frame').src = versionUrl;
+          if (openPdfInMobileViewer(versionUrl, contractId)) return;
+          document.getElementById('audit-pdf-frame').src = sealGuardPdfFrameUrl(versionUrl);
           document.getElementById('audit-pdf-download-btn').href = version.file_url || version.preview_url || '#';
           document.getElementById('audit-pdf-version').textContent = 'v' + version.version_number;
           document.querySelectorAll('.audit-version-item').forEach(function(other) { other.classList.remove('active'); });
@@ -996,6 +1236,12 @@ function loadAuditVersions(contractId, selectedVersion) {
       });
     })
     .catch(function() { list.innerHTML = '<div class="audit-version-loading">Version history could not be loaded.</div>'; });
+}
+
+function escapeAuditVersionHistoryText(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, function(character) {
+    return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[character];
+  });
 }
 
 function loadVerificationHistory(logId) {
@@ -1300,5 +1546,12 @@ document.addEventListener('click', function(event) {
     window.location.href = link.href;
   });
 });
+
+function changeDashboardRowsPerPage(value) {
+  const url = new URL(window.location.href);
+  url.searchParams.set('per_page', value);
+  url.searchParams.delete('page');
+  window.location.href = url.toString();
+}
 </script>
 {% endblock %}

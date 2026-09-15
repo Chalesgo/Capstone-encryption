@@ -6,6 +6,7 @@ import io
 import os
 import tempfile
 import zipfile
+from io import StringIO
 from pathlib import Path
 from unittest import expectedFailure
 from unittest.mock import patch
@@ -16,6 +17,7 @@ from django.contrib.auth.models import Permission, User
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.cache import cache
+from django.core.management import call_command
 from django.http import HttpResponse
 from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
@@ -66,6 +68,29 @@ class AuditLogTests(TestCase):
         self.assertContains(response, 'contracts/sealguard-admin.css')
         self.assertContains(response, 'Back to SealGuard')
 
+    @patch('contracts.management.commands.verify_integrity.verify_version_chain', return_value=[])
+    def test_integrity_scan_reports_failed_version(self, verify_chain):
+        ContractVersion.objects.create(
+            contract=self.contract,
+            version_number=1,
+            file=self.contract.file.name,
+            fingerprint='stored-fingerprint',
+            previous_fingerprint='',
+        )
+
+        output = StringIO()
+        call_command('verify_integrity', stdout=output, stderr=output)
+
+        self.assertIn('1 version(s)', output.getvalue())
+        self.assertIn('1 failure(s)', output.getvalue())
+        self.assertTrue(AuditLog.objects.filter(
+            contract=self.contract,
+            action='reported_tampering',
+            verification_source='Scheduled Integrity Scan',
+            integrity_check='Failed',
+        ).exists())
+        verify_chain.assert_called_once_with(self.contract)
+
     def test_document_title_survives_permanent_deletion(self):
         request = RequestFactory().post('/')
         request.user = self.user
@@ -114,10 +139,69 @@ class AuditLogTests(TestCase):
         self.assertEqual(viewed_event.user, self.user)
         self.assertEqual(viewed_event.document_size, self.contract.file.size)
 
+        preview = self.client.get(reverse('preview_contract', args=[self.contract.id]))
+        self.assertEqual(preview.status_code, 200)
+        preview.close()
+        self.assertFalse(AuditLog.objects.filter(action='downloaded').exists())
+
         downloaded = self.client.get(reverse('download_contract', args=[self.contract.id]))
         downloaded.close()
         downloaded_event = AuditLog.objects.get(action='downloaded')
         self.assertEqual(downloaded_event.document_size, self.contract.file.size)
+
+    def test_mobile_pdf_static_assets_are_served_when_debug_is_false(self):
+        response = self.client.get('/static/contracts/mobile-pdf-host.js?v=details-3')
+
+        self.assertEqual(response.status_code, 200)
+        body = b''.join(response.streaming_content).decode()
+        self.assertIn('SealGuardPdf', body)
+        self.assertEqual(response.headers['Content-Type'].split(';')[0], 'application/javascript')
+
+    def test_version_history_identifies_account_that_added_each_version(self):
+        reviser = User.objects.create_user('revision_editor', password='password')
+        ContractVersion.objects.create(
+            contract=self.contract,
+            version_number=1,
+            source='upload',
+            file=self.contract.file.name,
+            created_by=self.user,
+        )
+        ContractVersion.objects.create(
+            contract=self.contract,
+            version_number=2,
+            source='revision',
+            file=self.contract.file.name,
+            created_by=reviser,
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('contract_version_history', args=[self.contract.id]))
+
+        self.assertEqual(response.status_code, 200)
+        versions = response.json()['versions']
+        self.assertEqual(versions[0]['created_by'], 'revision_editor')
+        self.assertEqual(versions[1]['created_by'], 'admin')
+        self.assertContains(self.client.get(reverse('contract_list')), 'Added by')
+        self.assertContains(self.client.get(reverse('dashboard')), 'Added by')
+
+    @patch('contracts.views.verify_version_chain')
+    def test_mobile_version_metadata_avoids_pdf_chain_work_and_requires_login(self, verify_chain):
+        ContractVersion.objects.create(
+            contract=self.contract, version_number=1, source='upload',
+            file=self.contract.file.name, created_by=self.user,
+        )
+        url = reverse('contract_version_history', args=[self.contract.id])
+        self.assertEqual(self.client.get(url, {'metadata_only': '1'}).status_code, 302)
+        self.client.force_login(self.user)
+        response = self.client.get(url, {'metadata_only': '1'})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data['title'], self.contract.title)
+        self.assertEqual(data['versions'][0]['created_by'], self.user.username)
+        self.assertIsNone(data['versions'][0]['valid'])
+        verify_chain.assert_not_called()
+        self.client.get(url)
+        verify_chain.assert_not_called()
 
     def test_dashboard_filters_activity_and_sorts_oldest_first(self):
         added = AuditLog.objects.create(action='added', document_title='First')
@@ -175,6 +259,25 @@ class AuditLogTests(TestCase):
         for activity in ('viewed', 'encrypted', 'approved', 'rejected'):
             self.assertContains(response, f'<option value="{activity}"')
 
+    def test_dashboard_shows_integrity_scan_activity_with_debug_log(self):
+        scan = AuditLog.objects.create(
+            action='integrity_scan',
+            document_title='Integrity Scan',
+            note='Integrity scan completed.',
+            verification_source='Scheduled Integrity Scan',
+            verification_result='Completed',
+            integrity_check='Complete',
+            verification_debug_log='Checked 12 version(s).\nDuration: 450 ms.',
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('dashboard'), {'activity': 'integrity_scan'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context['page_obj'].object_list), [scan])
+        self.assertContains(response, 'Integrity Scan')
+        self.assertContains(response, 'Checked 12 version(s).')
+
     def test_dashboard_marks_deleted_pdf_as_unavailable_with_reason(self):
         self.contract.is_trashed = True
         self.contract.trashed_at = timezone.now()
@@ -202,6 +305,9 @@ class AuditLogTests(TestCase):
         self.assertContains(response, 'id="audit-mobile-action-sheet"')
         self.assertContains(response, '>View PDF</span>')
         self.assertContains(response, '>Details</span>')
+        self.assertContains(response, 'id="audit-mobile-download-pdf"')
+        self.assertContains(response, '>Download PDF</span>')
+        self.assertContains(response, 'function auditMobileDownloadPdf(event)')
         self.assertContains(response, 'openAuditMobileSheet(row)')
         self.assertContains(response, 'openAuditPdfDetails(row)')
 
@@ -230,6 +336,9 @@ class AuditLogTests(TestCase):
         self.assertContains(response, 'openPdfPreview(contractId, row.dataset.fileUrl, row.dataset.contractTitle)')
         self.assertContains(response, 'id="contracts-doc-panel"')
         self.assertContains(response, 'id="mobile-contract-action-sheet"')
+        self.assertContains(response, '>Details</span>')
+        self.assertContains(response, 'function mobileSheetDetails()')
+        self.assertContains(response, 'forceDetails = false')
         self.assertContains(response, 'id="mobile-contract-edit-sheet"')
         self.assertContains(response, 'function openMobileEditSheet(contractId)')
         self.assertContains(response, 'function mobileEditAddRevision()')

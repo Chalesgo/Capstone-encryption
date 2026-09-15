@@ -1,8 +1,10 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="{% static 'contracts/mobile-pdf-host.js' %}?v=debug-5" data-viewer="{% static 'contracts/mobile-pdf.html' %}?v=debug-5"></script>
     <title>{% block title %}SealGuard{% endblock %} — Barangay Sto. Niño</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -825,13 +827,9 @@
     </div>
 </footer>
 <script>
-// Mobile browsers often cannot render PDFs inside an iframe. Let them use
-// their native PDF viewer instead; desktop keeps the in-page preview panels.
-function openPdfInMobileViewer(url) {
-    if (!url || !window.matchMedia('(max-width: 900px)').matches) return false;
-    const popup = window.open(url, '_blank', 'noopener,noreferrer');
-    if (!popup) window.location.href = url;
-    return true;
+// All mobile PDF entry points share the local SealGuard canvas viewer.
+function openPdfInMobileViewer(url, contractId = null, title = '', details = false) {
+    return window.SealGuardPdf.open(url, contractId, title, details);
 }
 
 function toggleProfilePopover() {

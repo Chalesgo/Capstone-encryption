@@ -30,6 +30,15 @@ if (-not $pythonExe) {
     $pythonExe = $pythonCommand.Source
 }
 
+# Validate Django before opening the public tunnel. A malformed .env would
+# otherwise leave ngrok running with an unreachable upstream and show up in
+# the browser as misleading 502 errors for every media asset.
+$env:DEBUG = 'True'
+$preflight = & $pythonExe $managePy check 2>&1
+if ($LASTEXITCODE -ne 0) {
+    throw "Django preflight failed. Fix the configuration before starting ngrok:$([Environment]::NewLine)$($preflight -join [Environment]::NewLine)"
+}
+
 $tempDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("sealguard-ngrok-{0}" -f [guid]::NewGuid())
 New-Item -ItemType Directory -Path $tempDirectory | Out-Null
 $ngrokOutput = Join-Path $tempDirectory 'ngrok.stdout.log'

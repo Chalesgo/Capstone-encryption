@@ -4,6 +4,7 @@ from django.conf import settings
 from django.views.static import serve
 from django.shortcuts import redirect
 from django.contrib.auth.views import LoginView
+from django.contrib.staticfiles.views import serve as static_serve
 from contracts.forms import SealGuardAuthenticationForm
 
 def home_redirect(request):
@@ -25,6 +26,9 @@ urlpatterns = [
 # staging/performance tests. Production hosting should route MEDIA_URL through
 # its dedicated web server or storage service instead.
 urlpatterns += [
+    # Keep local/staging assets available when DEBUG=False. Production should
+    # serve STATIC_ROOT through the web server or a dedicated static host.
+    re_path(r'^static/(?P<path>.*)$', static_serve, {'insecure': True}),
     re_path(r'^media/(?P<path>.*)$', serve, {
         'document_root': settings.MEDIA_ROOT,
     }),

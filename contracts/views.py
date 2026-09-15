@@ -1312,38 +1312,71 @@ def mark_contract_viewed(request, contract_id):
     if request.method != 'POST':
         return JsonResponse({'success': False}, status=405)
     contract = get_object_or_404(Contract, id=contract_id, is_trashed=False)
-    log_activity(request, 'viewed', contract=contract, note='Opened in document viewer')
+    latest_version = contract.versions.order_by('-version_number').first()
+    _process_log('pdf_view', 'viewed_marker_received', contract=contract, request=request)
+    log_activity(
+        request, 'viewed', contract=contract,
+        note='Opened in document viewer',
+        version_number=latest_version.version_number if latest_version else None,
+    )
     return JsonResponse({'success': True})
 
 @login_required
 def contract_version_history(request, contract_id):
+    started_at = time.perf_counter()
+    metadata_only = request.GET.get('metadata_only') == '1'
+    _process_log(
+        'pdf_view', 'version_history_started', request=request,
+        requested_contract_id=contract_id, metadata_only=metadata_only,
+    )
     contract = get_object_or_404(Contract, id=contract_id)
+    contract_loaded_ms = round((time.perf_counter() - started_at) * 1000)
     verified_log = AuditLog.objects.filter(contract=contract, action='viewed').order_by('-timestamp').first()
-    versions_qs = contract.versions.order_by('-version_number')
-    chain = verify_version_chain(contract)
+    versions_qs = contract.versions.select_related('created_by').order_by('-version_number')
+    versions = list(versions_qs)
+    versions_loaded_ms = round((time.perf_counter() - started_at) * 1000)
+    # Integrity verification is performed by the startup/daily scanner. Keep
+    # PDF viewing limited to metadata so opening a document never waits for a
+    # full revision-chain recomputation.
+    chain = []
+    chain_ms = 0
+    _process_log(
+        'pdf_view', 'version_history_data_loaded', contract=contract, request=request,
+        metadata_only=metadata_only, version_count=len(versions),
+        contract_loaded_ms=contract_loaded_ms, versions_loaded_ms=versions_loaded_ms,
+        integrity_chain_ms=chain_ms, integrity_check_deferred=True,
+    )
     chain_by_version = {c['version_number']: c for c in chain}
 
     versions_data = []
-    for v in versions_qs:
+    for v in versions:
         chain_info = chain_by_version.get(v.version_number, {})
         versions_data.append({
             'version_number': v.version_number,
             'source': v.get_source_display(),
             'created_at': v.created_at.strftime('%b %d, %Y'),
+            'created_by': v.created_by.username if v.created_by else 'Unknown account',
             'file_url': reverse('download_contract_version', args=[v.id]) if v.file else '',
             'preview_url': reverse('preview_contract_version', args=[v.id]) if v.file else '',
             'valid': chain_info.get('valid'),
             'is_current': bool(contract.file) and v.file.name == contract.file.name,
         })
 
-    return JsonResponse({
+    response_data = {
         'success': True,
         'created': contract.uploaded_at.strftime('%b %d, %Y'),
         'encrypted': versions_data[0]['created_at'] if versions_data else None,
         'verified': verified_log.timestamp.strftime('%b %d, %Y') if verified_log else 'Not yet verified',
         'version_count': len(versions_data),
+        'title': contract.title,
         'versions': versions_data,
-    })
+    }
+    _process_log(
+        'pdf_view', 'version_history_completed', contract=contract, request=request,
+        metadata_only=metadata_only, version_count=len(versions_data),
+        response_build_ms=round((time.perf_counter() - started_at) * 1000),
+    )
+    return JsonResponse(response_data)
 
 def _verification_preview_path(token):
     if not token or not re.fullmatch(r'[0-9a-f]{32}', token):
@@ -1479,11 +1512,20 @@ def audit_verification_history(request, log_id):
 
 @login_required
 def audit_verification_log_detail(request, log_id):
+    if not request.user.is_staff:
+        return JsonResponse({'success': False, 'message': 'Administrator access required.'}, status=403)
     entry = get_object_or_404(AuditLog, pk=log_id, verification_result__gt='')
+    elapsed_ms = None
+    if entry.verification_result == 'Running':
+        elapsed_ms = max(0, round((timezone.now() - entry.timestamp).total_seconds() * 1000))
     return JsonResponse({
         'success': True,
         'note': entry.note,
         'debug_log': entry.verification_debug_log,
+        'result': entry.verification_result,
+        'integrity': entry.integrity_check,
+        'timestamp': timezone.localtime(entry.timestamp).strftime('%Y-%m-%d %H:%M:%S'),
+        'elapsed_ms': elapsed_ms,
     })
 
 
@@ -1845,6 +1887,7 @@ def _contract_file_access(request, contract):
 
 
 def preview_contract(request, contract_id):
+    started_at = time.perf_counter()
     contract = get_object_or_404(Contract, pk=contract_id, is_trashed=False)
     if not _contract_file_access(request, contract):
         return redirect(f"{reverse('login')}?next={request.path}")
@@ -1852,6 +1895,10 @@ def preview_contract(request, contract_id):
         raise Http404
     latest_version = contract.versions.order_by('-version_number').first()
     version_number = latest_version.version_number if latest_version else 1
+    _process_log(
+        'pdf_view', 'current_pdf_response_started', contract=contract, request=request,
+        version=version_number, lookup_ms=round((time.perf_counter() - started_at) * 1000),
+    )
     return FileResponse(
         contract.file.open('rb'),
         content_type='application/pdf',
@@ -1860,6 +1907,7 @@ def preview_contract(request, contract_id):
 
 
 def preview_contract_version(request, version_id):
+    started_at = time.perf_counter()
     version = get_object_or_404(
         ContractVersion.objects.select_related('contract'),
         pk=version_id,
@@ -1869,6 +1917,11 @@ def preview_contract_version(request, version_id):
         return redirect(f"{reverse('login')}?next={request.path}")
     if not version.file:
         raise Http404
+    _process_log(
+        'pdf_view', 'version_pdf_response_started', contract=version.contract, request=request,
+        version=version.version_number, version_id=version.id,
+        lookup_ms=round((time.perf_counter() - started_at) * 1000),
+    )
     return FileResponse(
         version.file.open('rb'),
         content_type='application/pdf',
@@ -1953,9 +2006,10 @@ def tag_contract(request, pk):
 @login_required
 def create_folder(request):
     if request.method == 'POST':
+        name = request.POST.get('name', '').strip()[:100] or 'Untitled Folder'
         last_order = Folder.objects.order_by('-sort_order').values_list('sort_order', flat=True).first()
         folder = Folder.objects.create(
-            name='Untitled Folder',
+            name=name,
             owner=request.user,
             sort_order=(last_order + 1) if last_order is not None else 0,
         )
@@ -2106,8 +2160,11 @@ def dashboard(request):
     total_documents = Contract.objects.count()
     verified_documents = Contract.objects.filter(encrypted_cf__gt='').count()
     flagged_documents = AuditLog.objects.filter(action='reported_tampering').count()
+    latest_integrity_scan = AuditLog.objects.filter(
+        action='integrity_scan', verification_source='Scheduled Integrity Scan',
+    ).order_by('-timestamp', '-id').first()
 
-    valid_activity_filters = ['viewed', 'downloaded', 'added', 'encrypted', 'edited', 'approved', 'rejected', 'deleted', 'reported_tampering', 'verification', 'failed_login', 'login', 'logout', 'locked_out']
+    valid_activity_filters = ['viewed', 'downloaded', 'added', 'encrypted', 'edited', 'approved', 'rejected', 'deleted', 'reported_tampering', 'integrity_scan', 'verification', 'failed_login', 'login', 'logout', 'locked_out']
     requested_activity_filters = [
         value.strip()
         for raw_value in request.GET.getlist('activity')
@@ -2169,10 +2226,23 @@ def dashboard(request):
     paginator = Paginator(recent_logs, rows_per_page)
     page_obj = paginator.get_page(request.GET.get('page'))
 
+    # Older activity rows were recorded before viewed events stored their
+    # version number. Infer the version that existed when that activity took
+    # place so historical rows remain useful instead of showing "Current".
+    for log in page_obj:
+        log.display_version_number = log.version_number
+        if not log.display_version_number and log.contract_id:
+            historical_version = log.contract.versions.filter(
+                created_at__lte=log.timestamp,
+            ).order_by('-version_number').first()
+            if historical_version:
+                log.display_version_number = historical_version.version_number
+
     return render(request, 'dashboard.html', {
         'total_documents': total_documents,
         'verified_documents': verified_documents,
         'flagged_documents': flagged_documents,
+        'latest_integrity_scan': latest_integrity_scan,
         'recent_logs': page_obj,
         'page_obj': page_obj,
         'activity_filter': activity_filter,
@@ -2228,7 +2298,7 @@ def export_dashboard_report(request):
     for log in logs:
         writer.writerow([
             log.display_document_title,
-            log.user.username if log.user else 'N/A',
+            'System' if log.action == 'integrity_scan' else (log.user.username if log.user else 'N/A'),
             log.get_action_display(),
             log.timestamp.isoformat(),
             log.ip_address or '',

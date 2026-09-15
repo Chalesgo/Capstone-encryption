@@ -33,6 +33,7 @@
         <div class="meta-row audit-meta-row"><span class="meta-row-label audit-meta-label">Version</span><span class="meta-row-value audit-meta-value" id="{{ viewer_prefix }}-version">Current</span></div>
         <div class="meta-row audit-meta-row"><span class="meta-row-label audit-meta-label">File Size</span><span class="meta-row-value audit-meta-value" id="{{ viewer_prefix }}-size">—</span></div>
         <div class="meta-row audit-meta-row"><span class="meta-row-label audit-meta-label">Evidence</span><span class="meta-row-value audit-meta-value" id="{{ viewer_prefix }}-retention">—</span></div>
+        <div class="meta-row audit-meta-row"><span class="meta-row-label audit-meta-label">Uploaded by</span><span class="meta-row-value audit-meta-value" id="{{ viewer_prefix }}-activity-uploader">—</span></div>
       </div>
       {% else %}
       <p class="sidebar-section-label">Document Info</p>
@@ -41,16 +42,17 @@
         <div class="meta-row"><span class="meta-row-label">Last Encrypted</span><span class="meta-row-value" id="{{ viewer_prefix }}-meta-encrypted">—</span></div>
         <div class="meta-row"><span class="meta-row-label">Last Verified</span><span class="meta-row-value" id="{{ viewer_prefix }}-meta-verified">—</span></div>
         <div class="meta-row"><span class="meta-row-label">Version</span><span class="meta-row-value" id="{{ viewer_prefix }}-meta-version">—</span></div>
+        <div class="meta-row"><span class="meta-row-label">Uploaded by</span><span class="meta-row-value" id="{{ viewer_prefix }}-meta-uploader">—</span></div>
       </div>
       {% endif %}
       <p class="sidebar-section-label">Version History</p>
-      <div class="version-list audit-version-list" id="{{ viewer_prefix }}-version-list"></div>
+      <div class="version-list audit-version-list" id="{{ viewer_prefix }}-version-list"><div class="audit-version-loading">No version history available.</div></div>
       {% if viewer_show_verification %}
       <p class="sidebar-section-label">Activity Note</p>
       <p class="pdf-viewer-note" id="{{ viewer_prefix }}-note">No additional activity note.</p>
       <p class="sidebar-section-label">Verification History</p>
       <div class="verification-history-list" id="{{ viewer_prefix }}-verification-history">
-        <div class="audit-version-loading">Select an activity to load verification history.</div>
+        <div class="verification-history-empty">This document has no recorded verification attempts.</div>
       </div>
       {% endif %}
     </aside>

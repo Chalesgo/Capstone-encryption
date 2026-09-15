@@ -92,6 +92,24 @@ The application will be available at:
 
 http://127.0.0.1:8000
 
+### Integrity Monitoring
+
+SealGuard scans every stored PDF version when the Django development server
+starts. The scan runs in the background so it does not block the first page
+request. Run it manually with:
+
+```powershell
+$env:DEBUG='False'
+python manage.py verify_integrity
+```
+
+For daily Windows monitoring, create a Task Scheduler task that runs
+`scripts/run_integrity_scan.ps1` once per day. Failed checks are written to
+the terminal log and dashboard audit log; repeated identical failures are
+limited to one audit entry per 24 hours.
+Each completed run also appears as a compact `Integrity Scan` activity. Select
+that activity in the dashboard to open its stored debug log.
+
 ---
 
 ## Features
