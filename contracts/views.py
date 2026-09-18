@@ -1,9 +1,18 @@
+from .pdf_storage import open_pdf, read_pdf, write_pdf
 #views.py 
 from django.shortcuts import render, redirect, get_object_or_404
+from .access import (can_view, can_download, can_share, can_manage, is_admin, is_read_only_user,
+                     managed_contracts, viewable_contracts,
+                     visible_logs, document_access, view_document_access, bulk_document_access, workspace_access,
+                     workspace_mutation)
+from .integrity import INTEGRITY_SCAN_CACHE_KEY, INTEGRITY_SCAN_LOCK_KEY
+from django.core.cache import cache
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.cache import never_cache
 from django.conf import settings
-from .models import Contract, Folder, ContractVersion, PhysicalVerificationManifest, Tutorial
-from .forms import ContractForm, TutorialForm, sanitize_tutorial_html
+from .models import Contract, Folder, ContractVersion, PhysicalVerificationManifest, Tutorial, AccountSecurity, PasswordResetRequest, StaffInvitation
+from .forms import (ContractForm, TutorialForm, StaffRegistrationForm, StaffPasswordChangeForm,
+                    PasswordResetRequestForm, ApprovedPasswordResetForm, sanitize_tutorial_html)
 from .utils import (
     generate_file_hash,
     generate_canonical_fingerprint,
@@ -30,6 +39,9 @@ import json
 import csv
 import io
 import zipfile
+import threading
+import secrets
+import hashlib
 from PIL import Image
 from hmac import compare_digest
 from django.http import JsonResponse, FileResponse, Http404, HttpResponse
@@ -41,6 +53,8 @@ from django.core.paginator import Paginator
 from django.urls import reverse
 from django.core.files import File
 from django.contrib.auth.models import User
+from django.contrib.auth import login
+from .emailing import send_sealguard_mail
 from django.utils.dateparse import parse_date
 from .physical_verification import (
     build_manifest, compare_page, decode_page_token, sign_manifest,
@@ -59,7 +73,7 @@ def _document_name_stem(value):
     return name.strip()
 
 
-def _same_name_contract(uploaded_name, submitted_title=''):
+def _same_name_contract(uploaded_name, submitted_title='', user=None):
     names = {
         name.casefold()
         for name in (
@@ -74,7 +88,7 @@ def _same_name_contract(uploaded_name, submitted_title=''):
     query = Q()
     for name in names:
         query |= Q(base_filename__iexact=name) | Q(title__iexact=name) | Q(title__iexact=f'{name}.pdf')
-    return Contract.objects.filter(query, is_trashed=False).order_by('id').first()
+    return managed_contracts(user).filter(query, is_trashed=False).order_by('id').first()
 
 
 def _contract_pdf_filename(contract, version_number):
@@ -84,6 +98,12 @@ def _contract_pdf_filename(contract, version_number):
     if not title:
         title = f'contract_{contract.id}'
     return f'{title[:220]}_v{version_number}.pdf'
+
+
+def _verification_url(request):
+    """Return the configured public verification URL for soft-copy links."""
+    base = getattr(settings, 'PUBLIC_BASE_URL', '').strip().rstrip('/')
+    return base + reverse('public_verify') if base else request.build_absolute_uri(reverse('public_verify'))
 
 
 def _process_log(process, stage, *, contract=None, request=None, level='info', **details):
@@ -196,6 +216,7 @@ def help_tutorials(request):
 
 
 @login_required
+@workspace_mutation
 def edit_tutorial(request, pk):
     if not request.user.has_perm('contracts.change_tutorial'):
         return JsonResponse({'success': False, 'error': 'not_allowed'}, status=403)
@@ -211,6 +232,7 @@ def edit_tutorial(request, pk):
 
 
 @login_required
+@workspace_mutation
 def delete_tutorial(request, pk):
     if not request.user.has_perm('contracts.delete_tutorial'):
         return JsonResponse({'success': False, 'error': 'not_allowed'}, status=403)
@@ -221,7 +243,7 @@ def delete_tutorial(request, pk):
     tutorial.delete()
     return redirect('help_tutorials')
 
-def _existing_sealed_upload(uploaded_file):
+def _existing_sealed_upload(uploaded_file, user=None):
     """Recognize issued copies by their marker and exact stored PDF bytes."""
     import hashlib
     uploaded_file.seek(0)
@@ -239,7 +261,7 @@ def _existing_sealed_upload(uploaded_file):
         return None
     digest = hashlib.sha256(contents).digest()
     versions = ContractVersion.objects.select_related('contract').filter(
-        encrypted_cf=marker, contract__is_trashed=False,
+        encrypted_cf=marker, contract__is_trashed=False, contract__in=managed_contracts(user),
     )
     for version in versions:
         try:
@@ -259,6 +281,7 @@ def _existing_sealed_upload(uploaded_file):
 
 
 @login_required
+@workspace_mutation
 def check_duplicate_upload(request):
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'invalid_method'}, status=405)
@@ -267,11 +290,11 @@ def check_duplicate_upload(request):
     if not uploaded_file:
         return JsonResponse({'success': False, 'error': 'missing_file'}, status=400)
 
-    existing = _existing_sealed_upload(uploaded_file)
+    existing = _existing_sealed_upload(uploaded_file, request.user)
     if existing:
         return JsonResponse({'success': True, 'already_authenticated': existing, 'duplicates': []})
 
-    same_name = _same_name_contract(uploaded_file.name, request.POST.get('title', ''))
+    same_name = _same_name_contract(uploaded_file.name, request.POST.get('title', ''), request.user)
     if same_name:
         latest = same_name.versions.order_by('-version_number').first()
         return JsonResponse({
@@ -290,11 +313,9 @@ def check_duplicate_upload(request):
     )
     os.makedirs(os.path.dirname(temp_path), exist_ok=True)
     try:
-        with open(temp_path, 'wb') as temporary_file:
-            for chunk in uploaded_file.chunks():
-                temporary_file.write(chunk)
+        write_pdf(temp_path, uploaded_file.read())
         original_cf = generate_canonical_fingerprint(temp_path)
-        duplicates = Contract.objects.filter(
+        duplicates = managed_contracts(request.user).filter(
             original_fingerprint=original_cf,
             is_trashed=False,
         ).order_by('id')
@@ -322,16 +343,17 @@ def check_duplicate_upload(request):
 
 
 @login_required
+@workspace_mutation
 def upload_contract(request):
     if request.method == 'POST':
         form = ContractForm(request.POST, request.FILES)
         if form.is_valid():
-            existing = _existing_sealed_upload(request.FILES['file'])
+            existing = _existing_sealed_upload(request.FILES['file'], request.user)
             if existing:
                 return render(request, 'upload.html', {'form': form, 'already_authenticated': existing})
             existing_name_match = _same_name_contract(
                 request.FILES['file'].name,
-                request.POST.get('title', ''),
+                request.POST.get('title', ''), request.user,
             )
             if existing_name_match and request.POST.get('force_new') != '1':
                 return add_revision(request, existing_name_match.id)
@@ -339,6 +361,7 @@ def upload_contract(request):
             started_at = time.perf_counter()
             contract = form.save(commit=False)
             contract.recipient = request.user
+            contract.uploaded_by = request.user
             contract.save()
             _process_log('initial_encryption', 'contract_created', contract=contract, request=request)
 
@@ -346,8 +369,8 @@ def upload_contract(request):
             original_filename_only = os.path.splitext(os.path.basename(pdf_path))[0]
             contract.base_filename = original_filename_only
 
-            # Encrypted upload remains the default.  The explicit opt-out is
-            # useful for staging/importing a PDF before sealing it later.
+            # Keep the legacy staging flag for existing imports and tests. The
+            # normal upload interface no longer exposes an unencrypted option.
             if request.POST.get('skip_encryption') == '1':
                 original_cf = generate_canonical_fingerprint(pdf_path)
                 vector_cf = generate_vector_fingerprint(pdf_path)
@@ -368,10 +391,8 @@ def upload_contract(request):
                     previous_fingerprint='',
                     created_by=request.user,
                 )
-                log_activity(
-                    request, 'added', contract=contract,
-                    note='Initial upload stored without encryption',
-                )
+                log_activity(request, 'added', contract=contract,
+                             note='Initial upload encrypted at rest; authenticity sealing skipped')
                 _process_log(
                     'initial_upload', 'completed_without_encryption',
                     contract=contract, request=request, version=1,
@@ -410,7 +431,8 @@ def upload_contract(request):
             final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
             stamp_seal_on_pdf(
                 pdf_path, final_pdf_path, stamped_seal, qr_path=qr_path,
-                encrypted_cf=encrypted, qr_paths=qr_paths,
+                encrypted_cf=encrypted, qr_paths=qr_paths, encrypt_output=True,
+                verify_url=_verification_url(request),
             )
             _process_log('initial_encryption', 'pdf_sealed', contract=contract, request=request)
 
@@ -467,6 +489,7 @@ def upload_contract(request):
 
 
 @login_required
+@document_access()
 def encrypt_contract(request, contract_id):
     contract = get_object_or_404(Contract, id=contract_id)
     started_at = time.perf_counter()
@@ -502,7 +525,8 @@ def encrypt_contract(request, contract_id):
     final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
     stamp_seal_on_pdf(
         pdf_path, final_pdf_path, stamped_seal, qr_path=qr_path,
-        encrypted_cf=encrypted, qr_paths=qr_paths,
+        encrypted_cf=encrypted, qr_paths=qr_paths, encrypt_output=True,
+        verify_url=_verification_url(request),
     )
     _process_log('reencryption', 'pdf_sealed', contract=contract, request=request, version=next_version_number)
 
@@ -551,6 +575,7 @@ def encrypt_contract(request, contract_id):
     return redirect('contract_list')
 
 @login_required
+@document_access()
 def add_revision(request, contract_id):
     contract = get_object_or_404(Contract, id=contract_id)
 
@@ -560,7 +585,7 @@ def add_revision(request, contract_id):
         if not uploaded_file:
             return redirect('contract_list')
 
-        existing = _existing_sealed_upload(uploaded_file)
+        existing = _existing_sealed_upload(uploaded_file, request.user)
         if existing:
             return render(request, 'upload.html', {
                 'is_revision': True, 'contract': contract, 'already_authenticated': existing,
@@ -577,11 +602,9 @@ def add_revision(request, contract_id):
             })
 
         # ── Save the new revision file temporarily ──
-        temp_path = os.path.join(settings.MEDIA_ROOT, 'temp', uploaded_file.name)
+        temp_path = os.path.join(settings.MEDIA_ROOT, 'temp', f'{uuid.uuid4().hex}.pdf')
         os.makedirs(os.path.dirname(temp_path), exist_ok=True)
-        with open(temp_path, 'wb+') as f:
-            for chunk in uploaded_file.chunks():
-                f.write(chunk)
+        write_pdf(temp_path, uploaded_file.read())
 
         default_seal = os.path.join(settings.MEDIA_ROOT, 'seals', 'default_seal.png')
         stamped_seal = os.path.join(settings.MEDIA_ROOT, 'seals', f'seal_{contract.id}.png')
@@ -613,7 +636,8 @@ def add_revision(request, contract_id):
         final_pdf_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
         stamp_seal_on_pdf(
             temp_path, final_pdf_path, stamped_seal, qr_path=qr_path,
-            encrypted_cf=encrypted, qr_paths=qr_paths,
+            encrypted_cf=encrypted, qr_paths=qr_paths, encrypt_output=True,
+            verify_url=_verification_url(request),
         )
         _process_log('revision_encryption', 'pdf_sealed', contract=contract, request=request, version=next_version_number)
 
@@ -667,17 +691,18 @@ def add_revision(request, contract_id):
 
 
 @login_required
+@workspace_access
 def contract_list(request):
-    contracts = Contract.objects.filter(is_trashed=False).order_by('-modified_at', '-id')
+    contracts = viewable_contracts(request.user).filter(is_trashed=False).order_by('-modified_at', '-id')
     search_query = request.GET.get('q', '').strip()
     if search_query:
         contracts = contracts.filter(
             Q(title__icontains=search_query)
-            | Q(recipient__username__icontains=search_query)
+            | Q(uploaded_by__username__icontains=search_query)
             | Q(tags__icontains=search_query)
         )
     status_filter = request.GET.get('status', '').strip()
-    if status_filter in {'pending', 'sent', 'approved'}:
+    if status_filter in {'pending', 'final'}:
         contracts = contracts.filter(status=status_filter)
     folder_filter = request.GET.get('folder', '').strip()
     if folder_filter.isdigit():
@@ -689,6 +714,9 @@ def contract_list(request):
     if per_page not in {10, 25, 50}:
         per_page = 25
     page_obj = Paginator(contracts, per_page).get_page(request.GET.get('page'))
+    for contract in page_obj.object_list:
+        contract.can_share = can_share(request.user, contract)
+        contract.can_manage = can_manage(request.user, contract)
     # Folders are shared across the staff workspace.  Folder deletion and
     # document removal are still enforced by delete_folder below.
     folders = Folder.objects.all()
@@ -700,12 +728,13 @@ def contract_list(request):
         'status_filter': status_filter,
         'folder_filter': folder_filter,
         'per_page': per_page,
+        'read_only_user': is_read_only_user(request.user),
+        'workspace_role': 'Admin' if is_admin(request.user) else ('Staff' if request.user.is_staff else 'User'),
     })
 
 @login_required
+@document_access()
 def delete_contract(request, contract_id):
-    if not request.user.has_perm('contracts.delete_contract'):
-        return redirect('contract_list')
 
     contract = get_object_or_404(Contract, id=contract_id)
 
@@ -724,9 +753,8 @@ def delete_contract(request, contract_id):
     return render(request, 'confirm_delete.html', {'contract': contract})
 
 @login_required
+@bulk_document_access
 def bulk_delete_contracts(request):
-    if not request.user.has_perm('contracts.delete_contract'):
-        return JsonResponse({'success': False, 'error': 'not_allowed'}, status=403)
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'invalid_method'}, status=405)
 
@@ -762,6 +790,7 @@ def _bulk_contract_ids(request):
 
 
 @login_required
+@bulk_document_access
 def bulk_assign_folder(request):
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'invalid_method'}, status=405)
@@ -788,13 +817,16 @@ def bulk_assign_folder(request):
 
 
 @login_required
+@bulk_document_access
 def bulk_update_status(request):
+    if not is_admin(request.user):
+        return JsonResponse({'success': False, 'error': 'admin_required'}, status=403)
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'invalid_method'}, status=405)
 
     status = request.POST.get('status', '').strip()
     status_labels = dict(Contract.STATUS_CHOICES)
-    if status not in status_labels:
+    if status not in {'pending', 'final'}:
         return JsonResponse({'success': False, 'error': 'invalid_status'}, status=400)
 
     ids = _bulk_contract_ids(request)
@@ -805,7 +837,7 @@ def bulk_update_status(request):
             continue
         contract.status = status
         contract.save(update_fields=['status', 'modified_at'])
-        action = 'approved' if status == 'approved' else 'edited'
+        action = 'approved' if status == 'final' else 'edited'
         log_activity(
             request, action, contract=contract,
             note=f'Status changed to {status_labels[status]}',
@@ -815,6 +847,7 @@ def bulk_update_status(request):
 
 
 @login_required
+@bulk_document_access
 def bulk_encrypt_contracts(request):
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'invalid_method'}, status=405)
@@ -847,6 +880,8 @@ def bulk_encrypt_contracts(request):
 
 
 @login_required
+@bulk_document_access
+@never_cache
 def bulk_download_contracts(request):
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'invalid_method'}, status=405)
@@ -888,12 +923,10 @@ def bulk_download_contracts(request):
 
 @login_required
 def trash_list(request):
-    if not request.user.has_perm('contracts.delete_contract'):
-        return redirect('contract_list')
 
     _purge_expired_trash(request)
 
-    trashed = Contract.objects.filter(is_trashed=True).order_by('-trashed_at')
+    trashed = managed_contracts(request.user).filter(is_trashed=True).order_by('-trashed_at')
     trash_items = []
     for c in trashed:
         expires_at = c.trashed_at + timedelta(days=TRASH_RETENTION_DAYS)
@@ -909,9 +942,8 @@ def trash_list(request):
 
 
 @login_required
+@document_access()
 def restore_contract(request, contract_id):
-    if not request.user.has_perm('contracts.change_contract'):
-        return JsonResponse({'success': False}, status=403)
 
     if request.method == 'POST':
         contract = get_object_or_404(Contract, id=contract_id, is_trashed=True)
@@ -924,9 +956,8 @@ def restore_contract(request, contract_id):
 
 
 @login_required
+@document_access()
 def permanently_delete_contract(request, contract_id):
-    if not request.user.has_perm('contracts.delete_contract'):
-        return JsonResponse({'success': False}, status=403)
 
     if request.method == 'POST':
         contract = get_object_or_404(Contract, id=contract_id, is_trashed=True)
@@ -938,11 +969,9 @@ def permanently_delete_contract(request, contract_id):
 
 @login_required
 def empty_trash(request):
-    if not request.user.has_perm('contracts.delete_contract'):
-        return JsonResponse({'success': False}, status=403)
 
     if request.method == 'POST':
-        trashed = Contract.objects.filter(is_trashed=True)
+        trashed = managed_contracts(request.user).filter(is_trashed=True)
         count = trashed.count()
         for contract in trashed:
             _hard_delete_contract(contract, request=request, note=f'Trash emptied: {contract.title}')
@@ -1026,9 +1055,7 @@ def verify_physical(request):
             uploaded_file.seek(0)
             if len(uploaded_files) == 1 and uploaded_file.read(5) == b'%PDF-':
                 uploaded_file.seek(0)
-                with open(temp_path, 'wb') as destination:
-                    for chunk in uploaded_file.chunks():
-                        destination.write(chunk)
+                write_pdf(temp_path, uploaded_file.read())
             else:
                 images = []
                 for page_file in uploaded_files:
@@ -1036,7 +1063,9 @@ def verify_physical(request):
                     images.append(Image.open(page_file).convert('RGB'))
                 if not images:
                     raise ValueError('Upload a scanned PDF or page photographs.')
-                images[0].save(temp_path, 'PDF', save_all=True, append_images=images[1:])
+                image_pdf = io.BytesIO()
+                images[0].save(image_pdf, 'PDF', save_all=True, append_images=images[1:])
+                write_pdf(temp_path, image_pdf.getvalue())
 
             payloads = [decode_page_token(token) for token in tokens]
             manifest_record = PhysicalVerificationManifest.objects.select_related(
@@ -1070,7 +1099,7 @@ def verify_physical(request):
                     'expected_order': expected_numbers,
                 })
 
-                with fitz.open(temp_path) as scan_document:
+                with open_pdf(temp_path) as scan_document:
                     page_count_matches = scan_document.page_count == manifest['total_pages']
                     token_count_matches = len(payloads) == scan_document.page_count
                     structure_valid = (
@@ -1082,7 +1111,7 @@ def verify_physical(request):
                         details['message'] = 'The submitted pages do not match the registered document structure.'
                     else:
                         comparisons = []
-                        with fitz.open(manifest_record.version.file.path) as official_document:
+                        with open_pdf(manifest_record.version.file.path) as official_document:
                             for index, payload in enumerate(payloads):
                                 page_number = int(payload['p'])
                                 comparison = compare_page(
@@ -1136,7 +1165,7 @@ def verify_physical(request):
 @login_required
 def physical_verification_review(request, log_id, version_id):
     audit_log = get_object_or_404(
-        AuditLog.objects.select_related('contract'), pk=log_id,
+        visible_logs(request.user).select_related('contract'), pk=log_id,
         contract__isnull=False,
     )
     version = get_object_or_404(
@@ -1151,6 +1180,8 @@ def physical_verification_review(request, log_id, version_id):
     })
 
 @login_required
+@workspace_mutation
+@document_access()
 def upload_signed_scan(request, contract_id):
     """
     Accepts a scanned copy of a physically-signed contract. Verifies it via
@@ -1164,11 +1195,9 @@ def upload_signed_scan(request, contract_id):
         if not uploaded_file:
             return redirect('contract_list')
 
-        temp_path = os.path.join(settings.MEDIA_ROOT, 'temp', uploaded_file.name)
+        temp_path = os.path.join(settings.MEDIA_ROOT, 'temp', f'{uuid.uuid4().hex}.pdf')
         os.makedirs(os.path.dirname(temp_path), exist_ok=True)
-        with open(temp_path, 'wb+') as f:
-            for chunk in uploaded_file.chunks():
-                f.write(chunk)
+        write_pdf(temp_path, uploaded_file.read())
 
         try:
             latest_version = contract.versions.order_by('-version_number').first()
@@ -1187,7 +1216,8 @@ def upload_signed_scan(request, contract_id):
             final_filename = f"contract_{contract.id}_signed_v{next_version_number}.pdf"
             final_path = os.path.join(settings.MEDIA_ROOT, 'contracts', final_filename)
             stamp_seal_on_pdf(
-                temp_path, final_path, stamped_seal, encrypted_cf=encrypted, qr_paths=qr_paths
+                temp_path, final_path, stamped_seal, encrypted_cf=encrypted, qr_paths=qr_paths,
+                encrypt_output=True, verify_url=_verification_url(request)
             )
             sealed_cf = generate_canonical_fingerprint(final_path)
             version_cf = generate_canonical_fingerprint(final_path, previous_cf=previous_cf)
@@ -1207,7 +1237,7 @@ def upload_signed_scan(request, contract_id):
                 created_by=request.user,
             )
             _save_physical_manifest(version, manifest, manifest_signature)
-            contract.status = 'approved'
+            contract.status = 'final'
             contract.file = f'contracts/{final_filename}'
             contract.fingerprint = sealed_cf
             contract.vector_fingerprint = vector_cf
@@ -1267,7 +1297,7 @@ def has_barangay_footer(pdf_path: str):
     indicating it was processed by our system.
     """
     try:
-        doc = fitz.open(pdf_path)
+        doc = open_pdf(pdf_path)
         footer_keywords = [
             'barangay sto. nino',
             'digitally authenticated document',
@@ -1308,6 +1338,7 @@ def get_contract_meta(contract, include_chain=True):
 
 
 @login_required
+@view_document_access
 def mark_contract_viewed(request, contract_id):
     if request.method != 'POST':
         return JsonResponse({'success': False}, status=405)
@@ -1322,6 +1353,8 @@ def mark_contract_viewed(request, contract_id):
     return JsonResponse({'success': True})
 
 @login_required
+@view_document_access
+@never_cache
 def contract_version_history(request, contract_id):
     started_at = time.perf_counter()
     metadata_only = request.GET.get('metadata_only') == '1'
@@ -1401,6 +1434,7 @@ def _purge_old_verification_previews(preview_dir, max_age_seconds=3600):
             os.remove(path)
 
 
+@never_cache
 def verification_preview(request, token):
     if request.session.get('verify_preview_token') != token:
         raise Http404
@@ -1408,16 +1442,17 @@ def verification_preview(request, token):
     if not preview_path or not os.path.isfile(preview_path):
         raise Http404
     return FileResponse(
-        open(preview_path, 'rb'),
+        io.BytesIO(read_pdf(preview_path)),
         content_type='application/pdf',
         filename='verification-preview.pdf',
     )
 
 
 @login_required
+@never_cache
 def audit_evidence_preview(request, log_id):
     audit_log = get_object_or_404(
-        AuditLog.objects.select_related('contract'),
+        visible_logs(request.user).select_related('contract'),
         pk=log_id,
     )
     if not audit_log.evidence_file:
@@ -1434,7 +1469,7 @@ def _attach_verification_evidence(audit_log, temp_path, original_name):
     if not audit_log or not temp_path or not os.path.isfile(temp_path):
         return
     safe_name = os.path.basename(original_name or 'reported-document.pdf')
-    with open(temp_path, 'rb') as evidence_handle:
+    with io.BytesIO(read_pdf(temp_path, allow_plaintext=True)) as evidence_handle:
         audit_log.evidence_file.save(safe_name, File(evidence_handle), save=True)
 
 
@@ -1485,10 +1520,10 @@ def _log_public_verification(
 @login_required
 def audit_verification_history(request, log_id):
     selected_log = get_object_or_404(
-        AuditLog.objects.select_related('contract'),
+        visible_logs(request.user).select_related('contract'),
         pk=log_id,
     )
-    history = AuditLog.objects.filter(verification_result__gt='')
+    history = visible_logs(request.user).filter(verification_result__gt='')
     if selected_log.contract_id:
         history = history.filter(contract_id=selected_log.contract_id)
     elif selected_log.document_title:
@@ -1512,7 +1547,7 @@ def audit_verification_history(request, log_id):
 
 @login_required
 def audit_verification_log_detail(request, log_id):
-    if not request.user.is_staff:
+    if not request.user.is_superuser:
         return JsonResponse({'success': False, 'message': 'Administrator access required.'}, status=403)
     entry = get_object_or_404(AuditLog, pk=log_id, verification_result__gt='')
     elapsed_ms = None
@@ -1527,6 +1562,152 @@ def audit_verification_log_detail(request, log_id):
         'timestamp': timezone.localtime(entry.timestamp).strftime('%Y-%m-%d %H:%M:%S'),
         'elapsed_ms': elapsed_ms,
     })
+
+
+STAFF_REGISTRATION_OTP_TTL = 10 * 60
+STAFF_DEFAULT_PASSWORD = 'Welcome123!'
+
+
+@login_required
+def create_staff_invitation(request):
+    if not request.user.is_superuser:
+        return JsonResponse({'success': False, 'error': 'Administrator access required.'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required.'}, status=405)
+    token = secrets.token_urlsafe(32)
+    StaffInvitation.objects.create(
+        token_hash=hashlib.sha256(token.encode()).hexdigest(),
+        created_by=request.user,
+        expires_at=timezone.now() + timedelta(hours=24),
+    )
+    return JsonResponse({'success': True, 'url': request.build_absolute_uri(f'/accounts/register/?invite={token}')})
+
+
+def staff_register(request):
+    if request.user.is_authenticated:
+        return redirect('contract_list')
+    invite_token = request.GET.get('invite', '') or request.POST.get('invite', '') or request.session.get('staff_invite_token', '')
+    invite = StaffInvitation.objects.filter(
+        token_hash=hashlib.sha256(invite_token.encode()).hexdigest(),
+        used_at__isnull=True, expires_at__gt=timezone.now(),
+    ).first() if invite_token else None
+    if not invite:
+        return render(request, 'registration/register.html', {'invite_required': True})
+    request.session['staff_invite_token'] = invite_token
+    if not request.session.session_key:
+        request.session.create()
+    pending_key = f'sealguard:staff-registration:{request.session.session_key}'
+    pending = cache.get(pending_key)
+    form = StaffRegistrationForm(request.POST or None)
+    if request.method == 'POST' and request.POST.get('otp'):
+        code = request.POST.get('otp', '').strip()
+        if not pending or not secrets.compare_digest(str(pending.get('otp')), code):
+            return render(request, 'registration/register.html', {'form': form, 'otp_sent': True, 'error': 'That verification code is invalid or expired.'})
+        username, email = pending['username'], pending['email']
+        if User.objects.filter(username__iexact=username).exists() or User.objects.filter(email__iexact=email).exists():
+            cache.delete(pending_key)
+            return render(request, 'registration/register.html', {'form': form, 'error': 'An account with that username or email already exists.'})
+        user = User.objects.create_user(username=username, email=email, password=STAFF_DEFAULT_PASSWORD, is_staff=True)
+        AccountSecurity.objects.create(user=user, must_change_password=True)
+        invite.used_at = timezone.now()
+        invite.save(update_fields=['used_at'])
+        cache.delete(pending_key)
+        send_sealguard_mail(
+            'Your SealGuard account is ready',
+            f'Your username is {username}. Your temporary password is {STAFF_DEFAULT_PASSWORD}. Sign in once, then change it immediately.',
+            [email], fail_silently=True,
+        )
+        login(request, user)
+        return redirect('password_change_required')
+    if request.method == 'POST' and form.is_valid():
+        email = form.cleaned_data['email']
+        if User.objects.filter(email__iexact=email).exists():
+            form.add_error('email', 'That email address is already in use.')
+        else:
+            otp = f'{secrets.randbelow(1000000):06d}'
+            cache.set(pending_key, {'otp': otp, 'username': form.cleaned_data['username'], 'email': email}, STAFF_REGISTRATION_OTP_TTL)
+            send_sealguard_mail('SealGuard email verification code', f'Your SealGuard account verification code is {otp}. It expires in 10 minutes.', [email], fail_silently=True)
+            return render(request, 'registration/register.html', {'form': form, 'otp_sent': True, 'email': email, 'invite': invite_token})
+    return render(request, 'registration/register.html', {'form': form, 'otp_sent': bool(pending), 'email': pending.get('email') if pending else '', 'invite': invite_token})
+
+
+@login_required
+def password_change_required(request):
+    security = getattr(request.user, 'account_security', None)
+    if not security or not security.must_change_password:
+        return redirect('contract_list')
+    form = StaffPasswordChangeForm(request.user, request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        security.must_change_password = False
+        security.password_changed_at = timezone.now()
+        security.save(update_fields=['must_change_password', 'password_changed_at'])
+        return redirect('contract_list')
+    return render(request, 'registration/password_change_required.html', {'form': form})
+
+
+def password_reset_request(request):
+    reset = None
+    step = 'email'
+    verified_id = request.session.get('password_reset_verified_id')
+    if verified_id:
+        reset = PasswordResetRequest.objects.filter(
+            pk=verified_id, status='approved', user__is_active=True,
+        ).select_related('user').first()
+        if reset and reset.expires_at and reset.expires_at >= timezone.now():
+            step = 'password'
+        else:
+            request.session.pop('password_reset_verified_id', None)
+            reset = None
+    reset_form = PasswordResetRequestForm(request.POST or None)
+    if request.method == 'POST' and request.POST.get('stage') == 'password':
+        reset = PasswordResetRequest.objects.filter(
+            pk=request.POST.get('request_id'), status='approved', user__is_active=True,
+        ).select_related('user').first()
+        if not reset or request.session.get('password_reset_verified_id') != reset.pk or not reset.expires_at or reset.expires_at < timezone.now():
+            request.session.pop('password_reset_verified_id', None)
+            return render(request, 'registration/password_reset.html', {'reset_form': reset_form, 'error': 'Your verification session expired. Request a new code.', 'step': 'email'})
+        form = ApprovedPasswordResetForm(reset.user, request.POST)
+        if form.is_valid():
+            form.save()
+            reset.status = 'used'
+            reset.otp = ''
+            reset.save(update_fields=['status', 'otp'])
+            request.session.pop('password_reset_verified_id', None)
+            request.session.pop('password_reset_request_id', None)
+            return redirect('login')
+        return render(request, 'registration/password_reset.html', {'reset_form': reset_form, 'reset': reset, 'form': form, 'step': 'password'})
+    if request.method == 'POST' and request.POST.get('stage') == 'verify':
+        reset = PasswordResetRequest.objects.filter(pk=request.POST.get('request_id'), status='approved').select_related('user').first()
+        if not reset or not reset.expires_at or reset.expires_at < timezone.now() or not secrets.compare_digest(request.POST.get('otp', ''), reset.otp):
+            return render(request, 'registration/password_reset.html', {'reset_form': reset_form, 'reset': reset, 'error': 'That verification code is invalid or expired.', 'step': 'verify'})
+        request.session['password_reset_verified_id'] = reset.pk
+        return render(request, 'registration/password_reset.html', {'reset_form': reset_form, 'reset': reset, 'form': ApprovedPasswordResetForm(reset.user), 'step': 'password'})
+    if request.method == 'POST' and reset_form.is_valid():
+        identifier = reset_form.cleaned_data['identifier'].strip()
+        user = User.objects.filter(
+            is_active=True, is_staff=True, is_superuser=False,
+            email__iexact=identifier,
+        ).first()
+        if user:
+            session_request_id = request.session.get('password_reset_request_id')
+            reset = PasswordResetRequest.objects.filter(pk=session_request_id, user=user).first() if session_request_id else None
+            if reset and reset.status == 'approved' and reset.expires_at and reset.expires_at >= timezone.now():
+                request.session['password_reset_request_id'] = reset.pk
+                return render(request, 'registration/password_reset.html', {'reset_form': reset_form, 'reset': reset, 'step': 'verify'})
+            if reset and reset.status == 'pending':
+                return render(request, 'registration/password_reset.html', {'reset_form': reset_form, 'pending': True, 'step': 'email'})
+            reset = PasswordResetRequest.objects.create(user=user, email=user.email, status='pending')
+            request.session['password_reset_request_id'] = reset.pk
+            for admin_user in User.objects.filter(is_active=True, is_superuser=True).exclude(email=''):
+                send_sealguard_mail(
+                    'SealGuard password reset approval required',
+                    f'{user.username} requested a password reset. Review request #{reset.pk} in the Admin Portal.',
+                    [admin_user.email], fail_silently=True,
+                )
+            return render(request, 'registration/password_reset.html', {'reset_form': reset_form, 'pending': True, 'step': 'email'})
+        return render(request, 'registration/password_reset.html', {'reset_form': reset_form, 'pending': True, 'step': 'email'})
+    return render(request, 'registration/password_reset.html', {'reset_form': reset_form, 'reset': reset, 'step': step})
 
 
 def public_verify(request):
@@ -1559,9 +1740,7 @@ def public_verify(request):
         _purge_old_verification_previews(preview_dir)
         preview_token = uuid.uuid4().hex
         temp_path = os.path.join(preview_dir, f'{preview_token}.pdf')
-        with open(temp_path, 'wb+') as preview_file:
-            for chunk in uploaded_file.chunks():
-                preview_file.write(chunk)
+        write_pdf(temp_path, uploaded_file.read())
         request.session['verify_preview_token'] = preview_token
 
         filename_lower = uploaded_file.name.lower()
@@ -1650,7 +1829,7 @@ def public_verify(request):
         matched_contract = None
         failure_reason = ''
         try:
-            with fitz.open(temp_path) as uploaded_pdf:
+            with open_pdf(temp_path) as uploaded_pdf:
                 debug_log.append(f"[PASS] PDF structure opened successfully: {uploaded_pdf.page_count} page(s)")
             _process_log('verification', 'pdf_structure_validated', request=request)
 
@@ -1859,7 +2038,7 @@ def public_verify(request):
     preview_token = request.session.get('verify_preview_token')
     preview_url = reverse('verification_preview', args=[preview_token]) if result and preview_token else None
 
-    public_contract_queryset = Contract.objects.filter(is_public=True).order_by('-uploaded_at', '-id')
+    public_contract_queryset = Contract.objects.filter(is_public=True, is_trashed=False).order_by('-uploaded_at', '-id')
     public_page_obj = Paginator(public_contract_queryset, 20).get_page(request.GET.get('page'))
     public_contracts = [
         # The public browser only needs display metadata. Full chain
@@ -1881,11 +2060,13 @@ def public_verify(request):
 
 
 def _contract_file_access(request, contract):
-    if request.user.is_authenticated or contract.is_public:
-        return True
-    return False
+    allowed = can_view(request.user, contract)
+    if not allowed and request.user.is_authenticated:
+        raise Http404
+    return allowed
 
 
+@never_cache
 def preview_contract(request, contract_id):
     started_at = time.perf_counter()
     contract = get_object_or_404(Contract, pk=contract_id, is_trashed=False)
@@ -1906,6 +2087,7 @@ def preview_contract(request, contract_id):
     )
 
 
+@never_cache
 def preview_contract_version(request, version_id):
     started_at = time.perf_counter()
     version = get_object_or_404(
@@ -1929,6 +2111,7 @@ def preview_contract_version(request, version_id):
     )
 
 
+@never_cache
 def download_contract(request, contract_id):
     if not request.user.is_authenticated:
         contract = Contract.objects.filter(pk=contract_id, is_trashed=False).first()
@@ -1936,7 +2119,7 @@ def download_contract(request, contract_id):
             return redirect(f"{reverse('login')}?next={request.path}")
     else:
         contract = get_object_or_404(Contract, pk=contract_id, is_trashed=False)
-    if not _contract_file_access(request, contract):
+    if not can_download(request.user, contract):
         return redirect(f"{reverse('login')}?next={request.path}")
     if not contract.file:
         raise Http404
@@ -1956,13 +2139,14 @@ def download_contract(request, contract_id):
     )
 
 
+@never_cache
 def download_contract_version(request, version_id):
     version = get_object_or_404(
         ContractVersion.objects.select_related('contract'),
         pk=version_id,
         contract__is_trashed=False,
     )
-    if not _contract_file_access(request, version.contract):
+    if not can_download(request.user, version.contract):
         return redirect(f"{reverse('login')}?next={request.path}")
     if not version.file:
         raise Http404
@@ -1979,6 +2163,7 @@ def download_contract_version(request, version_id):
 
 # New rename view
 @login_required
+@document_access()
 def rename_contract(request, pk):
     if request.method == 'POST':
         import json
@@ -1992,6 +2177,7 @@ def rename_contract(request, pk):
 
 # New tag view
 @login_required
+@document_access()
 def tag_contract(request, pk):
     if request.method == 'POST':
         import json
@@ -2004,6 +2190,7 @@ def tag_contract(request, pk):
     return JsonResponse({'success': False}, status=400)
 
 @login_required
+@workspace_mutation
 def create_folder(request):
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()[:100] or 'Untitled Folder'
@@ -2017,9 +2204,8 @@ def create_folder(request):
     return JsonResponse({'success': False}, status=400)
 
 @login_required
+@bulk_document_access
 def bulk_permanently_delete_contracts(request):
-    if not request.user.has_perm('contracts.delete_contract'):
-        return JsonResponse({'success': False, 'error': 'not_allowed'}, status=403)
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'invalid_method'}, status=405)
 
@@ -2032,6 +2218,7 @@ def bulk_permanently_delete_contracts(request):
 
 
 @login_required
+@workspace_mutation
 def reorder_folders(request):
     if request.method != 'POST':
         return JsonResponse({'success': False}, status=400)
@@ -2054,6 +2241,7 @@ def reorder_folders(request):
 
 
 @login_required
+@workspace_mutation
 def rename_folder(request, pk):
     if request.method == 'POST':
         import json
@@ -2068,6 +2256,7 @@ def rename_folder(request, pk):
 
 
 @login_required
+@document_access()
 def assign_folder(request, contract_id):
     if request.method == 'POST':
         import json
@@ -2084,10 +2273,15 @@ def assign_folder(request, contract_id):
     return JsonResponse({'success': False}, status=400)
 
 @login_required
+@workspace_mutation
 def delete_folder(request, pk):
     if request.method == 'POST':
         import json
         folder = get_object_or_404(Folder, pk=pk)
+        if not is_admin(request.user) and folder.owner_id != request.user.pk:
+            raise Http404
+        if folder.contracts.exclude(pk__in=managed_contracts(request.user)).exists():
+            raise Http404
         data = json.loads(request.body)
         mode = data.get('mode', 'unassign')  # 'unassign' or 'delete_items'
         has_items = folder.contracts.exists()
@@ -2121,22 +2315,24 @@ def delete_folder(request, pk):
     return JsonResponse({'success': False}, status=400)
 # New status view
 @login_required
+@document_access()
 def update_status(request, pk):
+    if not is_admin(request.user):
+        return redirect('contract_list')
     if request.method == 'POST':
         contract = get_object_or_404(Contract, pk=pk)
-        contract.status = request.POST.get('status', contract.status)
-        contract.save()
         status = request.POST.get('status', contract.status)
+        if status not in {'pending', 'final'}:
+            return redirect('contract_list')
         contract.status = status
         contract.save()
-        if status == 'approved':
+        if status == 'final':
             log_activity(request, 'approved', contract=contract)
     return redirect('contract_list')
 
 @login_required
+@document_access(share=True)
 def publish_contract(request, pk):
-    if not request.user.has_perm('contracts.change_contract'):
-        return JsonResponse({'success': False}, status=403)
 
     if request.method == 'POST':
         import json
@@ -2156,12 +2352,13 @@ def publish_contract(request, pk):
 from django.db.models import Count, Q
 
 @login_required
+@workspace_access
 def dashboard(request):
-    total_documents = Contract.objects.count()
-    verified_documents = Contract.objects.filter(encrypted_cf__gt='').count()
-    flagged_documents = AuditLog.objects.filter(action='reported_tampering').count()
-    latest_integrity_scan = AuditLog.objects.filter(
-        action='integrity_scan', verification_source='Scheduled Integrity Scan',
+    total_documents = viewable_contracts(request.user).filter(is_trashed=False).count()
+    verified_documents = viewable_contracts(request.user).filter(is_trashed=False, encrypted_cf__gt='').count()
+    flagged_documents = visible_logs(request.user).filter(action='reported_tampering').count()
+    latest_integrity_scan = visible_logs(request.user).filter(
+        action='integrity_scan',
     ).order_by('-timestamp', '-id').first()
 
     valid_activity_filters = ['viewed', 'downloaded', 'added', 'encrypted', 'edited', 'approved', 'rejected', 'deleted', 'reported_tampering', 'integrity_scan', 'verification', 'failed_login', 'login', 'logout', 'locked_out']
@@ -2190,7 +2387,7 @@ def dashboard(request):
     if sort_order not in {'newest', 'oldest'}:
         sort_order = 'newest'
 
-    recent_logs = AuditLog.objects.select_related('user', 'contract')
+    recent_logs = visible_logs(request.user).select_related('user', 'contract')
     if activity_filters:
         recent_logs = recent_logs.filter(action__in=activity_filters)
     date_from = parse_date(request.GET.get('date_from', '').strip())
@@ -2203,7 +2400,7 @@ def dashboard(request):
     if user_id.isdigit():
         recent_logs = recent_logs.filter(user_id=int(user_id))
     status = request.GET.get('status', '').strip()
-    if status in {'pending', 'sent', 'approved'}:
+    if status in {'pending', 'final'}:
         recent_logs = recent_logs.filter(contract__status=status)
     document_query = request.GET.get('document', '').strip()
     if document_query:
@@ -2256,10 +2453,55 @@ def dashboard(request):
         'report_user': user_id,
         'report_status': status,
         'report_document': document_query,
+        'read_only_user': is_read_only_user(request.user),
+        'workspace_role': 'Admin' if is_admin(request.user) else ('Staff' if request.user.is_staff else 'User'),
     })
 
 
 @login_required
+def cancel_integrity_scan(request):
+    if not request.user.is_superuser:
+        return JsonResponse({'success': False, 'error': 'Administrator access required.'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required.'}, status=405)
+    scan = AuditLog.objects.filter(
+        action='integrity_scan', verification_result='Running',
+    ).order_by('-timestamp', '-id').first()
+    if not scan:
+        return JsonResponse({'success': False, 'error': 'No integrity scan is currently running.'}, status=404)
+    control = cache.get(INTEGRITY_SCAN_CACHE_KEY) or {}
+    control.update({'scan_log_id': scan.id, 'cancel_requested': True})
+    cache.set(INTEGRITY_SCAN_CACHE_KEY, control, 6 * 60 * 60)
+    scan.note = 'Cancellation requested by an administrator. The scanner will stop at the next document boundary.'
+    scan.verification_result = 'Cancel requested'
+    scan.save(update_fields=['note', 'verification_result'])
+    return JsonResponse({'success': True, 'message': 'Cancellation requested.'})
+
+
+@login_required
+def start_integrity_scan(request):
+    if not request.user.is_superuser:
+        return JsonResponse({'success': False, 'error': 'Administrator access required.'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required.'}, status=405)
+    if cache.get(INTEGRITY_SCAN_LOCK_KEY) or AuditLog.objects.filter(
+        action='integrity_scan', verification_result__in=['Running', 'Cancel requested']
+    ).exists():
+        return JsonResponse({'success': False, 'error': 'An integrity scan is already in progress.'}, status=409)
+
+    def run_scan():
+        from django.core.management import call_command
+        try:
+            call_command('verify_integrity', quiet_success=True, source='Admin-triggered Integrity Scan')
+        except Exception:
+            logging.getLogger('contracts.integrity').exception('Admin-triggered integrity scan failed')
+
+    threading.Thread(target=run_scan, name='sealguard-integrity-admin', daemon=True).start()
+    return JsonResponse({'success': True, 'message': 'Integrity scan started.'})
+
+
+@login_required
+@workspace_mutation
 def export_dashboard_report(request):
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = 'attachment; filename="sealguard-audit-report.csv"'
@@ -2273,7 +2515,7 @@ def export_dashboard_report(request):
         for value in raw_value.split(',')
         if value.strip() in valid_actions
     ]
-    logs = AuditLog.objects.select_related('user', 'contract')
+    logs = visible_logs(request.user).select_related('user', 'contract')
     if requested_actions and 'all' not in requested_actions:
         logs = logs.filter(action__in=list(dict.fromkeys(requested_actions)))
     date_from = parse_date(request.GET.get('date_from', '').strip())
@@ -2286,7 +2528,7 @@ def export_dashboard_report(request):
     if user_id.isdigit():
         logs = logs.filter(user_id=int(user_id))
     status = request.GET.get('status', '').strip()
-    if status in {'pending', 'sent', 'approved'}:
+    if status in {'pending', 'final'}:
         logs = logs.filter(contract__status=status)
     document_query = request.GET.get('document', '').strip()
     if document_query:
@@ -2304,4 +2546,48 @@ def export_dashboard_report(request):
             log.ip_address or '',
             log.note or '',
         ])
+    return response
+
+
+@login_required
+@document_access(share=True)
+def contract_access(request, contract_id):
+    """Owners and administrators grant or revoke document editing access."""
+    from django.db import transaction
+    contract = get_object_or_404(Contract, pk=contract_id, is_trashed=False)
+    if request.method == 'POST':
+        username = request.POST.get('username', '').strip()
+        action = request.POST.get('action')
+        if action not in {'grant', 'revoke'}:
+            return JsonResponse({'error': 'Choose grant or revoke.'}, status=400)
+        target = User.objects.filter(username=username).first()
+        if not target or (action == 'grant' and not target.is_active):
+            return JsonResponse({'error': 'No active account has that username.'}, status=400)
+        if is_admin(target) or target.pk == contract.uploaded_by_id:
+            return JsonResponse({'error': 'The uploader and administrators already have access.'}, status=400)
+        with transaction.atomic():
+            if action == 'grant':
+                contract.collaborators.add(target)
+            else:
+                contract.collaborators.remove(target)
+            log_activity(request, 'edited', contract=contract,
+                         note=f'Document access {"granted to" if action == "grant" else "revoked from"} {target.username}')
+    elif request.method != 'GET':
+        return JsonResponse({'error': 'Method not allowed.'}, status=405)
+    collaborator_ids = set(contract.collaborators.values_list('id', flat=True))
+    accounts = [
+        {
+            'username': account.username,
+            'created_at': timezone.localtime(account.date_joined).strftime('%b %d, %Y'),
+            'has_access': account.id in collaborator_ids,
+        }
+        for account in User.objects.filter(is_active=True, is_superuser=False)
+        .exclude(pk=contract.uploaded_by_id).order_by('username')
+    ]
+    response = JsonResponse({
+        'owner': contract.uploaded_by.username if contract.uploaded_by else 'Administrator-managed document',
+        'users': list(contract.collaborators.order_by('username').values('username')),
+        'accounts': accounts,
+    })
+    response['Cache-Control'] = 'private, no-store'
     return response

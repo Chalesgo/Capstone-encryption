@@ -102,7 +102,7 @@
     cursor: pointer;
   }
   .dashboard-filter-toggle:hover,
-  .dashboard-filter-toggle[aria-expanded="true"] { border-color: #3b5bdb; color: #3b5bdb; background: #f7f9ff; }
+  .dashboard-filter-toggle[aria-expanded="true"] { border-color: #f4a34d; color: #d9822b; background: #fff8ef; }
   .dashboard-filter-toggle svg { width: 15px; height: 15px; }
   .audit-filters {
     position: fixed;
@@ -126,13 +126,40 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin: -4px -2px 6px;
-    color: #889aab;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+    margin: -4px -2px 0;
+    padding-bottom: 14px;
+    border-bottom: 1px solid #e8e6e2;
   }
+  .filter-panel-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #1a1a2e;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .filter-panel-title svg {
+    width: 15px;
+    height: 15px;
+    stroke: #f4a34d;
+    flex-shrink: 0;
+  }
+  .filter-panel-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .filter-reset-link {
+    border: 0;
+    background: transparent;
+    color: #889aab;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+  }
+  .filter-reset-link:hover { color: #f4a34d; text-decoration: underline; }
   .dashboard-filter-close {
     display: inline-grid;
     place-items: center;
@@ -147,18 +174,16 @@
     line-height: 1;
     cursor: pointer;
   }
-  .dashboard-filter-close:hover { border-color: #3b5bdb; color: #3b5bdb; }
+  .dashboard-filter-close:hover { border-color: #f4a34d; color: #d9822b; }
   .audit-filter-field {
     display: flex;
     flex-direction: column;
     gap: 5px;
   }
   .audit-filter-field label {
-    color: #889aab;
-    font-size: 11px;
+    color: #445566;
+    font-size: 12.5px;
     font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
   }
 
   .audit-filter-field select {
@@ -167,14 +192,13 @@
     min-width: 180px;
     min-height: 42px;
     padding: 8px 34px 8px 11px;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
+    border: 1px solid #e0deda;
+    border-radius: 8px;
     background: #fff;
     color: #2d3a47;
     font-family: inherit;
     font-size: 13px;
     font-weight: 400;
-    box-shadow: 0 1px 2px rgba(30, 40, 50, .04);
     cursor: pointer;
     transition: border-color .15s ease, box-shadow .15s ease;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='m1 1 4 4 4-4' fill='none' stroke='%232d3a47' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
@@ -185,6 +209,10 @@
   .integrity-status-banner:hover { background: #fff1c7; }
   .integrity-status-dot { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; background: #f4a340; box-shadow: 0 0 0 4px rgba(244, 163, 64, .16); animation: integrity-pulse 1.4s ease-in-out infinite; }
   .integrity-status-timer { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 700; }
+  .integrity-run-button { display: inline-flex; align-items: center; gap: 7px; margin: 0 0 12px auto; padding: 8px 11px; border: 1px solid #cfd9e3; border-radius: 8px; background: #fff; color: #40566b; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; }
+  .integrity-run-button:hover { background: #f4f7fa; border-color: #aebdca; }
+  .integrity-run-button:disabled { opacity: .55; cursor: wait; }
+  .integrity-run-button svg { width: 15px; height: 15px; }
   @keyframes integrity-pulse { 50% { opacity: .45; } }
   .audit-filter-field select::-ms-expand { display: none; }
   .audit-filter-field input[type="date"],
@@ -193,20 +221,19 @@
     width: 100%;
     box-sizing: border-box;
     padding: 8px 11px;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
+    border: 1px solid #e0deda;
+    border-radius: 8px;
     background: #fff;
     color: #2d3a47;
     font: inherit;
     font-size: 13px;
-    box-shadow: 0 1px 2px rgba(30, 40, 50, .04);
   }
-  .audit-filter-field input:focus { outline: none; border-color: #3b5bdb; box-shadow: 0 0 0 3px rgba(59, 91, 219, .12); }
+  .audit-filter-field input:focus { outline: none; border-color: #f4a34d; box-shadow: 0 0 0 3px rgba(244, 163, 77, .16); }
   .audit-filters .audit-filter-field select { width: 100%; min-width: 0; }
   .audit-filters .filter-document-search { order: 1; }
-  .audit-filters .filter-activity { order: 2; }
+  .audit-filters .filter-activity { order: 2; border-top: 1px solid #e8e6e2; padding-top: 14px; margin-top: 2px; }
   .audit-filters .filter-user { order: 3; }
-  .audit-filters .filter-sort { order: 4; }
+  .audit-filters .filter-sort { order: 4; border-top: 1px solid #e8e6e2; padding-top: 14px; margin-top: 2px; }
   .audit-filters .filter-date-from { order: 5; }
   .audit-filters .filter-date-to { order: 6; }
   .audit-filters .filter-status,
@@ -219,8 +246,8 @@
   .status-filter-select.status-pending { color: #667085; border-color: #cbd5e1; }
   .status-filter-select.status-sent { color: #b7791f; border-color: #f4c54d; background-color: #fffdf4; }
   .status-filter-select.status-approved { color: #16805a; border-color: #8bd8b5; background-color: #f3fcf7; }
-  .audit-filter-field select:hover { border-color: #94a3b8; }
-  .audit-filter-field select:focus { outline: none; border-color: #3b5bdb; box-shadow: 0 0 0 3px rgba(59, 91, 219, .12); }
+  .audit-filter-field select:hover { border-color: #cbb89a; }
+  .audit-filter-field select:focus { outline: none; border-color: #f4a34d; box-shadow: 0 0 0 3px rgba(244, 163, 77, .16); }
   .activity-filter-control { position: relative; width: 100%; min-width: 0; }
   .activity-filter-native {
     position: absolute;
@@ -239,15 +266,15 @@
     width: 100%;
     min-height: 42px;
     padding: 6px 10px;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
+    border: 1px solid #e0deda;
+    border-radius: 8px;
     background: #fff;
     color: #2d3a47;
     cursor: pointer;
     font: inherit;
     text-align: left;
   }
-  .activity-filter-trigger:focus-visible { outline: 2px solid #3b5bdb; outline-offset: 2px; }
+  .activity-filter-trigger:focus-visible { outline: 2px solid #f4a34d; outline-offset: 2px; }
   .activity-filter-trigger .action-badge { white-space: nowrap; }
   .activity-filter-chevron { width: 8px; height: 8px; margin: -4px 3px 0 8px; flex: 0 0 8px; border-right: 2px solid #2d3a47; border-bottom: 2px solid #2d3a47; font-size: 0; line-height: 0; transform: rotate(45deg); transition: transform .15s ease; }
   .activity-filter-control.open .activity-filter-chevron { transform: rotate(225deg); }
@@ -284,12 +311,12 @@
   }
   .activity-filter-menu .action-badge { white-space: nowrap; }
   .activity-filter-option:hover,
-  .activity-filter-option[aria-selected="true"] { background: #f8fafc; }
+  .activity-filter-option[aria-selected="true"] { background: #fff8ef; }
   .activity-filter-option::before { content: ''; width: 14px; height: 14px; margin: 4px 6px 0 2px; border: 1px solid #cbd5e1; border-radius: 3px; background: #fff; flex-shrink: 0; }
-  .activity-filter-option[aria-selected="true"]::before { border-color: #3b5bdb; background: #3b5bdb; box-shadow: inset 0 0 0 3px #fff; }
+  .activity-filter-option[aria-selected="true"]::before { border-color: #f4a34d; background: #f4a34d; box-shadow: inset 0 0 0 3px #fff; }
   .activity-filter-actions { display: flex; gap: 6px; margin-top: 5px; padding: 7px 5px 2px; border-top: 1px solid #eef0f4; }
   .activity-filter-actions button { flex: 1; padding: 6px 8px; border: 1px solid #dbe2ea; border-radius: 6px; background: #fff; color: #52606d; cursor: pointer; font: inherit; font-size: 12px; }
-  .activity-filter-actions button[data-filter-done] { border-color: #3b5bdb; background: #3b5bdb; color: #fff; }
+  .activity-filter-actions button[data-filter-done] { border-color: #f4a34d; background: #f4a34d; color: #fff; }
   .action-badge.all { background: #f3f4f6; color: #667085; }
   .action-badge.integrity_scan { background: #eef2ff; color: #4657a8; }
   .audit-filter-status {
@@ -463,6 +490,9 @@
   .integrity-log-overlay.open { display: block; }
   .integrity-log-dialog { position: fixed; top: 50%; left: 50%; z-index: 1510; display: none; width: min(720px, calc(100vw - 32px)); max-height: min(620px, calc(100vh - 32px)); transform: translate(-50%, -50%); overflow: hidden; border: 1px solid #dbe2ea; border-radius: 12px; background: #fff; box-shadow: 0 20px 55px rgba(15, 23, 42, .22); }
   .integrity-log-dialog.open { display: flex; flex-direction: column; }
+  @keyframes integrity-dialog-in { from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)) scale(.985); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+  .integrity-log-dialog.open { animation: integrity-dialog-in .18s ease-out both; }
+  @media (prefers-reduced-motion: reduce) { .integrity-log-dialog.open { animation: none; } }
   .integrity-log-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 18px; border-bottom: 1px solid #e5ebf0; color: #243443; }
   .integrity-log-header strong { font-size: 15px; }
   .integrity-log-close { width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent; color: #667788; font-size: 22px; cursor: pointer; }
@@ -689,12 +719,14 @@
     <div class="stat-card-sub">Requires review</div>
   </div>
 </div>
-{% if latest_integrity_scan and latest_integrity_scan.verification_result == 'Running' %}
-{% if request.user.is_staff %}<button type="button" class="integrity-status-banner" role="status" aria-live="polite" data-integrity-started="{{ latest_integrity_scan.timestamp|date:'c' }}" data-log-id="{{ latest_integrity_scan.id }}" data-log-url="{% url 'audit_verification_log_detail' latest_integrity_scan.id %}" data-action="Integrity Scan" onclick="openIntegrityScanLog(this)">{% else %}<div class="integrity-status-banner" role="status" aria-live="polite">{% endif %}
+{% if request.user.is_superuser %}<div style="display:flex;justify-content:flex-end;"><button type="button" class="integrity-run-button" id="start-integrity-scan" {% if latest_integrity_scan and latest_integrity_scan.verification_result == 'Running' or latest_integrity_scan and latest_integrity_scan.verification_result == 'Cancel requested' %}disabled{% endif %} onclick="startIntegrityScan(event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 11a8 8 0 1 1-2.34-5.66L20 7"/><path d="M20 3v4h-4"/></svg><span>{% if latest_integrity_scan and latest_integrity_scan.verification_result == 'Running' %}Scan in progress{% else %}Run integrity scan{% endif %}</span></button></div>{% endif %}
+{% if latest_integrity_scan and latest_integrity_scan.verification_result == 'Running' or latest_integrity_scan and latest_integrity_scan.verification_result == 'Cancel requested' %}
+{% if request.user.is_superuser %}<div class="integrity-status-banner" role="status" aria-live="polite" data-integrity-started="{{ latest_integrity_scan.timestamp|date:'c' }}" data-log-id="{{ latest_integrity_scan.id }}" data-log-url="{% url 'audit_verification_log_detail' latest_integrity_scan.id %}" data-action="Integrity Scan" onclick="openIntegrityScanLog(this)">{% else %}<div class="integrity-status-banner" role="status" aria-live="polite">{% endif %}
   <span class="integrity-status-dot" aria-hidden="true"></span>
-  <span>Integrity scan in progress</span>
-  {% if request.user.is_staff %}<span class="integrity-status-timer" data-integrity-timer>00:00</span>{% endif %}
-{% if request.user.is_staff %}</button>{% else %}</div>{% endif %}
+  <span>{% if latest_integrity_scan.verification_result == 'Cancel requested' %}Integrity scan cancellation requested{% else %}Integrity scan in progress{% endif %}</span>
+  {% if request.user.is_superuser %}<span class="integrity-status-timer" data-integrity-timer>00:00</span>{% endif %}
+  {% if request.user.is_superuser and latest_integrity_scan.verification_result == 'Running' %}<button type="button" class="integrity-cancel-button" data-integrity-cancel onclick="cancelIntegrityScan(event, {{ latest_integrity_scan.id }})">Cancel scan</button>{% endif %}
+</div>
 {% endif %}
 
 <div class="audit-panel">
@@ -709,8 +741,14 @@
     <div class="mobile-dashboard-filter-overlay" id="mobile-dashboard-filter-overlay" onclick="closeDashboardFilters()"></div>
     <form class="audit-filters" id="audit-filters" method="get">
       <div class="dashboard-filter-sidebar-heading">
-        <span>Activity filters</span>
-        <button type="button" class="dashboard-filter-close" id="dashboard-filter-close" aria-label="Close filters">&times;</button>
+        <span class="filter-panel-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+          Filters
+        </span>
+        <div class="filter-panel-actions">
+          <button type="button" class="filter-reset-link" id="dashboard-filter-reset">Reset</button>
+          <button type="button" class="dashboard-filter-close" id="dashboard-filter-close" aria-label="Close filters">&times;</button>
+        </div>
       </div>
       <div class="audit-filter-field filter-activity">
         <label for="activity-filter">Show activity</label>
@@ -780,8 +818,7 @@
         <select id="report-status" class="status-filter-select" name="status" onchange="styleDashboardStatusFilter(this)">
           <option value="">All statuses</option>
           <option value="pending" {% if report_status == 'pending' %}selected{% endif %}>Draft</option>
-          <option value="sent" {% if report_status == 'sent' %}selected{% endif %}>Sent</option>
-          <option value="approved" {% if report_status == 'approved' %}selected{% endif %}>Signed</option>
+          <option value="final" {% if report_status == 'final' %}selected{% endif %}>Final copy</option>
         </select>
       </div>
       <div class="audit-filter-field filter-document-search">
@@ -830,7 +867,7 @@
           data-log-id="{{ log.id }}"
           data-preview-url="{% if log.evidence_file %}{% url 'audit_evidence_preview' log.id %}{% elif log.contract and log.contract.file and not log.contract.is_trashed %}{% url 'preview_contract' log.contract.id %}{% endif %}"
           data-preview-reason="{% if log.contract and log.contract.is_trashed %}This document is in the trash.{% elif log.contract and not log.contract.file %}The document file is missing.{% elif not log.evidence_file and not log.contract %}No document file is linked to this activity.{% else %}This PDF is no longer retained.{% endif %}"
-          data-download-url="{% if log.contract and log.contract.file %}{% url 'download_contract' log.contract.id %}{% endif %}"
+          data-download-url="{% if not read_only_user and log.contract and log.contract.file %}{% url 'download_contract' log.contract.id %}{% endif %}"
           data-contract-id="{% if log.contract %}{{ log.contract.id }}{% endif %}"
           data-version="{% if log.display_version_number %}{{ log.display_version_number }}{% endif %}"
           data-title="{{ log.display_document_title|default:'Reported document' }}"
@@ -946,10 +983,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="10" x2="12" y2="16"/><line x1="12" y1="7" x2="12.01" y2="7"/></svg>
       <span>Details</span>
     </button>
-    <a class="audit-mobile-sheet-action" id="audit-mobile-download-pdf" href="#" download aria-label="Download PDF" onclick="auditMobileDownloadPdf(event)">
+    {% if not read_only_user %}<a class="audit-mobile-sheet-action" id="audit-mobile-download-pdf" href="#" download aria-label="Download PDF" onclick="auditMobileDownloadPdf(event)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
       <span>Download PDF</span>
-    </a>
+    </a>{% endif %}
   </div>
 </div>
 <div class="integrity-log-overlay" id="integrity-log-overlay" onclick="closeIntegrityScanLog()"></div>
@@ -969,9 +1006,9 @@
   <div class="audit-pdf-body">
     <div class="audit-pdf-frame-wrap">
       <div class="audit-pdf-actions">
-        <a class="audit-pdf-action" id="audit-pdf-download" href="#" download title="Download">
+        {% if not read_only_user %}<a class="audit-pdf-action" id="audit-pdf-download" href="#" download title="Download">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        </a>
+        </a>{% endif %}
         <button class="audit-pdf-action" type="button" onclick="closeAuditPdf()" title="Close">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
@@ -1041,6 +1078,43 @@
     }
     refresh();
   };
+  window.startIntegrityScan = function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const button = event.currentTarget;
+    button.disabled = true;
+    fetch('{% url 'start_integrity_scan' %}', {
+      method: 'POST',
+      headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json'},
+      body: '{}'
+    }).then(function(response) {
+      return response.json().then(function(data) {
+        if (!response.ok) throw new Error(data.error || 'Unable to start the scan.');
+        window.location.reload();
+      });
+    }).catch(function(error) {
+      button.disabled = false;
+      window.alert(error.message);
+    });
+  };
+  window.cancelIntegrityScan = function(event, logId) {
+    event.preventDefault();
+    event.stopPropagation();
+    const button = event.currentTarget;
+    if (!window.confirm('Cancel the integrity scan? PDFs not reached yet will remain unchecked, not tampered.')) return;
+    button.disabled = true;
+    fetch('{% url 'cancel_integrity_scan' %}', {
+      method: 'POST',
+      headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json'},
+      body: JSON.stringify({scan_log_id: logId})
+    }).then(function(response) {
+      if (!response.ok) throw new Error('Unable to cancel the scan.');
+      window.location.reload();
+    }).catch(function(error) {
+      button.disabled = false;
+      window.alert(error.message);
+    });
+  };
   const banner = document.querySelector('[data-integrity-started][data-log-url]');
   if (banner) {
     window.startIntegrityScanPolling(banner.dataset.logUrl, function(data) {
@@ -1065,7 +1139,7 @@ function openAuditPdfFromRow(row) {
   }
   openAuditPdfDetails(row);
 }
-window.dashboardIsAdmin = {% if request.user.is_staff %}true{% else %}false{% endif %};
+window.dashboardIsAdmin = {% if request.user.is_superuser %}true{% else %}false{% endif %};
 function openIntegrityScanLog(row) {
   const overlay = document.getElementById('integrity-log-overlay');
   const dialog = document.getElementById('integrity-log-dialog');
@@ -1426,6 +1500,7 @@ function closeAuditPdf() {
       trigger.setAttribute('aria-expanded', 'false');
     }
   });
+  window.syncDashboardActivityFilter = syncActivityFilter;
   // The initial label and selection state are server-rendered to avoid a load flash.
 })();
 document.addEventListener('keydown', function(event) {
@@ -1453,6 +1528,13 @@ function toggleDashboardFilters() {
 dashboardFilterToggle?.addEventListener('click', toggleDashboardFilters);
 dashboardMobileFilterToggle?.addEventListener('click', toggleDashboardFilters);
 dashboardFilterClose?.addEventListener('click', closeDashboardFilters);
+document.getElementById('dashboard-filter-reset')?.addEventListener('click', function() {
+  const form = document.getElementById('audit-filters');
+  if (!form) return;
+  form.reset();
+  styleDashboardStatusFilter(document.getElementById('report-status'));
+  if (window.syncDashboardActivityFilter) window.syncDashboardActivityFilter();
+});
 document.addEventListener('click', function(event) {
   if (dashboardFilterForm?.classList.contains('open')
       && !dashboardFilterForm.contains(event.target)

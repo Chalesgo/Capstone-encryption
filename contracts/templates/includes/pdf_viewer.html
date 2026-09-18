@@ -3,9 +3,9 @@
   <div class="pdf-panel-body{% if viewer_show_verification %} audit-pdf-body{% endif %}">
     <div class="pdf-frame-wrap{% if viewer_show_verification %} audit-pdf-frame-wrap{% endif %}">
       <div class="pdf-floating-actions{% if viewer_show_verification %} audit-pdf-actions{% endif %}">
-        <a class="icon-btn{% if viewer_show_verification %} audit-pdf-action{% endif %}" id="{{ viewer_prefix }}-download-btn" href="#" download target="_blank" title="Download" aria-label="Download PDF">
+          {% if not read_only_user %}<a class="icon-btn{% if viewer_show_verification %} audit-pdf-action{% endif %}" id="{{ viewer_prefix }}-download-btn" href="#" download target="_blank" title="Download" aria-label="Download PDF">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        </a>
+          </a>{% endif %}
         <button class="icon-btn{% if viewer_show_verification %} audit-pdf-action{% endif %}" type="button" onclick="{{ viewer_close_function }}()" title="Close" aria-label="Close PDF preview">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>

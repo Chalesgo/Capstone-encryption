@@ -6,3 +6,4 @@ Pillow
 pycryptodome
 qrcode[pil]
 python-decouple
+reportlab>=4.0,<5

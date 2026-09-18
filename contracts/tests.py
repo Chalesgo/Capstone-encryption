@@ -1,3 +1,4 @@
+from .pdf_storage import read_pdf, write_pdf
 from datetime import timedelta
 import base64
 import json
@@ -1084,7 +1085,7 @@ class DocumentManagementTests(TestCase):
         owner = user or User.objects.first()
         contract = Contract.objects.create(
             title=f'Document Management {number}',
-            recipient=owner,
+            recipient=owner, uploaded_by=owner,
             file=SimpleUploadedFile(
                 f'document-management-{number}.pdf',
                 b'%PDF-1.7\nDocument management test fixture',
@@ -1521,7 +1522,7 @@ class DocumentManagementTests(TestCase):
         self.assertEqual(encrypted.json()['already_encrypted'], 1)
         encrypt.assert_called_once()
 
-    def test_bulk_toolbar_keeps_trash_permission_gated(self):
+    def test_bulk_toolbar_allows_document_administrators(self):
         self.make_contract(203, self.staff)
         self.client.force_login(self.staff)
 
@@ -1531,9 +1532,9 @@ class DocumentManagementTests(TestCase):
         self.assertContains(page, 'id="bulk-change-status"')
         self.assertContains(page, 'id="bulk-download-contracts"')
         self.assertContains(page, 'id="bulk-encrypt-contracts"')
-        self.assertNotContains(page, 'id="bulk-delete-contracts"')
-        denied = self.client.post(reverse('bulk_delete_contracts'), {'ids': []})
-        self.assertEqual(denied.status_code, 403)
+        self.assertContains(page, 'id="bulk-delete-contracts"')
+        response = self.client.post(reverse('bulk_delete_contracts'), {'ids': []})
+        self.assertEqual(response.status_code, 200)
 
 
 class EndToEndWorkflowTests(TestCase):
@@ -1613,13 +1614,13 @@ class EndToEndWorkflowTests(TestCase):
                 retrieved = self.client.get(reverse('preview_contract', args=[contract.id]))
                 self.assertEqual(retrieved.status_code, 200)
                 retrieved_bytes = b''.join(retrieved.streaming_content)
-                self.assertEqual(retrieved_bytes, Path(contract.file.path).read_bytes())
+                self.assertEqual(retrieved_bytes, read_pdf(contract.file.path))
 
     def test_e2e03_staff_and_public_verification_matrix(self):
         processed = self.process_documents(30)
         public_client = Client()
         for contract, _original in processed:
-            sealed_bytes = Path(contract.file.path).read_bytes()
+            sealed_bytes = read_pdf(contract.file.path)
             for verifier in (self.client, public_client):
                 with self.subTest(contract=contract.id, verifier=verifier is self.client):
                     response = verifier.post(reverse('public_verify'), {
@@ -1644,7 +1645,7 @@ class EndToEndWorkflowTests(TestCase):
                 response = restarted_client.get(reverse('download_contract', args=[contract.id]))
                 self.assertEqual(response.status_code, 200)
                 response_bytes = b''.join(response.streaming_content)
-                self.assertEqual(response_bytes, Path(contract.file.path).read_bytes())
+                self.assertEqual(response_bytes, read_pdf(contract.file.path))
 
 
 class CryptographicUnitTests(TestCase):
@@ -1967,7 +1968,7 @@ class PublicVerificationCryptoTests(TestCase):
 
         stored_path = media_root / 'contracts' / 'enrolled.pdf'
         stored_path.parent.mkdir(parents=True, exist_ok=True)
-        stored_path.write_bytes(self.sealed_bytes)
+        write_pdf(stored_path, self.sealed_bytes)
         self.contract = Contract.objects.create(
             title='Cryptographic verification fixture',
             file='contracts/enrolled.pdf',
@@ -2022,6 +2023,8 @@ class PublicVerificationCryptoTests(TestCase):
 
     def test_issued_pdf_upload_offers_existing_copy_without_creating_revision(self):
         user = User.objects.create_user('issued-copy-staff', is_staff=True)
+        self.contract.uploaded_by = user
+        self.contract.save(update_fields=['uploaded_by'])
         self.client.force_login(user)
         for route, data in (
             (reverse('check_duplicate_upload'), {}),
@@ -2252,7 +2255,7 @@ class PublicVerificationCryptoTests(TestCase):
 
         observed = {'authentic': 0, 'tampered': 0, 'not_found': 0, 'error': 0}
         for contract, _raw in enrolled:
-            result = verify_bytes(Path(contract.file.path).read_bytes(), f'accuracy-authentic-{contract.id}.pdf')
+            result = verify_bytes(read_pdf(contract.file.path), f'accuracy-authentic-{contract.id}.pdf')
             observed[result] += 1
 
         def mutate(pdf_bytes, category):
@@ -2283,7 +2286,7 @@ class PublicVerificationCryptoTests(TestCase):
             for number in range(10):
                 source_contract = enrolled[(number + len(category)) % len(enrolled)][0]
                 result = verify_bytes(
-                    mutate(Path(source_contract.file.path).read_bytes(), category),
+                    mutate(read_pdf(source_contract.file.path), category),
                     f'accuracy-{category}-{number}.pdf',
                 )
                 category_results[category].append(result)
@@ -2389,11 +2392,11 @@ class PublicVerificationCryptoTests(TestCase):
         # tampered, and unknown so the filename demonstration branch is excluded.
         cases = []
         for contract, _original_bytes in enrolled:
-            cases.append(('authentic', Path(contract.file.path).read_bytes(), 'acc-control'))
+            cases.append(('authentic', read_pdf(contract.file.path), 'acc-control'))
         for category in ('text', 'image', 'vector', 'metadata', 'structural'):
             for number in range(10):
                 contract = enrolled[(number + len(category)) % len(enrolled)][0]
-                cases.append(('tampered', mutate(Path(contract.file.path).read_bytes(), category), f'acc-{category}'))
+                cases.append(('tampered', mutate(read_pdf(contract.file.path), category), f'acc-{category}'))
         for number in range(20):
             cases.append(('not_found', build_pdf(100 + number, 'unregistered'), 'acc-unregistered'))
 
@@ -2471,7 +2474,7 @@ class PhysicalVerificationTests(TestCase):
         Image.new('RGBA', (240, 240), (35, 105, 90, 255)).save(
             seal_directory / 'default_seal.png'
         )
-        self.user = User.objects.create_user('physical_staff', password='password')
+        self.user = User.objects.create_user('physical_staff', password='password', is_staff=True)
         self.contract, self.version, self.tokens, self.pdf_bytes = self.issue_document(
             'Contract A', ['Page one amount PHP 3,000', 'Page two terms and signature', 'Page three approval']
         )
@@ -2489,7 +2492,7 @@ class PhysicalVerificationTests(TestCase):
         document.close()
         fingerprint = generate_canonical_fingerprint(path)
         contract = contract or Contract.objects.create(
-            title=title, file=f'contracts/{filename}', fingerprint=fingerprint,
+            title=title, file=f'contracts/{filename}', fingerprint=fingerprint, uploaded_by=self.user,
             original_fingerprint=fingerprint,
         )
         version = ContractVersion.objects.create(
@@ -2503,7 +2506,9 @@ class PhysicalVerificationTests(TestCase):
             version=version, manifest_id=manifest['manifest_id'], manifest=manifest,
             signature=sign_manifest(manifest, self.private_key_path),
         )
-        return contract, version, tokens, path.read_bytes()
+        pdf_bytes = path.read_bytes()
+        write_pdf(path, pdf_bytes)
+        return contract, version, tokens, pdf_bytes
 
     def verify(self, tokens=None, pdf_bytes=None):
         upload = SimpleUploadedFile(

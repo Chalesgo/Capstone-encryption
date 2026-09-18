@@ -3,9 +3,49 @@ import time
 
 from django.conf import settings
 from django.contrib.auth.signals import user_logged_in, user_logged_out, user_login_failed
+from django.db.models.signals import post_save
+from django.db.backends.signals import connection_created
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.dispatch import receiver
+
+
+SEALGUARD_ROLE_GROUPS = ('SealGuard Admin', 'SealGuard Staff', 'SealGuard User')
+
+
+def sync_sealguard_role_group(instance):
+    """Mirror the account role flags into named groups for administrator clarity."""
+    from django.contrib.auth.models import Group
+    groups = {group.name: group for group in Group.objects.filter(name__in=SEALGUARD_ROLE_GROUPS)}
+    role_name = 'SealGuard Admin' if instance.is_superuser else ('SealGuard Staff' if instance.is_staff else 'SealGuard User')
+    role_group = groups.get(role_name)
+    if role_group is None:
+        return
+    role_permissions = []
+    for group in groups.values():
+        role_permissions.extend(group.permissions.all())
+    if role_permissions and instance.pk:
+        # Role permissions are managed through Groups, never left as stale
+        # direct User permissions after a role change.
+        instance.user_permissions.remove(*role_permissions)
+    instance.groups.remove(*[group for name, group in groups.items() if name != role_name])
+    instance.groups.add(role_group)
+
+
+@receiver(post_save, sender=User)
+def sync_sealguard_role_group_on_save(sender, instance, **kwargs):
+    sync_sealguard_role_group(instance)
+
+
+@receiver(connection_created)
+def configure_sqlite_connection(sender, connection, **kwargs):
+    """Make local SQLite tolerate concurrent web/admin activity."""
+    if connection.vendor != 'sqlite':
+        return
+    with connection.cursor() as cursor:
+        cursor.execute('PRAGMA busy_timeout=120000')
+        cursor.execute('PRAGMA synchronous=NORMAL')
+        cursor.execute('PRAGMA journal_mode=WAL')
 
 from .models import AuditLog
 

@@ -21,6 +21,23 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
 CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='', cast=Csv())
 
+# The QR approval page is commonly demonstrated through an HTTPS tunnel.  The
+# tunnel terminates TLS before forwarding to Django, so tell Django which
+# scheme the browser used and accept the public URL configured for this run.
+# The ngrok wildcard is limited to DEBUG demos; production should use an
+# explicit CSRF_TRUSTED_ORIGINS value instead.
+PUBLIC_BASE_URL = config('PUBLIC_BASE_URL', default='').strip().rstrip('/')
+if PUBLIC_BASE_URL.startswith(('http://', 'https://')) and PUBLIC_BASE_URL not in CSRF_TRUSTED_ORIGINS:
+    CSRF_TRUSTED_ORIGINS = [*CSRF_TRUSTED_ORIGINS, PUBLIC_BASE_URL]
+if DEBUG:
+    ALLOWED_HOSTS = [*ALLOWED_HOSTS, '.ngrok-free.dev', '.ngrok.io']
+    CSRF_TRUSTED_ORIGINS = [
+        *CSRF_TRUSTED_ORIGINS,
+        'https://*.ngrok-free.dev',
+        'https://*.ngrok.io',
+    ]
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 
 # Application definition
 
@@ -35,11 +52,14 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'contracts.middleware.PDFStorageFailureMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'contracts.middleware.NullOriginApprovalMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'contracts.middleware.RequiredPasswordChangeMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -76,7 +96,10 @@ DATABASES = {
         # five-second driver timeout. Production should use the configured
         # server database rather than relying on SQLite for high concurrency.
         'OPTIONS': {
-            'timeout': 30,
+            # SQLite has one writer. Give short overlaps (admin writes while
+            # a request is finishing) time to clear instead of surfacing a
+            # misleading "database is locked" error.
+            'timeout': 120,
         },
     }
 }
@@ -144,13 +167,20 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # The Django development server must serve local media during staging and
 # performance tests even when DEBUG is disabled. Production deployments should
-# set SERVE_MEDIA=False and serve MEDIA_ROOT through the web server/storage layer.
+# route media through the permission-checked Django view; never expose MEDIA_ROOT.
 SERVE_MEDIA = config('SERVE_MEDIA', default=True, cast=bool)
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
 X_FRAME_OPTIONS = 'SAMEORIGIN'
 LOGIN_FAILURE_THRESHOLD = 5
 LOGIN_LOCKOUT_SECONDS = 30
+EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=EMAIL_HOST_USER or 'no-reply@sealguard.local')
 
 AUTHENTICATION_BACKENDS = [
     'contracts.authentication.SealGuardModelBackend',
@@ -159,3 +189,5 @@ AUTHENTICATION_BACKENDS = [
 RSA_PRIVATE_KEY_PATH = os.path.join(BASE_DIR, 'keys', 'private.pem')
 RSA_PUBLIC_KEY_PATH = os.path.join(BASE_DIR, 'keys', 'public.pem')
 MAX_UPLOAD_SIZE = 15 * 1024 * 1024
+
+# Set to the stable HTTPS origin used in printed QR access sheets.

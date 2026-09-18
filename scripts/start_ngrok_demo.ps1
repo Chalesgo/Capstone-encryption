@@ -96,6 +96,9 @@ try {
 
     $publicHost = ([uri]$publicUrl).Host
     $env:DEBUG = 'True'
+    # Do not run the write-heavy integrity scan inside the web process. Run it
+    # separately when needed so admin writes remain available during demos.
+    $env:SEALGUARD_RUN_STARTUP_INTEGRITY = '0'
     $env:ALLOWED_HOSTS = "localhost,127.0.0.1,$publicHost"
     $env:CSRF_TRUSTED_ORIGINS = $publicUrl
 

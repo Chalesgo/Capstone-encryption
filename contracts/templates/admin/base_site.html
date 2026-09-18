@@ -5,7 +5,20 @@
 
 {% block extrastyle %}
 {{ block.super }}
-<link rel="stylesheet" href="{% static 'contracts/sealguard-admin.css' %}">
+<link rel="stylesheet" href="{% static 'contracts/sealguard-admin.css' %}?v=5">
+<style>
+  .sealguard-link-overlay { display:none !important; position:fixed !important; inset:0 !important; z-index:9999 !important; align-items:center !important; justify-content:center !important; padding:20px !important; background:rgba(15,23,42,.52) !important; }
+  .sealguard-link-overlay.open { display:flex !important; animation:sealguard-admin-backdrop-in .16s ease-out both; }
+  .sealguard-link-modal { display:block !important; width:min(470px,100%) !important; box-sizing:border-box !important; padding:28px !important; border-radius:16px !important; background:#fff !important; color:#334455 !important; box-shadow:0 24px 70px rgba(15,23,42,.3) !important; }
+  .sealguard-link-overlay.open .sealguard-link-modal { animation:sealguard-admin-panel-in .18s ease-out both; }
+  .sealguard-link-modal h2 { color:#1a1a2e !important; margin:0 0 8px !important; }
+  .sealguard-link-modal p { color:#667788 !important; line-height:1.6 !important; }
+  .sealguard-link-actions { display:flex !important; justify-content:flex-end !important; gap:9px !important; margin-top:22px !important; }
+  .sealguard-link-actions button { padding:9px 14px !important; border-radius:8px !important; cursor:pointer !important; }
+  @keyframes sealguard-admin-backdrop-in { from { opacity:0; } to { opacity:1; } }
+  @keyframes sealguard-admin-panel-in { from { opacity:0; transform:translateY(8px) scale(.985); } to { opacity:1; transform:translateY(0) scale(1); } }
+  @media (prefers-reduced-motion:reduce) { .sealguard-link-overlay.open, .sealguard-link-overlay.open .sealguard-link-modal { animation:none !important; } }
+</style>
 {% endblock %}
 
 {% block branding %}
@@ -26,5 +39,93 @@
 {% endblock %}
 
 {% block nav-global %}
+{% if has_permission %}
+<div class="sealguard-header-actions">
+<button type="button" class="sealguard-admin-tool" onclick="openAdminLinkModal('invite')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg> Staff invite</button>
+<button type="button" class="sealguard-admin-tool" onclick="openAdminLinkModal('password')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg> Password link</button>
 <a class="sealguard-back-link" href="{% url 'contract_list' %}">Back to SealGuard</a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block footer %}
+{{ block.super }}
+{% if has_permission %}
+<div class="sealguard-link-overlay" id="sealguard-link-overlay" onclick="closeAdminLinkModal(event)">
+  <section class="sealguard-link-modal" role="dialog" aria-modal="true" aria-labelledby="sealguard-link-title" aria-describedby="sealguard-link-warning" onclick="event.stopPropagation()">
+    <div class="sealguard-link-icon" aria-hidden="true">!</div>
+    <h2 id="sealguard-link-title">Share this link carefully</h2>
+    <p id="sealguard-link-warning"></p>
+    <input id="sealguard-link-value" class="sealguard-link-value" aria-label="Link to share" readonly hidden>
+    <p id="sealguard-link-status" role="status" aria-live="polite"></p>
+    <div class="sealguard-link-actions"><button type="button" class="sealguard-link-close" onclick="closeAdminLinkModal()">Close</button><button type="button" class="sealguard-link-copy" id="sealguard-link-copy" onclick="confirmAdminLinkCopy()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false" style="vertical-align: middle; margin-right: 6px;"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg><span id="sealguard-link-copy-label">Generate and copy</span></button></div>
+  </section>
+</div>
+<script>
+let adminLinkType = null;
+let adminLinkTrigger = null;
+function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+    const input = document.createElement('input'); input.value = text; input.setAttribute('readonly', ''); input.style.position = 'fixed'; input.style.opacity = '0';
+    document.body.appendChild(input); input.select();
+    try { if (!document.execCommand('copy')) throw new Error('Copy was blocked. Select the link above and copy it manually.'); } finally { input.remove(); }
+    return Promise.resolve();
+}
+function openAdminLinkModal(type) {
+    adminLinkTrigger = document.activeElement;
+    adminLinkType = type;
+    const invite = type === 'invite';
+    document.getElementById('sealguard-link-title').textContent = invite ? 'Create a staff invitation' : 'Share the password-change link';
+    document.getElementById('sealguard-link-warning').textContent = invite
+        ? 'This invitation expires in 24 hours and can be used once. Treat it as a private access link: share it only with the intended staff member, and never post it publicly.'
+        : 'This link opens the password-recovery page. Share it only with the intended staff member. They must use the email connected to their account, receive an approval code, and then choose a new password.';
+    const value = document.getElementById('sealguard-link-value');
+    value.value = '';
+    document.getElementById('sealguard-link-status').textContent = '';
+    value.hidden = invite;
+    if (!invite) value.value = '{{ request.scheme }}://{{ request.get_host }}{% url 'password_reset_request' %}';
+    document.getElementById('sealguard-link-copy-label').textContent = invite ? 'Generate and copy' : 'Copy link';
+    document.getElementById('sealguard-link-overlay').classList.add('open');
+    document.getElementById('sealguard-link-copy').focus();
+}
+function closeAdminLinkModal(event) {
+    if (!document.getElementById('sealguard-link-overlay').classList.contains('open')) return;
+    if (document.getElementById('sealguard-link-copy').disabled) return;
+    if (event && event.target !== event.currentTarget) return;
+    document.getElementById('sealguard-link-overlay').classList.remove('open');
+    adminLinkType = null;
+    if (adminLinkTrigger) adminLinkTrigger.focus();
+}
+async function confirmAdminLinkCopy() {
+    const button = document.getElementById('sealguard-link-copy');
+    button.disabled = true;
+    try {
+        let url = document.getElementById('sealguard-link-value').value;
+        if (adminLinkType === 'invite' && !url) {
+            const response = await fetch('{% url 'create_staff_invitation' %}', {method: 'POST', headers: {'X-CSRFToken': '{{ csrf_token }}'}});
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Unable to create invitation.');
+            url = data.url;
+            document.getElementById('sealguard-link-value').value = url;
+            document.getElementById('sealguard-link-value').hidden = false;
+        }
+        await copyText(url);
+        document.getElementById('sealguard-link-copy-label').textContent = 'Copied';
+        document.getElementById('sealguard-link-status').textContent = 'Link copied. You can now share it privately.';
+    } catch (error) {
+        document.getElementById('sealguard-link-status').textContent = error.message || 'Unable to copy. Select the link and copy it manually.';
+        document.getElementById('sealguard-link-copy-label').textContent = 'Try again';
+    }
+    finally { button.disabled = false; }
+}
+document.addEventListener('keydown', event => { if (event.key === 'Escape') closeAdminLinkModal(); });
+document.getElementById('sealguard-link-overlay').addEventListener('keydown', event => {
+    if (event.key !== 'Tab') return;
+    const items = [...event.currentTarget.querySelectorAll('button:not(:disabled), input:not([hidden])')];
+    const first = items[0], last = items[items.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+});
+</script>
+{% endif %}
 {% endblock %}

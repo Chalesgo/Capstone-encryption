@@ -94,9 +94,9 @@ http://127.0.0.1:8000
 
 ### Integrity Monitoring
 
-SealGuard scans every stored PDF version when the Django development server
-starts. The scan runs in the background so it does not block the first page
-request. Run it manually with:
+SealGuard integrity scans are run manually or from a scheduled task so a
+write-heavy scan cannot block account creation or other SQLite writes. Run one
+with:
 
 ```powershell
 $env:DEBUG='False'
@@ -107,8 +107,14 @@ For daily Windows monitoring, create a Task Scheduler task that runs
 `scripts/run_integrity_scan.ps1` once per day. Failed checks are written to
 the terminal log and dashboard audit log; repeated identical failures are
 limited to one audit entry per 24 hours.
+An administrator can also start another scan from the Dashboard with the
+refresh icon. If a scan is already running, a scheduled or manual trigger is
+skipped so two scans cannot overlap.
 Each completed run also appears as a compact `Integrity Scan` activity. Select
-that activity in the dashboard to open its stored debug log.
+that activity in the dashboard to open its stored debug log. An administrator
+can cancel an active scan from the dashboard. A cancelled scan keeps results
+already checked, leaves unreached PDFs unchecked, and never labels an
+unreached PDF as tampered.
 
 ---
 
@@ -120,8 +126,8 @@ that activity in the dashboard to open its stored debug log.
 - AES-256-CBC encryption with RSA key wrapping
 - LSB steganography embedded into the official barangay seal
 - PDF metadata signature storage for reliable verification
-- Role-based access control — Superuser, Staff, and Public
-- Superuser-only contract deletion with file cleanup
+- Role-based access control for Admin, Staff, User, and public verification
+- Permission-checked document editing, sharing, download, and deletion
 - Audit-style verification log for debugging
 
 ---
@@ -130,8 +136,95 @@ that activity in the dashboard to open its stored debug log.
 Navigate to:
 http://127.0.0.1:8000/admin/
 
-Create your own superuser account using Step 7 above.
+Create your own superuser account using Step 7 above. Only active superusers
+can enter Django Admin; staff accounts use the application workspace and User
+accounts are limited to read-only PDF viewing.
 Do not share login credentials in this file.
+
+---
+
+## Roles and Permissions
+
+SealGuard separates its application roles from Django's `is_staff` label. In
+this project, `is_staff` means Staff workspace access; it does not grant
+Django Admin access. Admin means a Django superuser.
+
+### How the hybrid RBAC works
+
+There are three layers working together:
+
+1. **Role flags identify the account.** A superuser is an Admin, `is_staff` is
+   Staff, and an account with neither flag is a User. Only a superuser can open
+   `/admin/`.
+2. **Django Groups describe broad permissions.** Each account is synchronized
+   into `SealGuard Admin`, `SealGuard Staff`, or `SealGuard User`. The Group
+   permissions page shows what that role is generally allowed to do. Changing
+   Staff status automatically changes the matching group and removes stale
+   SealGuard permissions from the account.
+3. **SealGuard applies per-document rules.** `contracts/access.py` checks the
+   specific PDF for every protected action. Ownership, collaboration, public
+   status, trash status, and read-only restrictions determine whether the user
+   may view, download, edit, share, publish, or delete that particular document.
+
+The Group is therefore a role-level baseline, not a replacement for the
+document-level check. A Staff member can have the general permission to manage
+documents while still being blocked from a PDF they do not own or have access
+to. A User can have the general permission to view PDFs while remaining unable
+to download or modify them.
+
+### Gmail email delivery for local testing
+
+SealGuard uses the console email backend by default, so development emails are
+printed in the terminal. To send real Gmail messages, enable 2-Step Verification
+on the Gmail account, create a Google App Password, and place the following in
+your local `.env` file:
+
+```dotenv
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=your-account@gmail.com
+EMAIL_HOST_PASSWORD=your-16-character-app-password
+DEFAULT_FROM_EMAIL=your-account@gmail.com
+```
+
+Restart Django after changing `.env`, then use account registration or password
+recovery to send a test message. Do not use the normal Gmail password, commit
+`.env`, or paste the App Password into source code. Google requires 2-Step
+Verification for App Passwords and revokes them when the Google account
+password changes.
+
+| Capability | Admin (superuser) | Staff (`is_staff`) | User (neither flag) | Public / unauthenticated |
+|---|---|---|---|---|
+| Open `verify/` | Yes | Yes | Yes | Yes |
+| Use physical verification | Yes | Yes | Yes | Yes |
+| Open `list.html` and `dashboard` | Yes | Yes | Yes, read-only | No; public verification only |
+| See private documents | All documents | All non-trashed documents | Uploaded or explicitly shared documents | No |
+| View a PDF in SealGuard | Yes | Yes, read-only by default | Yes, read-only | Public documents only |
+| Download a PDF | Yes | Yes, for viewable PDFs | No | Public documents only |
+| Upload a document | Yes | Yes | No | No |
+| Rename, tag, revise, encrypt, or change status | Yes | Yes, for authorized documents | No | No |
+| Move documents or manage folders | Yes | Yes, for authorized documents | No | No |
+| Move documents to Trash or restore them | Yes | Yes, for authorized documents | No | No |
+| Permanently delete documents | Yes | Only where the normal document permission is granted | No | No |
+| Grant or revoke document access | Yes | Authorized uploader only | No | No |
+| Publish or unpublish a document | Yes | Authorized uploader only | No | No |
+| View activity for authorized documents | All activity | Authorized-document activity | Authorized-document activity, read-only | No private activity |
+| Export dashboard reports | Yes | Yes | No | No |
+| Start or cancel an integrity scan | Yes | No | No | No |
+| Enter `/admin/` | Yes | No | No | No |
+
+The User role can preview assigned PDFs but cannot download them. Direct media
+URLs enforce the same rule for private documents. A document marked public can
+be viewed and downloaded without an account, by design.
+
+The Django Admin Groups page mirrors these roles through the `SealGuard Admin`,
+`SealGuard Staff`, and `SealGuard User` groups. Their permissions cover workspace,
+PDF, revision, folder, tutorial, verification, reporting, invitation, and integrity
+scan capabilities. These are role-level permissions; document ownership and
+collaboration checks in `contracts/access.py` still decide which individual PDF a
+user may view or change.
 
 ---
 

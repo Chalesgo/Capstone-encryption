@@ -1,0 +1,113 @@
+<div class="modal-overlay" id="access-modal" role="dialog" aria-modal="true" aria-labelledby="access-modal-title">
+  <div class="modal" style="box-sizing:border-box;max-width:480px;width:min(480px, calc(100vw - 32px));max-height:85vh;overflow:auto">
+    <h3 id="access-modal-title">Manage document access</h3>
+    <p id="access-owner"></p>
+    <p>Shared users can view, download, revise, edit, and move this document to trash. Only its uploader and administrators can change access or make it public.</p>
+    <div id="access-users"></div>
+    <form onsubmit="event.preventDefault(); changeContractAccess('grant', document.getElementById('access-username').value)">
+      <label for="access-username">Find an account</label>
+      <input id="access-username" name="document-access-account" type="text" autocomplete="new-password" data-bwignore="true" data-1p-ignore="true" data-lpignore="true" spellcheck="false" required maxlength="150" style="display:block;width:100%;box-sizing:border-box;padding:10px;margin:8px 0" placeholder="Search by username" aria-describedby="access-suggestions-help">
+      <small id="access-suggestions-help" style="color:#667788">Suggestions include the account creation date. Select an account to grant access.</small>
+      <div id="access-account-suggestions" role="listbox" style="margin:8px 0 14px"></div>
+      <button type="submit" class="btn btn-primary">Grant access</button>
+    </form>
+    <p id="access-message" role="status" aria-live="polite"></p>
+    <div class="modal-actions"><button type="button" class="btn" onclick="closeContractAccess()">Close</button></div>
+  </div>
+</div>
+<script>
+let accessContractId = null;
+let accessReturnFocus = null;
+let accessAccounts = [];
+function closeContractAccess() {
+  document.getElementById('access-modal').classList.remove('active');
+  accessContractId = null;
+  if (accessReturnFocus) accessReturnFocus.focus();
+}
+function renderContractAccess(data) {
+  document.getElementById('access-owner').textContent = 'Uploader: ' + data.owner + '. Administrators always have access.';
+  const container = document.getElementById('access-users');
+  container.replaceChildren();
+  if (!data.users.length) container.textContent = 'No additional users have access.';
+  data.users.forEach(user => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:12px;margin:12px 0';
+    const label = document.createElement('span'); label.textContent = user.username;
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'btn'; button.textContent = 'Revoke';
+    button.setAttribute('aria-label', 'Revoke access for ' + user.username);
+    button.onclick = () => changeContractAccess('revoke', user.username);
+    row.append(label, button); container.append(row);
+  });
+  accessAccounts = data.accounts || [];
+  renderAccessSuggestions();
+}
+function renderAccessSuggestions() {
+  const input = document.getElementById('access-username');
+  const container = document.getElementById('access-account-suggestions');
+  if (!input || !container) return;
+  const query = input.value.trim().toLowerCase();
+  const matches = accessAccounts.filter(account => account.username.toLowerCase().includes(query)).slice(0, 8);
+  container.replaceChildren();
+  if (!matches.length) {
+    if (query) { container.textContent = 'No matching active accounts.'; container.style.color = '#667788'; }
+    return;
+  }
+  matches.forEach(account => {
+    const item = document.createElement('button');
+    item.type = 'button'; item.role = 'option'; item.className = 'access-account-suggestion';
+    item.style.cssText = 'display:flex;width:100%;justify-content:space-between;gap:12px;text-align:left;border:1px solid #e1e7ed;background:#fff;border-radius:7px;padding:9px 10px;margin:5px 0;cursor:pointer;color:#334455';
+    item.innerHTML = '<span><strong>' + escapeAccessText(account.username) + '</strong><br><small style="color:#667788">Account created ' + escapeAccessText(account.created_at) + '</small></span><span style="color:#667788;font-size:12px">' + (account.has_access ? 'Already shared' : 'Select') + '</span>';
+    item.disabled = account.has_access;
+    item.onclick = () => { input.value = account.username; renderAccessSuggestions(); input.focus(); };
+    container.appendChild(item);
+  });
+}
+function escapeAccessText(value) { return String(value == null ? '' : value).replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character])); }
+async function openContractAccess(id) {
+  accessReturnFocus = document.activeElement;
+  closeMobileEditSheet();
+  document.getElementById('contract-context-menu').classList.remove('active');
+  accessContractId = id;
+  document.getElementById('access-modal').classList.add('active');
+  document.getElementById('access-users').replaceChildren();
+  document.getElementById('access-owner').textContent = '';
+  document.getElementById('access-message').textContent = 'Loading access…';
+  document.getElementById('access-username').value = '';
+  document.getElementById('access-username').focus();
+  try {
+    const response = await fetch('/contract/' + id + '/access/');
+    if (!response.ok) throw new Error('You cannot manage access to this document.');
+    const data = await response.json();
+    if (accessContractId !== id) return;
+    renderContractAccess(data); document.getElementById('access-message').textContent = '';
+  } catch (error) { if (accessContractId === id) document.getElementById('access-message').textContent = error.message; }
+}
+async function changeContractAccess(action, username) {
+  const id = accessContractId;
+  if (!id) return;
+  const buttons = document.querySelectorAll('#access-modal button');
+  buttons.forEach(button => button.disabled = true);
+  try {
+    const response = await fetch('/contract/' + id + '/access/', {
+      method: 'POST', headers: {'X-CSRFToken': '{{ csrf_token }}'},
+      body: new URLSearchParams({action, username})
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Access could not be updated. Please refresh and try again.');
+    if (accessContractId !== id) return;
+    renderContractAccess(data);
+    document.getElementById('access-message').textContent = action === 'grant' ? 'Access granted.' : 'Access revoked.';
+    document.getElementById('access-username').value = '';
+  } catch (error) { if (accessContractId === id) document.getElementById('access-message').textContent = error.message; }
+  finally { buttons.forEach(button => button.disabled = false); }
+}
+document.getElementById('access-modal').addEventListener('keydown', event => {
+  if (event.key === 'Escape') { closeContractAccess(); return; }
+  if (event.key !== 'Tab') return;
+  const items = [...event.currentTarget.querySelectorAll('button:not(:disabled), input')];
+  const first = items[0], last = items[items.length - 1];
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+});
+document.getElementById('access-username').addEventListener('input', renderAccessSuggestions);
+</script>

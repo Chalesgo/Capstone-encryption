@@ -1,3 +1,4 @@
+from .pdf_storage import open_pdf, read_pdf, write_pdf
 import hashlib
 import hmac as hmac_lib
 import fitz
@@ -32,7 +33,7 @@ def generate_canonical_fingerprint(pdf_path, previous_cf=None):
     (hash-chained version history — tampering with an earlier version
     breaks the chain for every version after it).
     """
-    doc = fitz.open(pdf_path)
+    doc = open_pdf(pdf_path)
     combined = ""
 
     for page in doc:
@@ -81,7 +82,7 @@ def _normalize_vector_value(value):
 
 def generate_vector_fingerprint(pdf_path):
     """Hash normalized vector drawing commands for strict editor/tamper detection."""
-    document = fitz.open(pdf_path)
+    document = open_pdf(pdf_path)
     try:
         pages = []
         for page_number, page in enumerate(document):
@@ -288,7 +289,7 @@ def extract_data_from_image(image_path: str):
 def extract_lsb_marker_from_pdf(pdf_path: str, expected_marker: str):
     """Return the expected LSB marker if it survives as an embedded PDF image."""
     try:
-        with fitz.open(pdf_path) as document:
+        with open_pdf(pdf_path) as document:
             seen = set()
             for page in document:
                 for image_info in page.get_images(full=True):
@@ -319,13 +320,13 @@ def extract_lsb_marker_from_pdf(pdf_path: str, expected_marker: str):
     return None
 
 def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None, encrypted_cf=None,
-                      qr_paths=None):
+                      qr_paths=None, encrypt_output=False, verify_url=None):
     """
     Creates a new PDF with extended page size to fit an authentication
     strip below content. Stores encrypted CF in PDF metadata for
     reliable verification.
     """
-    src = fitz.open(input_pdf)
+    src = open_pdf(input_pdf)
     dst = fitz.open()
 
     strip_height = 150
@@ -458,11 +459,14 @@ def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None, encrypted_
             page_num_text,
             fontsize=7.5, color=text_muted, align=0,
         )
+        verify_rect = fitz.Rect(center_left, new_height - 30, center_right, new_height - 16)
         new_page.insert_textbox(
-            fitz.Rect(center_left, new_height - 30, center_right, new_height - 16),
-            "Verify at: [your website URL]",
+            verify_rect,
+            "Verify at: " + (verify_url or "the SealGuard website"),
             fontsize=7, color=text_muted, align=0,
         )
+        if verify_url:
+            new_page.insert_link({"kind": fitz.LINK_URI, "from": verify_rect, "uri": verify_url})
 
     # ── Store encrypted CF in PDF metadata ──
     if encrypted_cf:
@@ -470,7 +474,10 @@ def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None, encrypted_
         metadata['keywords'] = f'SEALGUARD:{encrypted_cf}'
         dst.set_metadata(metadata)
 
-    dst.save(output_pdf)
+    if encrypt_output:
+        write_pdf(output_pdf, dst.tobytes())
+    else:
+        dst.save(output_pdf)
     dst.close()
     src.close()
     
@@ -495,7 +502,7 @@ def generate_qr_code(data: str, output_path: str):
 def extract_cf_from_metadata(pdf_path: str):
     """Extracts the SEALGUARD value from the PDF metadata, if present."""
     try:
-        with fitz.open(pdf_path) as doc:
+        with open_pdf(pdf_path) as doc:
             keywords = doc.metadata.get('keywords', '')
         if keywords.startswith('SEALGUARD:'):
             return keywords[len('SEALGUARD:'):]
@@ -507,7 +514,7 @@ def extract_cf_from_metadata(pdf_path: str):
     Creates a new PDF with extended page size to fit the signature strip below content.
     Stores encrypted CF in PDF metadata for reliable verification.
     """
-    src = fitz.open(input_pdf)
+    src = open_pdf(input_pdf)
     dst = fitz.open()
 
     strip_height = 130
@@ -610,7 +617,7 @@ def extract_cf_from_metadata(pdf_path: str):
         metadata['keywords'] = f'SEALGUARD:{encrypted_cf}'
         dst.set_metadata(metadata)
 
-    dst.save(output_pdf)
+    write_pdf(output_pdf, dst.tobytes())
     dst.close()
     src.close()
 

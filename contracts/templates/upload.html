@@ -359,18 +359,8 @@
                 </svg>
                 <span id="upload-process-info">After uploading, the system will automatically generate a SHA-256 canonical fingerprint,
                 encrypt it with AES-256-CBC, embed it into the digital seal via LSB steganography,
-                and stamp the authenticated seal onto your contract.</span>
+                and stamp the authenticated seal onto your contract. The complete PDF is also encrypted in storage and only decrypted for authorized viewing.</span>
             </div>
-
-            {% if not is_revision %}
-            <label class="upload-option" for="skip-encryption">
-                <input type="checkbox" id="skip-encryption" name="skip_encryption" value="1">
-                <span>
-                    <strong>Upload without encryption</strong>
-                    <small>Store the PDF and fingerprint now. You can encrypt it later from the Contracts page.</small>
-                </span>
-            </label>
-            {% endif %}
 
             <div style="display:flex; gap:10px;">
                 <button type="submit" id="upload-btn" class="btn btn-primary"
@@ -414,8 +404,9 @@
 
 <style>
     .duplicate-modal { display:none; position:fixed; inset:0; z-index:1000; align-items:center; justify-content:center; background:rgba(15,23,42,.45); padding:20px; }
-    .duplicate-modal.open { display:flex; }
+    .duplicate-modal.open { display:flex; animation: sealguard-modal-backdrop-in .16s ease-out both; }
     .duplicate-modal-card { width:min(460px, 100%); background:#fff; border-radius:16px; padding:24px; box-shadow:0 20px 60px rgba(15,23,42,.25); }
+    .duplicate-modal.open .duplicate-modal-card { animation: sealguard-modal-panel-in .18s ease-out both; }
     .duplicate-modal-card h2 { margin:0 0 8px; color:#1a1a2e; font-size:19px; }
     .duplicate-modal-card p { color:#667788; line-height:1.6; font-size:14px; }
     .duplicate-modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; }
@@ -432,24 +423,12 @@
     const warningBox = document.getElementById('file-warning');
     const uploadBtn = document.getElementById('upload-btn');
     const uploadBtnLabel = document.getElementById('upload-btn-label');
-    const skipEncryption = document.getElementById('skip-encryption');
     const uploadProcessInfo = document.getElementById('upload-process-info');
     const uploadForm = document.getElementById('upload-form');
     const duplicateModal = document.getElementById('duplicate-modal');
     const duplicateMessage = document.getElementById('duplicate-modal-message');
     let duplicateContracts = [];
     let duplicateCheckComplete = false;
-
-    function updateUploadModeLabel() {
-        if (!uploadBtnLabel || !skipEncryption) return;
-        uploadBtnLabel.textContent = skipEncryption.checked ? 'Upload without encryption' : 'Upload & Encrypt';
-        if (uploadProcessInfo) {
-            uploadProcessInfo.textContent = skipEncryption.checked
-                ? 'The PDF will be stored with its SHA-256 canonical fingerprint only. You can encrypt it later from the Contracts page.'
-                : 'After uploading, the system will automatically generate a SHA-256 canonical fingerprint, encrypt it with AES-256-CBC, embed it into the digital seal via LSB steganography, and stamp the authenticated seal onto your contract.';
-        }
-    }
-    skipEncryption?.addEventListener('change', updateUploadModeLabel);
 
     function formatBytes(bytes) {
         if (bytes < 1024) return bytes + ' B';

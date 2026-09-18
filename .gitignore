@@ -4,6 +4,8 @@ db.sqlite3
 .env
 *.pem
 *.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
 
 # Generated test, report, and Python cache files
 tmp/

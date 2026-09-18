@@ -2,19 +2,252 @@
 {% block title %}Staff Login{% endblock %}
 
 {% block content %}
-<div style="max-width: 420px; margin: 3rem auto;">
-    <div style="text-align: center; margin-bottom: 2rem;">
-        <h1 style="font-size: 24px; font-weight: 700; color: #1a1a2e;">Staff Login</h1>
-        <p style="color: #667788; font-size: 14px; margin-top: 6px;">
-            Access the contract management portal
-        </p>
+<style>
+    .auth-shell {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        min-height: calc(100vh - 56px - 4rem);
+        max-width: 980px;
+        margin: 0 auto;
+        border-radius: 18px;
+        overflow: hidden;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+
+    .auth-side {
+        background: #3a3a3a;
+        background-image:
+            radial-gradient(circle at 15% 18%, rgba(244,163,77,0.16), transparent 45%),
+            radial-gradient(circle at 85% 82%, rgba(58,90,158,0.28), transparent 50%);
+        color: #f0efed;
+        padding: 3rem 2.75rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+
+    .auth-side-mark {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 46px;
+        height: 46px;
+        border-radius: 12px;
+        background: rgba(244,163,77,0.14);
+        border: 1px solid rgba(244,163,77,0.3);
+    }
+
+    .auth-side-mark svg {
+        width: 22px;
+        height: 22px;
+        stroke: #f4a34d;
+    }
+
+    .auth-side h2 {
+        font-size: 22px;
+        font-weight: 600;
+        line-height: 1.35;
+        margin-top: 1.75rem;
+        color: #fff;
+    }
+
+    .auth-side p {
+        font-size: 13.5px;
+        color: #aab3c8;
+        line-height: 1.7;
+        margin-top: 0.6rem;
+        max-width: 30ch;
+    }
+
+    .auth-side-steps {
+        display: flex;
+        flex-direction: column;
+        gap: 1.1rem;
+        margin-top: 2.4rem;
+    }
+
+    .auth-side-step {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+    }
+
+    .auth-side-step svg {
+        width: 16px;
+        height: 16px;
+        stroke: #f4a34d;
+        flex-shrink: 0;
+        margin-top: 2px;
+    }
+
+    .auth-side-step span {
+        font-size: 12.5px;
+        color: #ccd3e0;
+        line-height: 1.55;
+    }
+
+    .auth-side-foot {
+        font-size: 11px;
+        color: #6f7891;
+        letter-spacing: 0.02em;
+        border-top: 1px solid rgba(255,255,255,0.08);
+        padding-top: 1rem;
+    }
+
+    .auth-main {
+        background: #fff;
+        padding: 3rem 2.75rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .auth-heading h1 {
+        font-size: 23px;
+        font-weight: 700;
+        color: #1a1a2e;
+    }
+
+    .auth-heading p {
+        color: #667788;
+        font-size: 13.5px;
+        margin-top: 5px;
+    }
+
+    .auth-staff-notice {
+        display: flex;
+        gap: 9px;
+        align-items: flex-start;
+        margin-top: 1.1rem;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border-left: 4px solid #3a5a9e;
+        background: #f1f5ff;
+        color: #40577d;
+        font-size: 12px;
+        line-height: 1.55;
+    }
+    .auth-staff-notice svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; }
+    .auth-staff-notice strong { color: #263f69; }
+    .auth-staff-notice a { color: #a95d18; font-weight: 700; }
+
+    .auth-form {
+        margin-top: 1.75rem;
+    }
+
+    .auth-form .form-group {
+        margin-bottom: 1.1rem;
+    }
+
+    .auth-form label {
+        display: block;
+        font-size: 12.5px;
+        font-weight: 600;
+        color: #445566;
+        margin-bottom: 6px;
+    }
+
+    .auth-error {
+        margin-bottom: 1.1rem;
+        padding: 10px 12px;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        background: #fef2f2;
+        color: #b91c1c;
+        font-size: 13px;
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+    }
+
+    .auth-error svg {
+        width: 15px;
+        height: 15px;
+        stroke: #b91c1c;
+        flex-shrink: 0;
+        margin-top: 1px;
+    }
+
+    .auth-submit {
+        width: 100%;
+        justify-content: center;
+        padding: 11px;
+        margin-top: 0.4rem;
+        font-size: 14px;
+    }
+
+    .auth-footnote {
+        text-align: center;
+        margin-top: 1.4rem;
+        font-size: 13px;
+        color: #667788;
+    }
+
+    .auth-footnote a {
+        color: #1a1a2e;
+        font-weight: 600;
+        text-decoration: none;
+    }
+
+    .auth-footnote a:hover { text-decoration: underline; }
+
+    @media (max-width: 760px) {
+        .auth-shell {
+            grid-template-columns: 1fr;
+            border-radius: 14px;
+            min-height: 0;
+        }
+        .auth-side { padding: 2rem; }
+        .auth-side-steps { display: none; }
+    .auth-main { padding: 2.25rem 1.75rem; }
+    }
+</style>
+
+<div class="auth-shell">
+    <div class="auth-side">
+        <div>
+            <span class="auth-side-mark">
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+            </span>
+            <h2>Every contract carries an invisible seal.</h2>
+            <p>Sign in to review, approve, and verify procurement contracts for Barangay Sto. Niño.</p>
+
+            <div class="auth-side-steps">
+                <div class="auth-side-step">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+                    <span>Staff accounts are approved individually — no self-registration for admin roles.</span>
+                </div>
+                <div class="auth-side-step">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    <span>Repeated failed attempts temporarily lock the account to protect contract records.</span>
+                </div>
+                <div class="auth-side-step">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                    <span>Anyone can verify a document's seal publicly — without signing in.</span>
+                </div>
+            </div>
+        </div>
+        <div class="auth-side-foot">SealGuard &middot; Barangay Sto. Ni&ntilde;o, Bi&ntilde;an City</div>
     </div>
 
-    <div class="card">
-        <form method="post" novalidate>
+    <div class="auth-main">
+        <div class="auth-heading">
+            <h1>Staff Login</h1>
+            <p>Access the contract management portal.</p>
+        </div>
+
+        <div class="auth-staff-notice" role="note">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span><strong>Staff members only.</strong> Public visitors do not need to sign in. <a href="/verify/">Verify a document</a> instead.</span>
+        </div>
+
+        <form method="post" novalidate class="auth-form">
             {% csrf_token %}
             {% if form.non_field_errors %}
-                <div role="alert" style="margin-bottom: 1rem; padding: 10px 12px; border: 1px solid #fecaca; border-radius: 8px; background: #fef2f2; color: #b91c1c; font-size: 13px;">
+                <div class="auth-error" role="alert">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                     <span id="login-error-message" data-lockout-seconds="{{ form.lockout_seconds_remaining|default:'' }}">
                         {{ form.login_error_message|default:'The username or password is incorrect. Please try again.' }}
                     </span>
@@ -22,23 +255,21 @@
             {% endif %}
             {% for field in form %}
                 <div class="form-group">
-                    <label>{{ field.label }}</label>
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
                     {{ field }}
                     {% if field.errors %}
-                        <span style="color: #dc2626; font-size: 12px;">{{ field.errors|join:", " }}</span>
+                        <span style="display:block; margin-top:5px; color: #dc2626; font-size: 12px;">{{ field.errors|join:", " }}</span>
                     {% endif %}
                 </div>
             {% endfor %}
-            <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 11px;">
-                Login
-            </button>
+            <button type="submit" class="btn btn-primary auth-submit">Login</button>
         </form>
-    </div>
 
-    <p style="text-align: center; margin-top: 1rem; font-size: 13px; color: #667788;">
-        Not a staff member? <a href="/verify/" style="color: #1a1a2e; font-weight: 500;">Verify a document instead</a>
-    </p>
+        <p class="auth-footnote">Not a staff member? <a href="/verify/">Verify a document instead</a></p>
+        <p class="auth-footnote"><a href="{% url 'password_reset_request' %}">Forgot your password?</a></p>
+    </div>
 </div>
+
 <script>
     (() => {
         const message = document.getElementById('login-error-message');

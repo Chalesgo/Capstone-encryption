@@ -1,3 +1,4 @@
+from .pdf_storage import open_pdf, read_pdf, write_pdf
 import base64
 import hashlib
 import json
@@ -47,7 +48,7 @@ def _image_hash(image):
 
 def build_manifest(contract_id, version_number, pdf_path, complete_fingerprint, issued_at):
     pages = []
-    with fitz.open(pdf_path) as document:
+    with open_pdf(pdf_path) as document:
         for index, page in enumerate(document):
             official_hash = _image_hash(_render_page(page))
             page_id = hashlib.sha256(

@@ -2,11 +2,16 @@ import logging
 import time
 
 from django.core.management.base import BaseCommand
+from django.core.cache import cache
 from django.db import close_old_connections
 from django.utils import timezone
 
 from contracts.models import AuditLog, Contract
 from contracts.utils import verify_version_chain
+from contracts.integrity import (
+    INTEGRITY_CACHE_SECONDS, INTEGRITY_RESULT_CACHE_PREFIX,
+    INTEGRITY_SCAN_CACHE_KEY, INTEGRITY_SCAN_LOCK_KEY,
+)
 
 
 logger = logging.getLogger('contracts.integrity')
@@ -17,8 +22,12 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--quiet-success', action='store_true')
+        parser.add_argument('--source', default='Scheduled Integrity Scan')
 
     def handle(self, *args, **options):
+        if not cache.add(INTEGRITY_SCAN_LOCK_KEY, {'started_at': timezone.now().isoformat()}, INTEGRITY_CACHE_SECONDS):
+            self.stdout.write('Integrity scan skipped because another scan is already in progress.')
+            return
         started_at = time.perf_counter()
         scan_started_at = timezone.now()
         close_old_connections()
@@ -31,11 +40,40 @@ class Command(BaseCommand):
             action='integrity_scan',
             document_title='Integrity Scan',
             note='Integrity scan is currently running.',
-            verification_source='Scheduled Integrity Scan',
+            verification_source=options['source'],
             verification_result='Running',
             integrity_check='In Progress',
             verification_debug_log='\n'.join(debug_lines),
         )
+        cache.set(INTEGRITY_SCAN_CACHE_KEY, {
+            'scan_log_id': scan_log.id,
+            'started_at': scan_started_at.isoformat(),
+            'cancel_requested': False,
+        }, INTEGRITY_CACHE_SECONDS)
+        result_cache_keys = []
+
+        def cancel_requested():
+            control = cache.get(INTEGRITY_SCAN_CACHE_KEY) or {}
+            if control.get('scan_log_id') == scan_log.id and control.get('cancel_requested'):
+                return True
+            return AuditLog.objects.filter(
+                pk=scan_log.id, verification_result='Cancel requested',
+            ).exists()
+
+        def finish_cancelled():
+            scan_log.note = (
+                f'Integrity scan cancelled after checking {checked_versions} version(s) '
+                f'across {checked_contracts} contract(s). Existing results were preserved.'
+            )
+            scan_log.verification_result = 'Cancelled'
+            scan_log.integrity_check = 'Cancelled'
+            debug_lines.append('Scan cancelled by an administrator. Unchecked PDFs were not marked tampered.')
+            scan_log.verification_debug_log = '\n'.join(debug_lines)
+            scan_log.save(update_fields=['note', 'verification_result', 'integrity_check', 'verification_debug_log'])
+            cache.delete(INTEGRITY_SCAN_CACHE_KEY)
+            cache.delete(INTEGRITY_SCAN_LOCK_KEY)
+            if result_cache_keys:
+                cache.delete_many(result_cache_keys)
 
         def register_failure(contract, version, reason):
             failure_key = (contract.id, version, reason)
@@ -61,7 +99,7 @@ class Command(BaseCommand):
                 AuditLog.objects.create(
                     contract=contract, action='reported_tampering',
                     version_number=version, note=reason,
-                    verification_source='Scheduled Integrity Scan',
+                    verification_source=options['source'],
                     verification_result='Possible Modification',
                     integrity_check='Failed',
                 )
@@ -70,6 +108,9 @@ class Command(BaseCommand):
             return failure
 
         for contract in Contract.objects.prefetch_related('versions').order_by('id'):
+            if cancel_requested():
+                finish_cancelled()
+                return
             checked_contracts += 1
             versions = list(contract.versions.order_by('version_number'))
             checked_versions += len(versions)
@@ -99,6 +140,13 @@ class Command(BaseCommand):
                 )
 
             chain_by_version = {item['version_number']: item for item in chain}
+            result_key = f'{INTEGRITY_RESULT_CACHE_PREFIX}{contract.id}'
+            cache.set(result_key, {
+                'contract_id': contract.id,
+                'valid': all(item.get('valid') for item in chain),
+                'checked_at': timezone.now().isoformat(),
+            }, INTEGRITY_CACHE_SECONDS)
+            result_cache_keys.append(result_key)
             for version in versions:
                 result = chain_by_version.get(version.version_number)
                 if not result or not result.get('valid'):
@@ -135,6 +183,9 @@ class Command(BaseCommand):
         catch_up_contract_count = 0
         catch_up_version_count = 0
         for contract in catch_up_contracts:
+            if cancel_requested():
+                finish_cancelled()
+                return
             catch_up_contract_count += 1
             versions = list(contract.versions.order_by('version_number'))
             catch_up_version_count += len(versions)
@@ -207,6 +258,10 @@ class Command(BaseCommand):
         scan_log.save(update_fields=[
             'note', 'verification_result', 'integrity_check', 'verification_debug_log',
         ])
+        cache.delete(INTEGRITY_SCAN_CACHE_KEY)
+        cache.delete(INTEGRITY_SCAN_LOCK_KEY)
+        if result_cache_keys:
+            cache.delete_many(result_cache_keys)
         if failures:
             self.stderr.write(self.style.ERROR(summary))
         else:

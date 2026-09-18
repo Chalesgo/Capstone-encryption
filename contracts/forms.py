@@ -7,6 +7,31 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
 import fitz
 from .models import Contract, Tutorial
+from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm
+
+
+class StaffRegistrationForm(forms.Form):
+    username = forms.CharField(max_length=150, label='Username')
+    email = forms.EmailField(label='Work email')
+
+    def clean_username(self):
+        value = self.cleaned_data['username'].strip()
+        from django.contrib.auth.models import User
+        if User.objects.filter(username__iexact=value).exists():
+            raise ValidationError('That username is already in use.')
+        return value
+
+
+class StaffPasswordChangeForm(PasswordChangeForm):
+    pass
+
+
+class PasswordResetRequestForm(forms.Form):
+    identifier = forms.EmailField(max_length=254, label='Email connected to your SealGuard account')
+
+
+class ApprovedPasswordResetForm(SetPasswordForm):
+    pass
 from .signals import (
     failed_login_count,
     is_account_locked,

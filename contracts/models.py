@@ -1,4 +1,5 @@
 from django.db import models
+from .pdf_storage import pdf_storage
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator
@@ -14,6 +15,63 @@ class Folder(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class AccountSecurity(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='account_security')
+    must_change_password = models.BooleanField(default=False)
+    password_changed_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f'Security settings for {self.user.username}'
+
+
+class PasswordResetRequest(models.Model):
+    STATUS_CHOICES = [('pending', 'Pending approval'), ('approved', 'Approved'), ('used', 'Completed'), ('rejected', 'Rejected')]
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='password_reset_requests')
+    email = models.EmailField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    otp = models.CharField(max_length=128, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.user.username} password reset ({self.get_status_display()})'
+
+
+class EmailMessageLog(models.Model):
+    """Demo inbox containing messages SealGuard attempted to send."""
+    recipient = models.EmailField()
+    subject = models.CharField(max_length=255)
+    body = models.TextField()
+    sent_at = models.DateTimeField(auto_now_add=True)
+    delivered = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-sent_at']
+        verbose_name = 'Outgoing email'
+        verbose_name_plural = 'Outgoing email inbox'
+
+    def __str__(self):
+        return f'{self.subject} → {self.recipient}'
+
+
+class StaffInvitation(models.Model):
+    token_hash = models.CharField(max_length=64, unique=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='staff_invitations')
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'Staff invitation ({"used" if self.used_at else "active"})'
 
 
 class Tutorial(models.Model):
@@ -65,7 +123,7 @@ class ContractVersion(models.Model):
     contract = models.ForeignKey('Contract', on_delete=models.CASCADE, related_name='versions')
     version_number = models.PositiveIntegerField()
     source = models.CharField(max_length=20, choices=SOURCE_CHOICES)
-    file = models.FileField(upload_to='contract_versions/')
+    file = models.FileField(upload_to='contract_versions/', storage=pdf_storage)
     fingerprint = models.CharField(max_length=64, blank=True)
     vector_fingerprint = models.CharField(max_length=64, blank=True)
     previous_fingerprint = models.CharField(max_length=64, blank=True)
@@ -110,9 +168,12 @@ def validate_pdf_signature(file):
 
 
 class Contract(models.Model):
+    uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='uploaded_contracts', editable=False)
+    collaborators = models.ManyToManyField(User, blank=True, related_name='shared_contracts')
     title = models.CharField(max_length=255)
     file = models.FileField(
-        upload_to='contracts/',
+        upload_to='contracts/', storage=pdf_storage,
         validators=[FileExtensionValidator(['pdf']), validate_pdf_signature],
     )
     fingerprint = models.CharField(max_length=64, blank=True, db_index=True)
@@ -127,8 +188,7 @@ class Contract(models.Model):
     original_fingerprint = models.CharField(max_length=64, blank=True)
     STATUS_CHOICES = [
         ('pending', 'Draft'),
-        ('sent', 'Sent'),
-        ('approved', 'Signed'),
+        ('final', 'Final copy'),
     ]
     recipient = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='contracts')
     folder = models.ForeignKey('Folder', on_delete=models.SET_NULL, null=True, blank=True, related_name='contracts')
@@ -177,7 +237,7 @@ class AuditLog(models.Model):
     version_number = models.PositiveIntegerField(null=True, blank=True)
     document_title = models.CharField(max_length=255, blank=True)
     note = models.CharField(max_length=255, blank=True)  # optional extra context
-    evidence_file = models.FileField(upload_to='verification_evidence/', blank=True, null=True)
+    evidence_file = models.FileField(storage=pdf_storage, upload_to='verification_evidence/', blank=True, null=True)
     verification_source = models.CharField(max_length=100, blank=True)
     verification_result = models.CharField(max_length=50, blank=True)
     integrity_check = models.CharField(max_length=30, blank=True)
@@ -243,3 +303,5 @@ class AuditLog(models.Model):
         who = self.user.username if self.user else 'N/A'
         what = self.display_document_title or '(no document)'
         return f"{who} — {self.get_action_display()} — {what}"
+
+from .approval_models import DocumentAccessLink, DocumentAccessRequest  # noqa: E402,F401

@@ -10,11 +10,15 @@ class ContractsConfig(AppConfig):
 
     def ready(self):
         from . import signals  # noqa: F401
-        # Run once in runserver's autoreloader child, or with --noreload.
+        # Integrity scans are expensive and write progress/audit rows. They
+        # must not start automatically with the web server because they can
+        # monopolize SQLite's single writer and block admin account creation.
+        # Run them explicitly with `python manage.py verify_integrity`, or set
+        # SEALGUARD_RUN_STARTUP_INTEGRITY=1 for a deliberately isolated demo.
         if (
             'runserver' in sys.argv
             and (os.environ.get('RUN_MAIN') == 'true' or '--noreload' in sys.argv)
-            and os.environ.get('SEALGUARD_SKIP_STARTUP_INTEGRITY') != '1'
+            and os.environ.get('SEALGUARD_RUN_STARTUP_INTEGRITY') == '1'
         ):
             threading.Thread(
                 target=self._run_startup_integrity_scan,

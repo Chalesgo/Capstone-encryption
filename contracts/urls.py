@@ -1,7 +1,15 @@
 from django.urls import path
-from . import views
+from . import views, approval_views
+from .notifications import notification_list
 
 urlpatterns = [
+    path('notifications/', notification_list, name='notification_list'),
+    path('document-access/<uuid:token>/', approval_views.request_access, name='request_document_access'),
+    path('document-access/<uuid:token>/view/', approval_views.approved_pdf, name='approved_document_pdf'),
+    path('contract/<int:contract_id>/access-sheet/', approval_views.access_sheet, name='document_access_sheet'),
+    path('access-requests/', approval_views.approval_queue, name='document_approval_queue'),
+    path('access-requests/<uuid:request_id>/review/', approval_views.review_request, name='review_document_request'),
+    path('contract/<int:contract_id>/access/', views.contract_access, name='contract_access'),
     path('verify/', views.public_verify, name='public_verify'),
     path('verify/preview/<str:token>/', views.verification_preview, name='verification_preview'),
     path('dashboard/activity/<int:log_id>/preview/', views.audit_evidence_preview, name='audit_evidence_preview'),
@@ -23,7 +31,13 @@ urlpatterns = [
     path('rename/<int:pk>/', views.rename_contract, name='rename_contract'),
     path('status/<int:pk>/',  views.update_status,   name='update_status'),
     path('dashboard/', views.dashboard, name='dashboard'),
+    path('accounts/register/', views.staff_register, name='staff_register'),
+    path('accounts/register/invitation/', views.create_staff_invitation, name='create_staff_invitation'),
+    path('accounts/password-change-required/', views.password_change_required, name='password_change_required'),
+    path('accounts/password-reset/', views.password_reset_request, name='password_reset_request'),
     path('dashboard/export/', views.export_dashboard_report, name='export_dashboard_report'),
+    path('dashboard/integrity/cancel/', views.cancel_integrity_scan, name='cancel_integrity_scan'),
+    path('dashboard/integrity/start/', views.start_integrity_scan, name='start_integrity_scan'),
     path('help/', views.help_tutorials, name='help_tutorials'),
     path('help/<int:pk>/edit/', views.edit_tutorial, name='edit_tutorial'),
     path('help/<int:pk>/delete/', views.delete_tutorial, name='delete_tutorial'),

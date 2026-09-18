@@ -1,0 +1,102 @@
+<style>
+#notification-trigger { display:inline-flex; flex-shrink:0; }
+#notification-badge[hidden] { display:none; }
+#notification-badge { width:auto; min-width:16px; height:16px; padding:0 3px; color:white; font-size:10px; line-height:16px; text-align:center; }
+#notification-dialog { position:fixed; inset:auto; margin:0; padding:0; width:min(400px,calc(100vw - 24px)); box-sizing:border-box; overflow-y:auto; z-index:1100; border:1px solid #e0deda; border-radius:14px; background:#fff; color:#334455; box-shadow:0 12px 36px #0002; }
+#notification-dialog[open] { animation:notification-open .15s ease-out; }
+@keyframes notification-open { from { opacity:0; transform:translateY(-5px); } to { opacity:1; transform:translateY(0); } }
+@media (prefers-reduced-motion:reduce) { #notification-dialog[open] { animation:none; } }
+.notification-header { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:20px; border-bottom:1px solid #eee; }
+.notification-header h2 { margin:0; font-size:20px; }
+.notification-header button { border:0; border-radius:8px; padding:8px 12px; cursor:pointer; background:#f0efed; color:#334455; }
+#notification-status { padding:12px 20px; font-size:13px; color:#667788; }
+#notification-list { list-style:none; margin:0; padding:0 12px 16px; }
+.notification-link { display:block; padding:14px 10px; border-bottom:1px solid #eee; color:inherit; text-decoration:none; overflow-wrap:anywhere; }
+.notification-link:hover,.notification-link:focus-visible { background:#fff4e8; border-radius:8px; }
+.notification-link strong,.notification-link span,.notification-link time { display:block; }
+.notification-link span { margin-top:5px; font-size:14px; }
+.notification-link time { margin-top:7px; font-size:12px; color:#667788; }
+</style>
+<dialog id="notification-dialog" aria-labelledby="notification-title">
+  <div class="notification-header"><h2 id="notification-title">Notifications</h2><button type="button" id="notification-close">Close</button></div>
+  <p id="notification-status" role="status" aria-live="polite">Loading requests…</p>
+  <ul id="notification-list"></ul>
+</dialog>
+<script>
+(() => {
+    const trigger = document.getElementById('notification-trigger');
+    const dialog = document.getElementById('notification-dialog');
+    const badge = document.getElementById('notification-badge');
+    const list = document.getElementById('notification-list');
+    const status = document.getElementById('notification-status');
+    let busy = false;
+    let snapshot = '';
+    if (!trigger) return;
+    trigger.setAttribute('aria-controls', 'notification-dialog');
+    trigger.setAttribute('aria-expanded', 'false');
+    function positionPanel() {
+        if (!dialog.open) return;
+        const rect = trigger.getBoundingClientRect();
+        const top = rect.bottom + 10;
+        const width = dialog.getBoundingClientRect().width;
+        dialog.style.top = `${top}px`;
+        dialog.style.left = `${Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12))}px`;
+        dialog.style.maxHeight = `${Math.max(0, window.innerHeight - top - 12)}px`;
+    }
+    function closePanel(returnFocus = false) {
+        if (!dialog.open) return;
+        dialog.close();
+        trigger.setAttribute('aria-expanded', 'false');
+        if (returnFocus) trigger.focus();
+    }
+    async function refresh() {
+        if (busy || document.hidden) return;
+        busy = true;
+        try {
+            const response = await fetch('{% url "notification_list" %}', {cache:'no-store', headers:{Accept:'application/json'}});
+            if (!response.ok || response.redirected) throw new Error();
+            const data = await response.json();
+            badge.hidden = !data.count;
+            badge.textContent = data.count > 99 ? '99+' : String(data.count);
+            trigger.setAttribute('aria-label', `Notifications: ${data.count} pending requests`);
+            status.textContent = data.count ? `${data.count} request(s) awaiting review. Select a request to review it.${data.count > 50 ? ' Showing the latest 50.' : ''}` : 'You’re all caught up. No requests are awaiting review.';
+            const updated = JSON.stringify(data.notifications);
+            if (updated !== snapshot) {
+                list.replaceChildren();
+                for (const item of data.notifications) {
+                    const li = document.createElement('li');
+                    const link = document.createElement('a');
+                    link.className = 'notification-link'; link.href = item.url;
+                    const title = document.createElement('strong'); title.textContent = item.title;
+                    const message = document.createElement('span'); message.textContent = item.message;
+                    const time = document.createElement('time'); time.dateTime = item.created_at; time.textContent = new Date(item.created_at).toLocaleString();
+                    link.append(title, message, time); li.append(link); list.append(li);
+                }
+                snapshot = updated;
+            }
+        } catch (_) { status.textContent = 'Unable to load notifications. Close and reopen to try again.'; }
+        finally { busy = false; }
+    }
+    trigger.addEventListener('click', () => {
+        if (dialog.open) { closePanel(true); return; }
+        if (typeof closeProfileModal === 'function') closeProfileModal();
+        dialog.show();
+        trigger.setAttribute('aria-expanded', 'true');
+        positionPanel(); refresh();
+    });
+    document.getElementById('notification-close').addEventListener('click', () => closePanel(true));
+    document.addEventListener('click', event => {
+        if (!dialog.contains(event.target) && !trigger.contains(event.target)) closePanel();
+    });
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && dialog.open) { event.preventDefault(); closePanel(true); }
+    });
+    document.addEventListener('focusin', event => {
+        if (!dialog.contains(event.target) && !trigger.contains(event.target)) closePanel();
+    });
+    window.addEventListener('resize', positionPanel);
+    window.addEventListener('scroll', positionPanel, true);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+    refresh(); setInterval(refresh, 30000);
+})();
+</script>
