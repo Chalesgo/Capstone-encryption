@@ -1,13 +1,13 @@
 {% extends "admin/base.html" %}
-{% load static %}
+{% load static i18n %}
 
 {% block title %}{{ title }} | SealGuard Admin{% endblock %}
 
 {% block extrastyle %}
 {{ block.super }}
-<link rel="stylesheet" href="{% static 'contracts/display-size.css' %}">
+<link rel="stylesheet" href="{% static 'contracts/display-size.css' %}?v=admin-fixed-1">
 <script src="{% static 'contracts/display-size.js' %}"></script>
-<link rel="stylesheet" href="{% static 'contracts/sealguard-admin.css' %}?v=5">
+<link rel="stylesheet" href="{% static 'contracts/sealguard-admin.css' %}?v=6">
 <style>
   .sealguard-link-overlay { display:none !important; position:fixed !important; inset:0 !important; z-index:9999 !important; align-items:center !important; justify-content:center !important; padding:20px !important; background:rgba(15,23,42,.52) !important; }
   .sealguard-link-overlay.open { display:flex !important; animation:sealguard-admin-backdrop-in .16s ease-out both; }
@@ -21,6 +21,29 @@
   @keyframes sealguard-admin-panel-in { from { opacity:0; transform:translateY(8px) scale(.985); } to { opacity:1; transform:translateY(0) scale(1); } }
   @media (prefers-reduced-motion:reduce) { .sealguard-link-overlay.open, .sealguard-link-overlay.open .sealguard-link-modal { animation:none !important; } }
 </style>
+{% endblock %}
+
+{% block usertools %}
+{% if has_permission %}
+<div id="user-tools">
+    {% block welcome-msg %}
+        {% translate 'Welcome,' %}
+        <strong>{% firstof user.get_short_name user.get_username %}</strong>.
+    {% endblock %}
+    {% block userlinks %}
+        {% if site_url %}<a href="{{ site_url }}">{% translate 'View site' %}</a> /{% endif %}
+        {% if user.is_active and user.is_staff %}
+            {% url 'django-admindocs-docroot' as docsroot %}
+            {% if docsroot %}<a href="{{ docsroot }}">{% translate 'Documentation' %}</a> /{% endif %}
+        {% endif %}
+        {% if user.has_usable_password %}<a href="{% url 'admin:password_change' %}">{% translate 'Change password' %}</a> /{% endif %}
+        <form id="logout-form" method="post" action="{% url 'admin:logout' %}">
+            {% csrf_token %}
+            <button type="submit">{% translate 'Log out' %}</button>
+        </form>
+    {% endblock %}
+</div>
+{% endif %}
 {% endblock %}
 
 {% block branding %}

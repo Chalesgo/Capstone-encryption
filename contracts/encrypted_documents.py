@@ -77,7 +77,10 @@ def open_encrypted_document(request):
             if hashlib.sha256(Path(file.path).read_bytes()).hexdigest() != metadata['sha256']:
                 raise ValueError('This document version has changed. Contact staff for a new download.')
             decrypt_pdf_bytes(ciphertext)
-            return redirect(target)
+            return render(request, 'access/open_encrypted.html', {
+                'viewer_url': target,
+                'viewer_title': contract.title,
+            })
         except (ValueError, KeyError, UnicodeError, signing.BadSignature, OSError,
                 Contract.DoesNotExist, ContractVersion.DoesNotExist):
             error = 'Unable to open this file. It must be an unchanged SealGuard download, and you must currently have permission to view its document version.'

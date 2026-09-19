@@ -1,25 +1,48 @@
 <style>
-#notification-trigger { display:inline-flex; flex-shrink:0; }
+#notification-trigger { display:inline-flex; flex-shrink:0; position:relative; }
 #notification-badge[hidden] { display:none; }
-#notification-badge { width:auto; min-width:16px; height:16px; padding:0 3px; color:white; font-size:10px; line-height:16px; text-align:center; }
-#notification-dialog { position:fixed; inset:auto; margin:0; padding:0; width:min(400px,calc(100vw - 24px)); box-sizing:border-box; overflow-y:auto; z-index:1100; border:1px solid #e0deda; border-radius:14px; background:#fff; color:#334455; box-shadow:0 12px 36px #0002; }
+#notification-badge { display:flex; align-items:center; justify-content:center; position:absolute; top:-4px; right:-4px; width:auto; min-width:17px; height:17px; padding:0 4px; box-sizing:border-box; color:white; font-size:10px; font-weight:700; line-height:17px; text-align:center; border-radius:999px; background:#dc3545; box-shadow:0 0 0 2px #fff; z-index:2; }
+
+#notification-dialog { position:fixed; inset:auto; margin:0; padding:0; width:min(380px,calc(100vw - 24px)); box-sizing:border-box; overflow-y:auto; z-index:1100; border:1px solid #e7e5e1; border-radius:16px; background:#fff; color:#2c3440; box-shadow:0 16px 40px #00000022; }
 #notification-dialog[open] { animation:notification-open .15s ease-out; }
-@keyframes notification-open { from { opacity:0; transform:translateY(-5px); } to { opacity:1; transform:translateY(0); } }
+@keyframes notification-open { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
 @media (prefers-reduced-motion:reduce) { #notification-dialog[open] { animation:none; } }
-.notification-header { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:20px; border-bottom:1px solid #eee; }
-.notification-header h2 { margin:0; font-size:20px; }
-.notification-header button { border:0; border-radius:8px; padding:8px 12px; cursor:pointer; background:#f0efed; color:#334455; }
-#notification-status { padding:12px 20px; font-size:13px; color:#667788; }
-#notification-list { list-style:none; margin:0; padding:0 12px 16px; }
-.notification-link { display:block; padding:14px 10px; border-bottom:1px solid #eee; color:inherit; text-decoration:none; overflow-wrap:anywhere; }
-.notification-link:hover,.notification-link:focus-visible { background:#fff4e8; border-radius:8px; }
-.notification-link strong,.notification-link span,.notification-link time { display:block; }
-.notification-link span { margin-top:5px; font-size:14px; }
-.notification-link time { margin-top:7px; font-size:12px; color:#667788; }
+
+.notification-header { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:14px 16px; }
+.notification-header h2 { margin:0; font-size:15px; font-weight:600; }
+.notification-header-actions { display:flex; align-items:center; gap:4px; }
+.notification-header button { border:0; border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer; background:transparent; color:#667788; }
+.notification-header button:hover { background:#f4f3f1; }
+.notification-header .notification-clear { color:#a12b2b; }
+.notification-header .notification-clear:hover { background:#fdf0f0; }
+
+#notification-status { padding:2px 16px 10px; font-size:12px; color:#8a94a1; }
+
+#notification-list { list-style:none; margin:0; padding:0 8px 10px; }
+.notification-link { display:flex; align-items:flex-start; gap:10px; padding:9px 8px; border-radius:10px; color:inherit; text-decoration:none; }
+.notification-link:hover, .notification-link:focus-visible { background:#f6f5f3; }
+
+.notification-dot { flex-shrink:0; width:8px; height:8px; margin-top:6px; border-radius:999px; background:#d97757; }
+
+.notification-body { min-width:0; flex:1; }
+.notification-row { display:flex; align-items:baseline; gap:8px; }
+.notification-link strong { flex:1; min-width:0; font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.notification-link time { flex-shrink:0; font-size:11px; color:#9aa3ad; }
+.notification-link span { display:block; margin-top:2px; font-size:12.5px; color:#667788; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+.notification-empty { padding:28px 16px 32px; text-align:center; color:#9aa3ad; }
+.notification-empty svg { margin-bottom:8px; opacity:.6; }
+.notification-empty p { margin:0; font-size:13px; }
 </style>
 <dialog id="notification-dialog" aria-labelledby="notification-title">
-  <div class="notification-header"><h2 id="notification-title">Notifications</h2><button type="button" id="notification-close">Close</button></div>
-  <p id="notification-status" role="status" aria-live="polite">Loading requests…</p>
+  <div class="notification-header">
+    <h2 id="notification-title">Notifications</h2>
+    <div class="notification-header-actions">
+      <button type="button" class="notification-clear" id="notification-clear" hidden>Clear all</button>
+      <button type="button" id="notification-close" aria-label="Close">✕</button>
+    </div>
+  </div>
+  <p id="notification-status" role="status" aria-live="polite">Loading…</p>
   <ul id="notification-list"></ul>
 </dialog>
 <script>
@@ -29,11 +52,23 @@
     const badge = document.getElementById('notification-badge');
     const list = document.getElementById('notification-list');
     const status = document.getElementById('notification-status');
+    const clearButton = document.getElementById('notification-clear');
     let busy = false;
     let snapshot = '';
+
     if (!trigger) return;
     trigger.setAttribute('aria-controls', 'notification-dialog');
     trigger.setAttribute('aria-expanded', 'false');
+
+    function relativeTime(iso) {
+        const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+        if (diff < 60) return 'now';
+        if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+        if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+        if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+        return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
+
     function positionPanel() {
         if (!dialog.open) return;
         const rect = trigger.getBoundingClientRect();
@@ -43,48 +78,120 @@
         dialog.style.left = `${Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12))}px`;
         dialog.style.maxHeight = `${Math.max(0, window.innerHeight - top - 12)}px`;
     }
+
     function closePanel(returnFocus = false) {
         if (!dialog.open) return;
         dialog.close();
         trigger.setAttribute('aria-expanded', 'false');
         if (returnFocus) trigger.focus();
     }
-    async function refresh() {
+
+    function renderEmptyState() {
+        list.replaceChildren();
+        const li = document.createElement('li');
+        li.className = 'notification-empty';
+        li.innerHTML = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a1.98 1.98 0 0 1-3.4 0"/></svg><p>You're all caught up</p>`;
+        list.append(li);
+    }
+
+    async function refresh(includeItems = false) {
         if (busy || document.hidden) return;
         busy = true;
         try {
-            const response = await fetch('{% url "notification_list" %}', {cache:'no-store', headers:{Accept:'application/json'}});
+            const endpoint = '{% url "notification_list" %}' + (includeItems ? '' : '?summary=1');
+            const response = await fetch(endpoint, { cache: 'no-store', headers: { Accept: 'application/json' } });
             if (!response.ok || response.redirected) throw new Error();
             const data = await response.json();
+
             badge.hidden = !data.count;
             badge.textContent = data.count > 99 ? '99+' : String(data.count);
             trigger.setAttribute('aria-label', `Notifications: ${data.count} pending requests`);
-            status.textContent = data.count ? `${data.count} request(s) awaiting review. Select a request to review it.${data.count > 50 ? ' Showing the latest 50.' : ''}` : 'You’re all caught up. No requests are awaiting review.';
+            clearButton.hidden = !data.count;
+            status.textContent = data.count
+                ? `${data.count} request${data.count === 1 ? '' : 's'} awaiting review${data.count > 50 ? ' · showing latest 50' : ''}`
+                : 'Nothing new right now';
+
+            if (!includeItems) return;
+
             const updated = JSON.stringify(data.notifications);
-            if (updated !== snapshot) {
-                list.replaceChildren();
-                for (const item of data.notifications) {
-                    const li = document.createElement('li');
-                    const link = document.createElement('a');
-                    link.className = 'notification-link'; link.href = item.url;
-                    const title = document.createElement('strong'); title.textContent = item.title;
-                    const message = document.createElement('span'); message.textContent = item.message;
-                    const time = document.createElement('time'); time.dateTime = item.created_at; time.textContent = new Date(item.created_at).toLocaleString();
-                    link.append(title, message, time); li.append(link); list.append(li);
-                }
-                snapshot = updated;
+            if (updated === snapshot) return;
+            snapshot = updated;
+
+            if (!data.notifications.length) { renderEmptyState(); return; }
+
+            list.replaceChildren();
+            for (const item of data.notifications) {
+                const li = document.createElement('li');
+                const link = document.createElement('a');
+                link.className = 'notification-link';
+                link.href = item.url;
+
+                const dot = document.createElement('span');
+                dot.className = 'notification-dot';
+                dot.setAttribute('aria-hidden', 'true');
+
+                const body = document.createElement('div');
+                body.className = 'notification-body';
+
+                const row = document.createElement('div');
+                row.className = 'notification-row';
+                const title = document.createElement('strong');
+                title.textContent = item.title;
+                title.title = item.title;
+                const time = document.createElement('time');
+                time.dateTime = item.created_at;
+                time.textContent = relativeTime(item.created_at);
+                time.title = new Date(item.created_at).toLocaleString();
+                row.append(title, time);
+
+                const message = document.createElement('span');
+                message.textContent = item.message;
+                message.title = item.message;
+
+                body.append(row, message);
+                link.append(dot, body);
+                li.append(link);
+                list.append(li);
             }
-        } catch (_) { status.textContent = 'Unable to load notifications. Close and reopen to try again.'; }
-        finally { busy = false; }
+        } catch (_) {
+            status.textContent = 'Unable to load notifications — reopen to retry';
+        } finally {
+            busy = false;
+        }
     }
+
     trigger.addEventListener('click', () => {
         if (dialog.open) { closePanel(true); return; }
         if (typeof closeProfileModal === 'function') closeProfileModal();
         dialog.show();
         trigger.setAttribute('aria-expanded', 'true');
-        positionPanel(); refresh();
+        positionPanel(); refresh(true);
     });
+
     document.getElementById('notification-close').addEventListener('click', () => closePanel(true));
+
+    clearButton.addEventListener('click', async () => {
+        clearButton.disabled = true;
+        try {
+            const response = await fetch('{% url "notification_list" %}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}', Accept: 'application/json' },
+                body: JSON.stringify({ action: 'clear_all' }),
+            });
+            if (!response.ok) throw new Error();
+            snapshot = '[]';
+            renderEmptyState();
+            badge.hidden = true;
+            badge.textContent = '';
+            clearButton.hidden = true;
+            status.textContent = 'Nothing new right now';
+        } catch (_) {
+            status.textContent = 'Unable to clear notifications — try again';
+        } finally {
+            clearButton.disabled = false;
+        }
+    });
+
     document.addEventListener('click', event => {
         if (!dialog.contains(event.target) && !trigger.contains(event.target)) closePanel();
     });
@@ -96,7 +203,7 @@
     });
     window.addEventListener('resize', positionPanel);
     window.addEventListener('scroll', positionPanel, true);
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
-    refresh(); setInterval(refresh, 30000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(dialog.open); });
+    refresh(false); setInterval(() => refresh(dialog.open), 120000);
 })();
 </script>

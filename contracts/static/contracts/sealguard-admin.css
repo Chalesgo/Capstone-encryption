@@ -191,6 +191,17 @@ div.breadcrumbs a { color: #445566; }
     font-size: 12px;
 }
 
+#nav-sidebar .current-app > table > caption,
+#nav-sidebar .current-app > table > caption .section {
+    background: #3a3a3a;
+    color: #ffffff !important;
+}
+
+#nav-sidebar .current-app > table > caption .section:hover,
+#nav-sidebar .current-app > table > caption .section:focus {
+    color: #f4a34d !important;
+}
+
 #nav-sidebar .current-app .section,
 #nav-sidebar .current-model { background: #fff4e8; }
 
@@ -332,6 +343,21 @@ a.button:hover {
 
 #changelist-filter h3,
 #changelist-filter li { padding-left: 16px; padding-right: 16px; }
+
+.change-list .toplinks {
+    align-items: center;
+    min-width: 0;
+    overflow: visible;
+    white-space: normal;
+}
+
+.change-list .toplinks a {
+    display: inline-block;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    line-height: 1.5;
+}
 
 .paginator {
     margin-top: 14px !important;
@@ -898,6 +924,9 @@ body.sealguard-admin-dashboard #content {
 
 #header { flex-wrap: wrap; gap: 14px 20px; }
 #header #user-tools { margin: 0; line-height: 1.8; }
+#header, #header #user-tools { overflow: visible; }
+#header #user-tools { position: relative; z-index: 20; }
+#sg-display-size.sg-size-admin { z-index: 30000; }
 .sealguard-header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 #header .sealguard-admin-tool, #header .sealguard-back-link {
     display: inline-flex;

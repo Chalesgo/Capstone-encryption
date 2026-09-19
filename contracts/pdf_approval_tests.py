@@ -58,14 +58,12 @@ class EncryptedPDFApprovalTests(TestCase):
         response = self.client.post(self.url, {'action': 'request', 'name': 'Guest',
             'email': 'guest@example.com', 'reason': 'Review the agreement', 'organization': 'Example'})
         self.assertEqual(response.status_code, 302)
-        code = re.search(r'\b(\d{6})\b', mail.outbox[-1].body).group(1)
         entry = DocumentAccessRequest.objects.latest('created_at')
-        self.assertNotEqual(entry.otp_hash, code)
-        self.assertEqual(self.client.get(self.view_url).status_code, 404)
-        self.assertEqual(self.client.post(self.url, {'action': 'verify', 'code': code}).status_code, 302)
-        entry.refresh_from_db()
         self.assertEqual(entry.status, 'pending')
+        self.assertIsNone(entry.email_verified_at)
         self.assertEqual(entry.otp_hash, '')
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertEqual(self.client.get(self.view_url).status_code, 404)
         return entry
 
     def test_qr_request_form_is_shown_even_with_existing_document_access(self):
@@ -81,29 +79,27 @@ class EncryptedPDFApprovalTests(TestCase):
                     self.assertContains(response, 'This is a public document')
                     self.assertContains(response, 'No account, sign-in, or access request is needed')
                     self.assertContains(response, 'id="approved-view-button"')
-                    self.assertNotContains(response, 'Send verification code')
+                    self.assertNotContains(response, 'Submit access request')
                 else:
                     self.assertContains(response, 'Full name')
-                    self.assertContains(response, 'Send verification code')
+                    self.assertContains(response, 'Submit access request')
                     self.assertNotContains(response, 'id="approved-view-button"')
                 self.assertNotContains(response, 'You already have access')
                 self.assertEqual(self.client.get(self.view_url).status_code, 404)
 
-    def test_code_verification_lock_is_retryable_and_does_not_approve(self):
+    def test_submission_lock_is_retryable_and_does_not_approve(self):
         from unittest.mock import patch
         from django.db import OperationalError
-        self.client.post(self.url, {'action': 'request', 'name': 'Guest',
-            'email': 'guest@example.com', 'reason': 'Review'})
-        code = re.search(r'\b(\d{6})\b', mail.outbox[-1].body).group(1)
+        data = {'action': 'request', 'name': 'Guest', 'email': 'guest@example.com', 'reason': 'Review'}
         with patch('django.db.models.query.QuerySet.update', side_effect=OperationalError('database is locked')):
-            response = self.client.post(self.url, {'action': 'verify', 'code': code})
-        self.assertContains(response, 'Please submit your verification code again shortly')
-        entry = DocumentAccessRequest.objects.get(link=self.link)
-        self.assertEqual(entry.status, 'email_pending')
-        self.assertEqual(entry.otp_attempts, 0)
+            response = self.client.post(self.url, data)
+        self.assertContains(response, 'Please submit your request again shortly')
+        self.assertFalse(DocumentAccessRequest.objects.exists())
+        self.link.refresh_from_db()
+        self.assertTrue(self.link.is_active)
         self.assertEqual(self.client.get(self.view_url).status_code, 404)
-        self.assertEqual(self.client.post(self.url, {'action': 'verify', 'code': code}).status_code, 302)
-        entry.refresh_from_db()
+        self.assertEqual(self.client.post(self.url, data).status_code, 302)
+        entry = DocumentAccessRequest.objects.get(link=self.link)
         self.assertEqual(entry.status, 'pending')
         reviewer = Client()
         reviewer.force_login(self.staff)
@@ -211,27 +207,25 @@ class EncryptedPDFApprovalTests(TestCase):
             self.assertEqual(reader.get(url).status_code, 404)
         self.assertEqual(reader.post(reverse('review_document_request', args=[entry.pk]), {'action': 'approve'}).status_code, 404)
 
-    def test_reviewer_cannot_approve_unverified_email_and_get_is_read_only(self):
-        self.client.post(self.url, {'action': 'request', 'name': 'Guest', 'email': 'guest@example.com', 'reason': 'Review'})
-        entry = DocumentAccessRequest.objects.get()
+    def test_reviewer_can_approve_submitted_request_and_get_is_read_only(self):
+        entry = self.request_and_verify()
         reviewer = Client()
         reviewer.force_login(self.staff)
         url = reverse('review_document_request', args=[entry.pk])
         self.assertEqual(reviewer.get(url).status_code, 405)
-        self.assertEqual(reviewer.post(url, {'action': 'approve'}).status_code, 404)
+        self.assertEqual(reviewer.post(url, {'action': 'approve'}).status_code, 302)
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, 'approved')
 
-    def test_code_attempt_limit_and_single_use_qr(self):
+    def test_submission_preserves_single_use_qr(self):
         data = {'action': 'request', 'name': 'Guest', 'email': 'guest@example.com', 'reason': 'Review'}
         self.client.post(self.url, data)
-        code = re.search(r'\b(\d{6})\b', mail.outbox[-1].body).group(1)
-        for _ in range(5):
-            self.client.post(self.url, {'action': 'verify', 'code': 'invalid'})
-        self.client.post(self.url, {'action': 'verify', 'code': code})
-        self.assertEqual(DocumentAccessRequest.objects.get().status, 'email_pending')
         for _ in range(5):
             response = self.client.post(self.url, data)
         self.assertContains(response, 'already been used')
         self.assertEqual(DocumentAccessRequest.objects.count(), 1)
+        self.assertEqual(DocumentAccessRequest.objects.get().status, 'pending')
+        self.assertEqual(self.client.get(self.view_url).status_code, 404)
 
     def test_qr_sheet_contains_no_confidential_pdf_content(self):
         self.client.force_login(self.staff)
@@ -250,21 +244,13 @@ class EncryptedPDFApprovalTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Confidential title')
 
-    def test_expired_code_and_rejection_do_not_grant_access(self):
-        self.client.post(self.url, {'action': 'request', 'name': 'Guest', 'email': 'guest@example.com', 'reason': 'Review'})
-        entry = DocumentAccessRequest.objects.get()
-        code = re.search(r'\b(\d{6})\b', mail.outbox[-1].body).group(1)
-        entry.otp_expires_at = timezone.now() - timedelta(seconds=1)
-        entry.save()
-        self.client.post(self.url, {'action': 'verify', 'code': code})
-        entry.refresh_from_db()
-        self.assertEqual(entry.status, 'email_pending')
-        entry.otp_expires_at = timezone.now() + timedelta(minutes=1)
-        entry.save()
-        self.client.post(self.url, {'action': 'verify', 'code': code})
+    def test_rejection_does_not_grant_access(self):
+        entry = self.request_and_verify()
         reviewer = Client()
         reviewer.force_login(self.staff)
         reviewer.post(reverse('review_document_request', args=[entry.pk]), {'action': 'reject'})
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, 'rejected')
         self.assertEqual(self.client.get(self.view_url).status_code, 404)
 
     def test_csrf_is_required_for_email_and_approval_actions(self):
@@ -274,11 +260,13 @@ class EncryptedPDFApprovalTests(TestCase):
         strict.force_login(self.staff)
         self.assertEqual(strict.post(reverse('review_document_request', args=[entry.pk]), {'action': 'approve'}).status_code, 403)
 
-    def test_email_failure_shows_error_without_claiming_delivery(self):
+    def test_submission_does_not_depend_on_email_delivery(self):
         from unittest.mock import patch
-        with patch('contracts.approval_views.send_mail', side_effect=OSError('Unavailable')):
+        with patch('contracts.approval_views.send_mail', side_effect=OSError('Unavailable')) as sender:
             response = self.client.post(self.url, {'action': 'request', 'name': 'Guest', 'email': 'guest@example.com', 'reason': 'Review'})
-        self.assertContains(response, 'We could not send')
+        self.assertEqual(response.status_code, 302)
+        sender.assert_not_called()
+        self.assertEqual(DocumentAccessRequest.objects.get().status, 'pending')
         self.assertEqual(self.client.get(self.view_url).status_code, 404)
 
     def test_migration_is_resumable_and_preserves_plaintext_bytes(self):
@@ -329,7 +317,9 @@ class EncryptedPDFApprovalTests(TestCase):
             def upload(client, payload=data):
                 return client.post(reverse('open_encrypted_document'), {
                     'document': SimpleUploadedFile('download.sgpdf', payload)})
-            self.assertRedirects(upload(self.client), reverse('preview_contract_version', args=[self.version.pk]), fetch_redirect_response=False)
+            opened = upload(self.client)
+            self.assertEqual(opened.status_code, 200)
+            self.assertContains(opened, 'encrypted-viewer-frame')
             reader = Client()
             reader.force_login(self.other)
             self.assertContains(upload(reader), 'Unable to open this file')
@@ -357,7 +347,7 @@ class EncryptedPDFApprovalTests(TestCase):
         def reopen():
             return self.client.post(reverse('open_encrypted_document'), {
                 'document': SimpleUploadedFile('guest.sgpdf', package)})
-        self.assertRedirects(reopen(), self.view_url, fetch_redirect_response=False)
+        self.assertEqual(reopen().status_code, 200)
         reviewer.post(reverse('review_document_request', args=[entry.pk]), {'action': 'revoke'})
         self.assertContains(reopen(), 'Unable to open this file')
         self.assertEqual(self.client.get(self.view_url + '?download=encrypted').status_code, 404)
@@ -380,7 +370,8 @@ class EncryptedPDFApprovalTests(TestCase):
             self.assertContains(reopen(), 'Unable to open this file')
             decrypt.assert_not_called()
         self.contract.collaborators.add(self.other)
-        self.assertEqual(reopen().status_code, 302)
+        self.assertEqual(reopen().status_code, 200)
+        self.assertContains(reopen(), 'encrypted-viewer-frame')
         self.contract.collaborators.remove(self.other)
         self.assertContains(reopen(), 'Unable to open this file')
 

@@ -1199,7 +1199,7 @@
       <td class="contract-document-cell" onclick="handleDocumentCellClick(event, {{ contract.id }})" oncontextmenu="if(window.matchMedia('(min-width: 901px)').matches) showContractContextMenu(event, {{ contract.id }})">
         <div class="contract-name-cell">
           {% if contract.seal_image %}
-            <img src="{{ contract.seal_image.url }}" class="contract-seal-thumb">
+            <img src="{{ contract.seal_image.url }}" class="contract-seal-thumb" loading="lazy" decoding="async" width="32" height="32" alt="">
           {% else %}
             <span class="contract-icon">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

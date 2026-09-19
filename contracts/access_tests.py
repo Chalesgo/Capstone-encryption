@@ -84,6 +84,16 @@ class DocumentAccessTests(TestCase):
         self.assertEqual(self.client.post(reverse('rename_contract', args=[self.contract.pk]),
                                          data={'title': 'stolen'}, content_type='application/json').status_code, 404)
 
+    def test_public_download_is_a_regular_pdf_for_anonymous_verify_visitors(self):
+        self.contract.is_public = True
+        self.contract.save()
+        response = self.client.get(reverse('download_contract', args=[self.contract.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertIn('attachment', response['Content-Disposition'])
+        self.assertNotIn('.sgpdf', response['Content-Disposition'])
+        self.assertIn(b'%PDF', b''.join(response.streaming_content))
+
     def test_unrelated_users_cannot_mutate_or_read_history(self):
         self.login(self.other)
         names = ['rename_contract', 'tag_contract', 'update_status', 'publish_contract',

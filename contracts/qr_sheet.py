@@ -34,7 +34,7 @@ def make_access_sheet(url, reference):
     pdf.setFont('Helvetica', 12)
     for y, line in zip((301, 273, 245), (
         '1. Scan the QR code and enter your details.',
-        '2. Verify your email with the code we send you.',
+        '2. Submit your request for staff review.',
         '3. Return to the page after staff approves your request.',
     )):
         pdf.drawString(66, y, line)
@@ -53,6 +53,6 @@ def make_access_sheet(url, reference):
         pdf.drawString(48, 125 - index * 12, line)
     pdf.linkURL(url, (48, 64, 547, 135), relative=0)
     pdf.setFont('Helvetica', 8)
-    pdf.drawString(48, 40, 'Keep your approval page and email verification code private.')
+    pdf.drawString(48, 40, 'Keep your approval page private.')
     pdf.save()
     return output.getvalue()

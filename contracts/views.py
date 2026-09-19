@@ -1,4 +1,4 @@
-from .pdf_storage import open_pdf, read_pdf, write_pdf
+from .pdf_storage import open_pdf, read_pdf, write_pdf, pdf_storage
 #views.py 
 from django.shortcuts import render, redirect, get_object_or_404
 from .access import (can_view, can_download, can_share, can_manage, is_admin, is_read_only_user,
@@ -91,13 +91,14 @@ def _same_name_contract(uploaded_name, submitted_title='', user=None):
     return managed_contracts(user).filter(query, is_trashed=False).order_by('id').first()
 
 
-def _contract_pdf_filename(contract, version_number):
+def _contract_pdf_filename(contract, version_number, *, short_title=False):
     """Build the browser download name from the system title and version."""
     title = _document_name_stem(contract.title)
     title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', title).rstrip('. ')
     if not title:
         title = f'contract_{contract.id}'
-    return f'{title[:220]}_v{version_number}.pdf'
+    title_limit = 80 if short_title else 220
+    return f'{title[:title_limit].rstrip(" ._")}_v{version_number}.pdf'
 
 
 def _verification_url(request):
@@ -2142,12 +2143,27 @@ def download_contract(request, contract_id):
         note='Downloaded current contract PDF',
         version_number=latest_version.version_number if latest_version else None,
     )
+    if contract.is_public and (not request.user.is_authenticated or request.GET.get('public') == '1'):
+        document = pdf_storage.open(contract.file.name, 'rb')
+        response = FileResponse(
+            document,
+            content_type='application/pdf',
+            as_attachment=True,
+            filename=_contract_pdf_filename(
+                contract,
+                latest_version.version_number if latest_version else 1,
+                short_title=request.GET.get('short_name') == '1',
+            ),
+        )
+        response['Cache-Control'] = 'private, no-store'
+        return response
     from .encrypted_documents import package_response
     return package_response(
         contract, contract.file,
         filename=_contract_pdf_filename(
             contract,
             latest_version.version_number if latest_version else 1,
+            short_title=request.GET.get('short_name') == '1',
         ),
         version=latest_version if latest_version and latest_version.file.name == contract.file.name else None,
     )

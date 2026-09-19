@@ -40,11 +40,11 @@ class NotificationTests(TestCase):
         self.assertContains(response, 'visitor@example.test')
         self.assertEqual(list(response.context['entries']), [self.entry])
 
-    def test_unverified_reviewed_and_trashed_requests_are_excluded(self):
-        self.entry.email_verified_at = None
+    def test_unsubmitted_reviewed_and_trashed_requests_are_excluded(self):
+        self.entry.status = 'email_pending'
         self.entry.save()
         self.assertEqual(self.feed(self.staff)['count'], 0)
-        self.entry.email_verified_at = timezone.now()
+        self.entry.email_verified_at = None
         self.entry.status = 'approved'
         self.entry.save()
         self.assertEqual(self.feed(self.staff)['count'], 0)

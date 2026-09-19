@@ -186,7 +186,7 @@ let sidebarViewport = window;
 try { if (params.get('embedded') === '1' && parent.location.origin === location.origin) sidebarViewport = parent; } catch (_) {}
 const desktopSidebar = sidebarViewport.matchMedia('(min-width: 901px)');
 function syncSidebar() {
-  sidebarPinned = desktopSidebar.matches && params.get('comparison') !== '1';
+  sidebarPinned = desktopSidebar.matches && params.get('comparison') !== '1' && params.get('hide_sidebar') !== '1';
   document.body.classList.toggle('sidebar-pinned', sidebarPinned);
   if (!sidebarPinned) {
     get('pdf-sidebar').setAttribute('role', 'dialog');

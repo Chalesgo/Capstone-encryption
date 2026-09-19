@@ -6,7 +6,7 @@ from django.utils.safestring import mark_safe
 import secrets
 from datetime import timedelta
 from django.utils import timezone
-from .models import Contract, Tutorial, PasswordResetRequest
+from .models import Contract, Tutorial, PasswordResetRequest, StaffInvitation
 from .models import EmailMessageLog
 from .emailing import send_sealguard_mail
 from .signals import sync_sealguard_role_group
@@ -142,6 +142,14 @@ class PasswordResetRequestAdmin(admin.ModelAdmin):
     def reject_reset_requests(self, request, queryset):
         count = queryset.filter(status='pending').update(status='rejected')
         self.message_user(request, f'{count} password reset request(s) rejected.')
+
+
+@admin.register(StaffInvitation)
+class StaffInvitationAdmin(admin.ModelAdmin):
+    list_display = ('id', 'created_by', 'created_at', 'expires_at', 'used_at')
+    list_filter = ('created_at', 'expires_at', 'used_at')
+    readonly_fields = ('token_hash', 'created_by', 'created_at', 'expires_at', 'used_at')
+    search_fields = ('created_by__username',)
 
 
 @admin.register(EmailMessageLog)

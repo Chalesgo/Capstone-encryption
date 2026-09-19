@@ -60,6 +60,15 @@ class EmailMessageLog(models.Model):
         return f'{self.subject} → {self.recipient}'
 
 
+class NotificationClearState(models.Model):
+    """Per-account cutoff used by the notification panel's Clear all action."""
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='notification_clear_state')
+    cleared_at = models.DateTimeField()
+
+    def __str__(self):
+        return f'Notifications cleared for {self.user.username}'
+
+
 class StaffInvitation(models.Model):
     token_hash = models.CharField(max_length=64, unique=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='staff_invitations')

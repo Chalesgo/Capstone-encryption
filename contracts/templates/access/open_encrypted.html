@@ -1,4 +1,5 @@
 {% extends 'registration/login.html' %}
+{% load static %}
 {% block title %}Open encrypted document{% endblock %}
 {% block auth_side_content %}
 <span class="auth-side-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
@@ -10,6 +11,36 @@
   <div class="auth-side-step"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/></svg><span>View the document after your access is confirmed.</span></div>
 </div>
 {% endblock %}
+{% if viewer_url %}
+<style>
+  .encrypted-viewer-overlay{position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,.35)}
+  .encrypted-viewer-panel{position:fixed;top:0;right:0;z-index:1200;width:70%;min-width:640px;height:100dvh;background:#fff;border-left:1px solid #eef0f4;box-shadow:-8px 0 32px rgba(0,0,0,.12);display:flex;flex-direction:column;animation:encrypted-viewer-in .3s ease both}
+  .encrypted-viewer-frame{flex:1;width:100%;border:0;background:#f5f6f8}
+  @keyframes encrypted-viewer-in{from{transform:translateX(100%)}to{transform:translateX(0)}}
+  @media(max-width:900px){.encrypted-viewer-panel{width:100%;min-width:0}}
+  @media(prefers-reduced-motion:reduce){.encrypted-viewer-panel{animation:none}}
+</style>
+<div class="encrypted-viewer-overlay" id="encrypted-viewer-overlay"></div>
+<section class="encrypted-viewer-panel" aria-label="Encrypted document viewer">
+  <iframe class="encrypted-viewer-frame" id="encrypted-viewer-frame" title="Encrypted document preview"></iframe>
+</section>
+<script>
+(() => {
+  const source = new URL('{{ viewer_url|escapejs }}', location.href);
+  const frame = document.getElementById('encrypted-viewer-frame');
+  const overlay = document.getElementById('encrypted-viewer-overlay');
+  const viewer = new URL('{% static "contracts/mobile-pdf.html" %}', location.href);
+  viewer.searchParams.set('file', source.href);
+  viewer.searchParams.set('embedded', '1');
+  viewer.searchParams.set('title', '{{ viewer_title|escapejs }}');
+  frame.src = viewer.href;
+  overlay.addEventListener('click', () => history.back());
+  window.addEventListener('message', event => {
+    if (event.origin === location.origin && event.source === frame.contentWindow && event.data?.type === 'sealguard-pdf-close') history.back();
+  });
+})();
+</script>
+{% endif %}
 {% block auth_main_content %}
 <style>
 .encrypted-file { width:100%; min-width:0; padding:10px; border:1px solid #e0deda; border-radius:8px; background:#fff; color:#445566; font-family:inherit; font-size:13px; }
@@ -31,4 +62,5 @@
     </form>
     {% if not user.is_authenticated %}<p class="auth-footnote">Have a staff account? <a href="{% url 'login' %}?next={% url 'open_encrypted_document' %}">Sign in</a></p>{% endif %}
     <p class="auth-footnote"><a href="/verify/">Verify a document</a></p>
+{% include 'access/encrypted_viewer.html' %}
 {% endblock %}

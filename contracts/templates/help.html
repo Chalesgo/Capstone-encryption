@@ -336,5 +336,24 @@ if (tutorialModal) {
     if (event.target === tutorialModal) closeTutorialEditor();
   });
 }
+
+const tutorialScrollKey = 'sealguard-tutorial-scroll-y';
+function saveTutorialScrollPosition() {
+  try { sessionStorage.setItem(tutorialScrollKey, String(window.scrollY)); } catch (_) {}
+}
+document.querySelectorAll('.question-link').forEach(function(link) {
+  link.addEventListener('click', saveTutorialScrollPosition);
+});
+document.querySelector('.mobile-question-select select')?.addEventListener('change', saveTutorialScrollPosition);
+document.addEventListener('DOMContentLoaded', function() {
+  let savedScrollY = null;
+  try { savedScrollY = sessionStorage.getItem(tutorialScrollKey); } catch (_) {}
+  if (savedScrollY !== null) {
+    requestAnimationFrame(function() {
+      window.scrollTo(0, Number(savedScrollY) || 0);
+      try { sessionStorage.removeItem(tutorialScrollKey); } catch (_) {}
+    });
+  }
+});
 </script>
 {% endblock %}

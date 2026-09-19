@@ -1,0 +1,31 @@
+{% load static %}
+{% if viewer_url %}
+<style>
+.encrypted-viewer-overlay{position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,.35)}
+.encrypted-viewer-panel{position:fixed;top:0;right:0;z-index:1200;width:70%;min-width:640px;height:100dvh;background:#fff;border-left:1px solid #eef0f4;box-shadow:-8px 0 32px rgba(0,0,0,.12);display:flex;flex-direction:column;animation:encrypted-viewer-in .3s ease both}
+.encrypted-viewer-frame{flex:1;width:100%;border:0;background:#f5f6f8}
+@keyframes encrypted-viewer-in{from{transform:translateX(100%)}to{transform:translateX(0)}}
+@media(max-width:900px){.encrypted-viewer-panel{width:100%;min-width:0}}
+@media(prefers-reduced-motion:reduce){.encrypted-viewer-panel{animation:none}}
+</style>
+<div class="encrypted-viewer-overlay" id="encrypted-viewer-overlay"></div>
+<section class="encrypted-viewer-panel" aria-label="Encrypted document viewer">
+  <iframe class="encrypted-viewer-frame" id="encrypted-viewer-frame" title="Encrypted document preview"></iframe>
+</section>
+<script>
+(() => {
+  const source = new URL('{{ viewer_url|escapejs }}', location.href);
+  const frame = document.getElementById('encrypted-viewer-frame');
+  const viewer = new URL('{% static "contracts/mobile-pdf.html" %}', location.href);
+  viewer.searchParams.set('file', source.href);
+  viewer.searchParams.set('embedded', '1');
+  viewer.searchParams.set('title', '{{ viewer_title|escapejs }}');
+  frame.src = viewer.href;
+  const close = () => history.back();
+  document.getElementById('encrypted-viewer-overlay').addEventListener('click', close);
+  window.addEventListener('message', event => {
+    if (event.origin === location.origin && event.source === frame.contentWindow && event.data?.type === 'sealguard-pdf-close') close();
+  });
+})();
+</script>
+{% endif %}

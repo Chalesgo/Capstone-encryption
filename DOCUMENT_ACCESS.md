@@ -35,11 +35,11 @@ Registered file paths (including older names without a .pdf suffix) and all medi
 
 1. The uploader or Admin opens a document row menu and chooses **Download QR access sheet** (also in the mobile Edit menu).
 2. The printable sheet contains a request URL and an opaque reference, with no private document title, PDF contents, credentials, or decryption key.
-3. A recipient scans it and provides a name, email, optional organization, and reason. A six-digit code verifies email possession; it expires after 10 minutes and permits at most five attempts. Requests are rate-limited by email/IP.
-4. Staff or Admin opens **PDF access requests** in navigation (`/access-requests/`) to approve or reject verified requests. Viewing can last 1 hour, 24 hours, or 3 days. Approved requests can be revoked.
-5. The recipient refreshes the request page in the same verified browser and opens the approved version. The grant provides no account, editing permission, future-version access, or general workspace access. Reopening in a different browser requires a new verified request and approval. Email delivery errors are shown instead of claiming a code was delivered.
+3. A recipient scans it and provides a name, email, optional organization, and reason. Submission immediately enters the staff approval queue; no email code is sent. Email is contact information, not a verified identity. Requests are rate-limited by email/IP.
+4. Staff or Admin opens **PDF access requests** in navigation (`/access-requests/`) to approve or reject submitted requests. Viewing can last 1 hour, 24 hours, or 3 days. Approved requests can be revoked.
+5. The recipient refreshes the request page in the same browser and opens the approved version. The grant provides no account, editing permission, future-version access, or general workspace access. Reopening in a different browser requires a new request and approval. Public documents remain directly viewable without a request.
 
-Set `PUBLIC_BASE_URL=https://your-stable-host` in the deployment environment for durable QR links. If unset, the sheet uses the current request origin; sheets created through localhost are local-only, and changing a temporary ngrok hostname invalidates old printed links. The configured email backend is used for codes. With the console backend, the code appears in the Django terminal for local testing; configure SMTP for real recipients. Approval does not send another email: the recipient checks the same page.
+Set `PUBLIC_BASE_URL=https://your-stable-host` in the deployment environment for durable QR links. If unset, the sheet uses the current request origin; sheets created through localhost are local-only, and changing a temporary ngrok hostname invalidates old printed links. The recipient checks the same request page for staff approval. Existing requests waiting for an email code can submit their saved details for staff review without a code.
 
 Revocation and expiry block subsequent PDF requests, but cannot erase bytes already delivered to a browser. Guest views and staff decisions are recorded in the audit log. This is access control, not copy prevention.
 

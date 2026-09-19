@@ -1,13 +1,11 @@
 import io
-import secrets
 from datetime import timedelta
 
 from django import forms
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.hashers import make_password, check_password
 from django.db import transaction, OperationalError
-from django.db.models import Q
+from django.db.models import Q, F
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -42,11 +40,11 @@ def _session_request(request, link):
 
 
 def _verified_in_session(request, entry):
-    return str(entry.pk) in request.session.get('verified_document_requests', [])
+    return request.session.get('document_access_requests', {}).get(str(entry.link_id)) == str(entry.pk)
 
 
 def _approved(entry):
-    return bool(entry and entry.status == 'approved' and entry.email_verified_at
+    return bool(entry and entry.status == 'approved'
                 and entry.expires_at and entry.expires_at > timezone.now()
                 and entry.approved_file and not entry.link.contract.is_trashed)
 
@@ -70,43 +68,11 @@ def request_access(request, token):
             mapping.pop(str(link.pk), None)
             request.session['document_access_requests'] = mapping
             return redirect('request_document_access', token=token)
-        if action == 'verify' and entry and entry.status == 'email_pending':
-            now = timezone.now()
-            if entry.otp_attempts >= 5 or entry.otp_expires_at <= now:
-                error = 'This code has expired or has too many attempts. Start a new request.'
-            else:
-                # Hash verification is deliberately outside the write transaction.
-                # SQLite cannot reliably upgrade a SELECT transaction to a writer
-                # while another request is writing (select_for_update is a no-op).
-                correct = check_password(request.POST.get('code', '')[:12], entry.otp_hash)
-                updates = {'otp_attempts': entry.otp_attempts + 1}
-                if correct:
-                    updates.update(status='pending', email_verified_at=now, otp_hash='')
-                try:
-                    if correct:
-                        request.session.cycle_key()
-                    with transaction.atomic():
-                        changed = DocumentAccessRequest.objects.filter(
-                            pk=entry.pk, status='email_pending', otp_hash=entry.otp_hash,
-                            otp_attempts=entry.otp_attempts, otp_expires_at__gt=timezone.now(),
-                        ).update(**updates)
-                        if changed and correct:
-                            log_activity(request, 'edited', contract=link.contract,
-                                         note=f'PDF access requested; request={entry.pk}; email verified')
-                    if not changed:
-                        error = 'This request changed or the code expired. Refresh the page and try again.'
-                    elif correct:
-                        # Session writes must not extend the document transaction.
-                        verified = request.session.get('verified_document_requests', [])
-                        request.session['verified_document_requests'] = (verified + [str(entry.pk)])[-20:]
-                    else:
-                        error = 'The code is incorrect. Please try again.'
-                except OperationalError as exc:
-                    if 'locked' not in str(exc).lower():
-                        raise
-                    error = 'The system is busy saving another request. Please submit your verification code again shortly.'
-            if not error:
-                return redirect('request_document_access', token=token)
+        if action == 'submit_existing' and entry and entry.status == 'email_pending':
+            DocumentAccessRequest.objects.filter(pk=entry.pk, status='email_pending').update(
+                status='pending', otp_hash='',
+            )
+            return redirect('request_document_access', token=token)
         elif action == 'request':
             form = RequestForm(request.POST)
             if not link.is_active:
@@ -119,42 +85,35 @@ def request_access(request, token):
                 if recent.filter(Q(ip_hash=ip_hash) | Q(email__iexact=email)).count() >= 5:
                     error = 'Too many requests. Please wait 15 minutes before trying again.'
                 else:
-                    code = f'{secrets.randbelow(1000000):06d}'
-                    entry = DocumentAccessRequest.objects.create(
-                        link=link, name=form.cleaned_data['name'], email=email,
-                        organization=form.cleaned_data['organization'], reason=form.cleaned_data['reason'],
-                        otp_hash=make_password(code), otp_expires_at=now + timedelta(minutes=10), ip_hash=ip_hash,
-                    )
                     try:
-                        delivered = send_mail('SealGuard document access: verify your email',
-                            f'Your verification code is {code}. It expires in 10 minutes. '
-                            'This verifies your email only; staff approval is still required. '
-                            'If you did not request access, ignore this message.', [email], fail_silently=False)
-                        if not delivered:
-                            raise RuntimeError('Email was not delivered')
-                    except Exception:
-                        error = 'We could not send the verification email. Please contact staff or try again later.'
-                        entry = None
-                    else:
+                        # Claim the single-use link as the first transaction write.
+                        # This avoids SQLite's read-to-write lock upgrade.
                         with transaction.atomic():
-                            current_link = DocumentAccessLink.objects.select_for_update().get(pk=link.pk)
-                            if not current_link.is_active:
-                                error = 'This QR code has already been used. Please request a fresh access sheet.'
-                                entry.delete()
-                                entry = None
-                            else:
-                                current_link.is_active = False
-                                current_link.superseded_at = timezone.now()
-                                current_link.save(update_fields=['is_active', 'superseded_at'])
-                                DocumentAccessLink.objects.create(contract=current_link.contract)
-                                mapping = request.session.get('document_access_requests', {}).copy()
-                                mapping[str(current_link.pk)] = str(entry.pk)
-                                request.session['document_access_requests'] = dict(list(mapping.items())[-20:])
-                        if error:
-                            pass
+                            claimed = DocumentAccessLink.objects.filter(pk=link.pk, is_active=True).update(
+                                is_active=False, superseded_at=now,
+                            )
+                            if claimed:
+                                entry = DocumentAccessRequest.objects.create(
+                                    link=link, name=form.cleaned_data['name'], email=email,
+                                    organization=form.cleaned_data['organization'], reason=form.cleaned_data['reason'],
+                                    status='pending', otp_hash='', otp_expires_at=now, ip_hash=ip_hash,
+                                )
+                                DocumentAccessLink.objects.create(contract=link.contract)
+                                log_activity(request, 'edited', contract=link.contract,
+                                             note=f'PDF access requested; request={entry.pk}; awaiting staff approval')
+                        if not claimed:
+                            error = 'This QR code has already been used. Please request a fresh access sheet.'
                         else:
+                            mapping = request.session.get('document_access_requests', {}).copy()
+                            mapping[str(link.pk)] = str(entry.pk)
+                            request.session['document_access_requests'] = dict(list(mapping.items())[-20:])
                             return redirect('request_document_access', token=token)
-        elif action != 'verify':
+                    except OperationalError as exc:
+                        if 'locked' not in str(exc).lower():
+                            raise
+                        entry = None
+                        error = 'The system is busy. Please submit your request again shortly.'
+        else:
             error = 'Choose a valid action.'
     response = render(request, 'access/request.html', {
         'link': link, 'entry': entry, 'form': form, 'error': error,
@@ -227,10 +186,12 @@ def approval_queue(request):
 def review_request(request, request_id):
     _require_reviewer(request)
     with transaction.atomic():
+        # Acquire the SQLite write lock before reading the review state.
+        DocumentAccessRequest.objects.filter(pk=request_id).update(status=F('status'))
         entry = get_object_or_404(DocumentAccessRequest.objects.select_for_update().select_related('link__contract'), pk=request_id)
         action = request.POST.get('action')
         contract = entry.link.contract
-        if not entry.email_verified_at or contract.is_trashed:
+        if contract.is_trashed:
             raise Http404
         if action in ('approve', 'reject') and entry.status == 'pending':
             if action == 'approve':

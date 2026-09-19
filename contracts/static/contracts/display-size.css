@@ -47,10 +47,17 @@
   position: relative; top: auto; right: auto; display: inline-block;
   margin-left: 12px; vertical-align: middle; text-align: left;
 }
+#sg-display-size.sg-size-admin .sg-size-panel {
+  position: fixed; top: 64px; right: 18px; z-index: 30001;
+  width: 180px; max-width: calc(100vw - 24px);
+}
 #profile-modal .profile-modal-card {
   max-height: calc(100% - 12px); overflow-y: auto;
 }
 @media (max-width: 900px) {
   .public-mobile-topbar { padding-right: 64px !important; }
   #sg-display-size:not(.sg-size-inline):not(.sg-size-admin) { right: 8px; }
+}
+@media (max-width: 767px) {
+  #sg-display-size.sg-size-admin .sg-size-panel { top: 112px; right: 12px; }
 }
