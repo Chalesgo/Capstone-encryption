@@ -1,5 +1,11 @@
 keys/
-media/
+# Runtime media is local/deployment storage. Keep only the public fallback
+# seal needed for a fresh deployment; uploaded PDFs, QR images, and LSB-sealed
+# outputs remain ignored.
+media/*
+!media/seals/
+media/seals/*
+!media/seals/default_seal.png
 db.sqlite3
 .env
 *.pem
