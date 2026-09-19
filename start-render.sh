@@ -4,7 +4,13 @@ set -o nounset
 set -o pipefail
 
 : "${DATA_ROOT:=/opt/render/project/src/data}"
-mkdir -p "${DATA_ROOT}/media"
+mkdir -p "${DATA_ROOT}/media/seals"
+
+# A fresh deployment has no runtime media yet. Seed only the public fallback
+# seal; uploaded PDFs, QR images, and LSB-generated seals stay runtime data.
+if [ ! -f "${DATA_ROOT}/media/seals/default_seal.png" ] && [ -f "media/seals/default_seal.png" ]; then
+  cp "media/seals/default_seal.png" "${DATA_ROOT}/media/seals/default_seal.png"
+fi
 
 python manage.py migrate --noinput
 python manage.py bootstrap_account
