@@ -24,6 +24,13 @@ class SchedulerTests(SimpleTestCase):
         apps.get_app_config('contracts').ready()
         start.assert_not_called()
 
+    @patch('contracts.integrity_scheduler.start_scheduler')
+    @patch('contracts.apps.sys.argv', ['gunicorn'])
+    @patch.dict('os.environ', {'SEALGUARD_RUN_INTEGRITY_SCHEDULER': '1'})
+    def test_render_server_starts_scheduler(self, start):
+        apps.get_app_config('contracts').ready()
+        start.assert_called_once()
+
     @patch('contracts.integrity_scheduler.launch_scan')
     def test_startup_then_daily_without_waiting_in_test(self, launch):
         stop = Mock()

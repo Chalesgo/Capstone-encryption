@@ -4,6 +4,8 @@ db.sqlite3
 .env
 *.pem
 .local-dev/
+data/
+staticfiles/
 *.sqlite3
 *.sqlite3-wal
 *.sqlite3-shm

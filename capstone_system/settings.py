@@ -15,18 +15,23 @@ from pathlib import Path
 from decouple import config, Csv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_ROOT = Path(config('DATA_ROOT', default=str(BASE_DIR))).expanduser().resolve()
 
 SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=True, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
 CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='', cast=Csv())
+RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME', '').strip()
+RENDER_EXTERNAL_URL = os.environ.get('RENDER_EXTERNAL_URL', '').strip().rstrip('/')
+if RENDER_EXTERNAL_HOSTNAME and RENDER_EXTERNAL_HOSTNAME not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS = [*ALLOWED_HOSTS, RENDER_EXTERNAL_HOSTNAME]
 
 # The QR approval page is commonly demonstrated through an HTTPS tunnel.  The
 # tunnel terminates TLS before forwarding to Django, so tell Django which
 # scheme the browser used and accept the public URL configured for this run.
 # The ngrok wildcard is limited to DEBUG demos; production should use an
 # explicit CSRF_TRUSTED_ORIGINS value instead.
-PUBLIC_BASE_URL = config('PUBLIC_BASE_URL', default='').strip().rstrip('/')
+PUBLIC_BASE_URL = config('PUBLIC_BASE_URL', default=RENDER_EXTERNAL_URL).strip().rstrip('/')
 if PUBLIC_BASE_URL.startswith(('http://', 'https://')) and PUBLIC_BASE_URL not in CSRF_TRUSTED_ORIGINS:
     CSRF_TRUSTED_ORIGINS = [*CSRF_TRUSTED_ORIGINS, PUBLIC_BASE_URL]
 if DEBUG:
@@ -37,6 +42,20 @@ if DEBUG:
         'https://*.ngrok.io',
     ]
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=not DEBUG, cast=bool)
+SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=not DEBUG, cast=bool)
+CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=not DEBUG, cast=bool)
+SECURE_HSTS_SECONDS = config(
+    'SECURE_HSTS_SECONDS',
+    default=3600 if RENDER_EXTERNAL_HOSTNAME and not DEBUG else 0,
+    cast=int,
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = config(
+    'SECURE_HSTS_INCLUDE_SUBDOMAINS', default=False, cast=bool,
+)
+SECURE_HSTS_PRELOAD = config('SECURE_HSTS_PRELOAD', default=False, cast=bool)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
 
 
 # Application definition
@@ -55,6 +74,7 @@ MIDDLEWARE = [
     'contracts.middleware.InternalPDFViewerMiddleware',
     'contracts.middleware.PDFStorageFailureMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'contracts.middleware.NullOriginApprovalMiddleware',
@@ -91,7 +111,7 @@ WSGI_APPLICATION = 'capstone_system.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': Path(config('SQLITE_PATH', default=str(DATA_ROOT / 'db.sqlite3'))),
         # Concurrent staging/performance requests may briefly contend for
         # SQLite's single-writer lock. Wait instead of failing at the default
         # five-second driver timeout. Production should use the configured
@@ -139,7 +159,20 @@ USE_I18N = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': (
+            'django.contrib.staticfiles.storage.StaticFilesStorage'
+            if DEBUG else
+            'whitenoise.storage.CompressedManifestStaticFilesStorage'
+        ),
+    },
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -165,14 +198,18 @@ LOGGING = {
 
 LOGIN_URL = '/accounts/login/'
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_ROOT = str(DATA_ROOT / 'media')
 # The Django development server must serve local media during staging and
 # performance tests even when DEBUG is disabled. Production deployments should
 # route media through the permission-checked Django view; never expose MEDIA_ROOT.
 SERVE_MEDIA = config('SERVE_MEDIA', default=True, cast=bool)
+SERVE_STATIC_VIA_DJANGO = config('SERVE_STATIC_VIA_DJANGO', default=False, cast=bool)
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
 X_FRAME_OPTIONS = 'SAMEORIGIN'
+# SealGuard intentionally embeds its own same-origin PDF viewer. Django's
+# deployment check recommends DENY for sites that never use frames.
+SILENCED_SYSTEM_CHECKS = ['security.W019']
 LOGIN_FAILURE_THRESHOLD = 5
 LOGIN_LOCKOUT_SECONDS = 30
 EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
@@ -186,9 +223,14 @@ DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=EMAIL_HOST_USER or 'no
 AUTHENTICATION_BACKENDS = [
     'contracts.authentication.SealGuardModelBackend',
 ]
-# RSA Key Paths
-RSA_PRIVATE_KEY_PATH = os.path.join(BASE_DIR, 'keys', 'private.pem')
-RSA_PUBLIC_KEY_PATH = os.path.join(BASE_DIR, 'keys', 'public.pem')
+# Existing encrypted documents require this exact RSA keypair. Render should
+# provide the files through its Secret Files feature under /etc/secrets.
+RSA_PRIVATE_KEY_PATH = config(
+    'RSA_PRIVATE_KEY_PATH', default=str(BASE_DIR / 'keys' / 'private.pem'),
+)
+RSA_PUBLIC_KEY_PATH = config(
+    'RSA_PUBLIC_KEY_PATH', default=str(BASE_DIR / 'keys' / 'public.pem'),
+)
 MAX_UPLOAD_SIZE = 15 * 1024 * 1024
 
 # Set to the stable HTTPS origin used in printed QR access sheets.

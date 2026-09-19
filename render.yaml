@@ -1,0 +1,55 @@
+services:
+  - type: web
+    name: sealguard
+    runtime: python
+    region: singapore
+    plan: 0.5c-512mb
+    branch: main
+    buildCommand: bash build.sh
+    startCommand: bash start-render.sh
+    healthCheckPath: /health/
+    autoDeployTrigger: off
+    maxShutdownDelaySeconds: 60
+    disk:
+      name: sealguard-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 25
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: DATA_ROOT
+        value: /opt/render/project/src/data
+      - key: SERVE_MEDIA
+        value: "True"
+      - key: RSA_PRIVATE_KEY_PATH
+        value: /etc/secrets/private.pem
+      - key: RSA_PUBLIC_KEY_PATH
+        value: /etc/secrets/public.pem
+      - key: SECURE_SSL_REDIRECT
+        value: "True"
+      - key: SESSION_COOKIE_SECURE
+        value: "True"
+      - key: CSRF_COOKIE_SECURE
+        value: "True"
+      - key: SECURE_HSTS_SECONDS
+        value: "3600"
+      - key: SECURE_HSTS_INCLUDE_SUBDOMAINS
+        value: "True"
+      - key: SECURE_HSTS_PRELOAD
+        value: "True"
+      - key: EMAIL_BACKEND
+        value: django.core.mail.backends.smtp.EmailBackend
+      - key: EMAIL_HOST
+        value: smtp.gmail.com
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_USE_TLS
+        value: "True"
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        sync: false
