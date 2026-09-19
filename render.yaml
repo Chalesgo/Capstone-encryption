@@ -9,7 +9,6 @@ services:
     startCommand: bash start-render.sh
     healthCheckPath: /health/
     autoDeployTrigger: off
-    maxShutdownDelaySeconds: 60
     disk:
       name: sealguard-data
       mountPath: /opt/render/project/src/data
