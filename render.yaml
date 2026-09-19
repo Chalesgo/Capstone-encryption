@@ -1,18 +1,19 @@
+# Temporary smoke-test Blueprint for Render's Free web-service plan.
+#
+# This is intentionally separate from render-paid.yaml. Free services cannot use
+# persistent disks, so do not upload documents that must survive a restart or
+# redeploy. Use render-paid.yaml for the real disk-backed deployment.
 services:
   - type: web
-    name: sealguard
+    name: sealguard-free-test
     runtime: python
     region: singapore
-    plan: 0.5c-512mb
+    plan: free
     branch: main
     buildCommand: bash build.sh
     startCommand: bash start-render.sh
     healthCheckPath: /health/
     autoDeployTrigger: off
-    disk:
-      name: sealguard-data
-      mountPath: /opt/render/project/src/data
-      sizeGB: 25
     envVars:
       - key: SECRET_KEY
         generateValue: true

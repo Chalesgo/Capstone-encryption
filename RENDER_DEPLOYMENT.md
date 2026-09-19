@@ -37,7 +37,8 @@ and a checksum manifest. Keep two private copies.
 
 ## 3. Create the Render service
 
-The repository includes `render.yaml`. In Render, use **New > Blueprint** and
+The repository includes `render-paid.yaml` for the disk-backed deployment. In
+Render, use **New > Blueprint** and
 select the private repository. The Blueprint supplies:
 
 - Singapore region
