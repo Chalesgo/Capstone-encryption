@@ -851,6 +851,7 @@
                 <span class="profile-detail-value">{{ user.date_joined|date:"F j, Y" }}</span>
             </div>
         </div>
+        <div data-display-size-slot></div>
         <div class="profile-modal-actions">
             {% if user.is_superuser %}
             <a class="btn btn-primary profile-action" href="/admin/">Open Admin Portal</a>

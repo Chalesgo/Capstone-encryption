@@ -1,5 +1,5 @@
 #sg-display-size {
-  position: fixed; bottom: 12px; left: 12px; z-index: 20000;
+  position: fixed; top: 8px; right: 18px; z-index: 20000;
   color: #334455; font: 13px/1.5 'DM Sans', system-ui, sans-serif;
 }
 #sg-display-size summary {
@@ -11,7 +11,7 @@
 #sg-display-size summary::-webkit-details-marker { display: none; }
 #sg-display-size summary:hover, #sg-display-size[open] summary { background: #eef2ff; }
 #sg-display-size .sg-size-panel {
-  position: absolute; bottom: 50px; left: 0; width: 180px;
+  position: absolute; top: 50px; right: 0; width: 180px;
   box-sizing: border-box; padding: 14px; border: 1px solid #dfe3e8;
   border-radius: 12px; background: #fff; box-shadow: 0 6px 24px #15253620;
 }
@@ -24,3 +24,20 @@
 #sg-display-size p { margin: 8px 0; color: #667788; font-size: 12px; }
 #sg-display-size :focus-visible { outline: 2px solid #3b5bdb; outline-offset: 3px; }
 @media print { #sg-display-size { display: none; } }
+#sg-display-size.sg-size-inline {
+  position: static; margin: 14px 0; text-align: left;
+}
+#sg-display-size.sg-size-inline .sg-size-panel {
+  position: static; width: 100%; box-shadow: none; background: #f7f6f4;
+}
+#sg-display-size.sg-size-admin {
+  position: relative; top: auto; right: auto; display: inline-block;
+  margin-left: 12px; vertical-align: middle; text-align: left;
+}
+#profile-modal .profile-modal-card {
+  max-height: calc(100% - 12px); overflow-y: auto;
+}
+@media (max-width: 900px) {
+  .public-mobile-topbar { padding-right: 64px !important; }
+  #sg-display-size:not(.sg-size-inline):not(.sg-size-admin) { right: 8px; }
+}
