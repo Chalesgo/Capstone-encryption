@@ -1,0 +1,55 @@
+# Temporary smoke-test Blueprint for Render's Free web-service plan.
+#
+# This is intentionally separate from render.yaml. Free services cannot use
+# persistent disks, so do not upload documents that must survive a restart or
+# redeploy. Use render.yaml for the real disk-backed deployment.
+services:
+  - type: web
+    name: sealguard-free-test
+    runtime: python
+    region: singapore
+    plan: free
+    branch: main
+    buildCommand: bash build.sh
+    startCommand: bash start-render.sh
+    healthCheckPath: /health/
+    autoDeployTrigger: off
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: DATA_ROOT
+        value: /opt/render/project/src/data
+      - key: SERVE_MEDIA
+        value: "True"
+      - key: RSA_PRIVATE_KEY_PATH
+        value: /etc/secrets/private.pem
+      - key: RSA_PUBLIC_KEY_PATH
+        value: /etc/secrets/public.pem
+      - key: SECURE_SSL_REDIRECT
+        value: "True"
+      - key: SESSION_COOKIE_SECURE
+        value: "True"
+      - key: CSRF_COOKIE_SECURE
+        value: "True"
+      - key: SECURE_HSTS_SECONDS
+        value: "3600"
+      - key: SECURE_HSTS_INCLUDE_SUBDOMAINS
+        value: "True"
+      - key: SECURE_HSTS_PRELOAD
+        value: "True"
+      - key: EMAIL_BACKEND
+        value: django.core.mail.backends.smtp.EmailBackend
+      - key: EMAIL_HOST
+        value: smtp.gmail.com
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_USE_TLS
+        value: "True"
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        sync: false
