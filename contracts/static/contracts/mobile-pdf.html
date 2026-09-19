@@ -20,7 +20,7 @@
     .pdf-page::before { content:attr(aria-label); position:absolute; top:16px; left:16px; font-size:12px; color:#6b7a8d; }
     .pdf-page canvas { display:block; width:100%; height:100%; position:relative; background:white; }
     .corner-actions { position:fixed; top:max(10px, env(safe-area-inset-top)); right:12px; z-index:2; display:flex; gap:6px; }
-    .corner-actions button { background:#fffffff2; box-shadow:0 2px 12px #24344318; }
+    .corner-actions button { background:#fffffff2; box-shadow:0 2px 8px #24344318; border:1px solid #e5ebf0; border-radius:8px; min-width:36px; min-height:36px; }
     #status { position:fixed; top:64px; left:20px; right:20px; margin:0; padding:8px 12px; background:#fff; border-radius:10px; text-align:center; z-index:2; }
     #status:empty { display:none; }
     .floating-controls { position:fixed; bottom:calc(16px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); z-index:3; width:max-content; max-width:calc(100% - 24px); display:flex; align-items:center; gap:4px; padding:6px; background:#fffffff5; border:1px solid white; box-shadow:0 5px 28px #1c2b3833; border-radius:40px; backdrop-filter:blur(12px); }
@@ -78,6 +78,15 @@
     #details-versions #version-message { margin:0 14px 8px; font-size:12.5px; }
     #details-versions #version-message:empty { display:none; }
     #details-versions #retry-versions { margin:0 10px 8px; }
+    body.sidebar-pinned { --sidebar-width: 300px; }
+    body.sidebar-pinned #pdf-sidebar { width:var(--sidebar-width); transform:none; visibility:visible; transition:none; }
+    body.sidebar-pinned #pages { right:var(--sidebar-width); }
+    body.sidebar-pinned .corner-actions { right:calc(var(--sidebar-width) + 12px); }
+    body.sidebar-pinned #status { right:calc(var(--sidebar-width) + 20px); }
+    body.sidebar-pinned .floating-controls { left:calc((100% - var(--sidebar-width)) / 2); max-width:calc(100% - var(--sidebar-width) - 24px); }
+    body.sidebar-pinned #details-toggle, body.sidebar-pinned #close-details,
+    body.sidebar-pinned #versions-toggle, body.sidebar-pinned #details-backdrop { display:none; }
+    body.sidebar-pinned .pdf-sidebar-title { padding-right:17px; }
     @media(prefers-reduced-motion:reduce) { #version-sheet, #version-backdrop, #pdf-sidebar, #details-backdrop { transition:none; } }
   </style>
 </head>
@@ -85,7 +94,7 @@
   <main id="pages" aria-label="Scrollable PDF pages" tabindex="0"><div id="page-stack"></div></main>
   <div class="corner-actions" aria-label="Document actions">
     <button id="details-toggle" title="Document details" aria-label="Document details" aria-controls="pdf-sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></svg></button>
-    <button id="download" title="Download PDF" aria-label="Download PDF" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg></button>
+    <button id="download" title="Download encrypted document (.sgpdf)" aria-label="Download encrypted document" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg></button>
     <button id="close" title="Close PDF" aria-label="Close PDF viewer">✕</button>
   </div>
   <p id="status" role="status">Opening document…</p>
@@ -104,6 +113,7 @@
       <div id="integrity-help-panel" hidden>✓ Integrity passed · ✕ Check failed or file unreadable · … Not checked yet</div>
       <p id="version-message" role="status"></p>
       <button id="retry-versions" hidden>Retry</button>
+      <a id="compare-revisions" hidden style="margin:12px;padding:12px;background:#edf2f8;color:#21466c;border-radius:8px;text-decoration:none;font-weight:600">Compare revisions side by side</a>
       <div id="version-list"></div>
     </div></div>
   </section>
@@ -121,6 +131,6 @@
     <p class="sidebar-section-label">Version History</p>
     <div id="details-versions"></div>
   </aside>
-  <script type="module" src="mobile-pdf.mjs?v=debug-5"></script>
+  <script type="module" src="mobile-pdf.mjs?v=pinned-sidebar-1"></script>
 </body>
 </html>

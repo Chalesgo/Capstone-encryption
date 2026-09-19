@@ -35,7 +35,20 @@ function setTitle(title) {
 }
 setTitle(params.get('title') || 'Document');
 
+let sidebarPinned = false;
 function panel(mode) {
+  if (sidebarPinned) {
+    document.body.classList.remove('versions-open', 'details-open');
+    get('version-sheet').inert = true;
+    get('pdf-sidebar').inert = false;
+    get('pdf-sidebar').removeAttribute('role');
+    get('pdf-sidebar').removeAttribute('aria-modal');
+    get('details-versions').append(get('version-content'));
+    scroller.inert = false;
+    document.querySelector('.floating-controls').inert = false;
+    document.querySelector('.corner-actions').inert = false;
+    return;
+  }
   const open = Boolean(mode), details = mode === 'details';
   document.body.classList.toggle('versions-open', mode === 'versions');
   document.body.classList.toggle('details-open', details);
@@ -71,7 +84,7 @@ document.addEventListener('keydown', event => {
   }
   if (event.key === 'Tab' && (document.body.classList.contains('versions-open') || document.body.classList.contains('details-open'))) {
     const activePanel = get(document.body.classList.contains('details-open') ? 'pdf-sidebar' : 'version-sheet');
-    const items = [...activePanel.querySelectorAll('button:not([hidden]):not(:disabled)')];
+    const items = [...activePanel.querySelectorAll('button:not([hidden]):not(:disabled), a[href]:not([hidden])')];
     const first = items[0], last = items.at(-1);
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
@@ -101,6 +114,12 @@ async function loadVersions() {
       duration_ms: Math.round(performance.now() - startedAt),
     });
     if (data.title) setTitle(data.title);
+    const compare = get('compare-revisions');
+    if (compare && data.versions.filter(v => v.preview_url).length >= 2 && params.get('comparison') !== '1') {
+      compare.href = '/contract/' + contractId + '/compare/';
+      compare.target = '_top';
+      compare.hidden = false;
+    }
     get('details-created').textContent = data.created || '—';
     get('details-encrypted').textContent = data.encrypted || '—';
     get('details-verified').textContent = data.verified || 'Not yet verified';
@@ -162,6 +181,22 @@ async function loadVersions() {
   } finally { versionsLoading = false; }
 }
 if (params.get('version')) get('versions-toggle').textContent = 'v' + params.get('version');
+// Use the host viewport for desktop panels, which can be narrower than 900px.
+let sidebarViewport = window;
+try { if (params.get('embedded') === '1' && parent.location.origin === location.origin) sidebarViewport = parent; } catch (_) {}
+const desktopSidebar = sidebarViewport.matchMedia('(min-width: 901px)');
+function syncSidebar() {
+  sidebarPinned = desktopSidebar.matches && params.get('comparison') !== '1';
+  document.body.classList.toggle('sidebar-pinned', sidebarPinned);
+  if (!sidebarPinned) {
+    get('pdf-sidebar').setAttribute('role', 'dialog');
+    get('pdf-sidebar').setAttribute('aria-modal', 'true');
+  }
+  panel(null);
+  if (pdf) { layout(); schedulePaint(); }
+}
+desktopSidebar.addEventListener('change', syncSidebar);
+syncSidebar();
 loadVersions();
 if (params.get('details') === '1') panel('details');
 
@@ -265,15 +300,12 @@ scroller.addEventListener('touchend', endPinch);
 scroller.addEventListener('touchcancel', endPinch);
 let resizeTimer;
 window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { layout(); goPage(pageNumber); schedulePaint(); },150); });
-get('close').onclick = () => parent.postMessage({type:'sealguard-pdf-close'}, location.origin);
-if (params.get('embedded') === '1') get('close').hidden = true;
+get('close').onclick = () => { if (parent === window) location.assign('/open-encrypted/'); else parent.postMessage({type:'sealguard-pdf-close'}, location.origin); };
+let encryptedDownloadUrl = null;
+get('download').title = 'Download encrypted document (.sgpdf)';
+get('download').setAttribute('aria-label', 'Download encrypted document');
 get('download').onclick = () => {
-  if (!bytes) return;
-  const url = URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
-  const link = document.createElement('a');
-  link.href = url; link.download = filename;
-  document.body.append(link); link.click(); link.remove();
-  setTimeout(() => URL.revokeObjectURL(url),60000);
+  if (encryptedDownloadUrl) location.assign(encryptedDownloadUrl);
 };
 window.addEventListener('pagehide', () => { controller.abort(); loadingTask?.destroy(); });
 
@@ -297,7 +329,14 @@ try {
     wasmUrl:new URL('./pdfjs/wasm/',import.meta.url).href});
   pdf = await loadingTask.promise;
   pdfDebug('pdf_document_loaded', {page_count: pdf.numPages, duration_ms: Math.round(performance.now() - fetchStartedAt)});
-  get('download').disabled = false;
+  const path = source.pathname;
+  if (/^\/contract\/(?:version\/)?\d+\/preview\/$/.test(path)) {
+    encryptedDownloadUrl = path.replace('/preview/', '/download/');
+  } else if (/^\/document-access\/[0-9a-f-]+\/view\/$/.test(path)) {
+    encryptedDownloadUrl = path + '?download=encrypted';
+  }
+  get('download').disabled = !encryptedDownloadUrl;
+  get('download').hidden = !encryptedDownloadUrl;
   const first = await pdf.getPage(1);
   const base = first.getViewport({scale:1});
   for (let number=1;number<=pdf.numPages;number++) {

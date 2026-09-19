@@ -162,6 +162,15 @@ def approved_pdf(request, token):
     # Grants cover the approved version only, never future revisions or editing.
     if entry.approved_version_id and entry.approved_version.contract_id != link.contract_id:
         raise Http404
+    if request.GET.get('download') == 'encrypted':
+        from .encrypted_documents import package_response
+        version = entry.approved_version
+        file = version.file if version else link.contract.file
+        if file.name != entry.approved_file:
+            raise Http404
+        log_activity(request, 'downloaded', contract=link.contract,
+                     note=f'Downloaded encrypted approved document; request={entry.pk}')
+        return package_response(link.contract, file, 'approved-document.sgpdf', version)
     try:
         document = pdf_storage.open(entry.approved_file, 'rb')
     except (OSError, PDFDecryptionError):

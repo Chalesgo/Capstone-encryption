@@ -2,7 +2,7 @@
   const viewer = new URL(document.currentScript.dataset.viewer, location.href);
   let overlay, frame, previousFocus, previousOverflow;
   window.sealGuardPdfFrameUrl = (url, contractId = null, title = '') => {
-    if (!url || !matchMedia('(max-width: 900px)').matches) return url;
+    if (!url) return url;
     const source = new URL(url, location.href);
     source.hash = '';
     const target = new URL(viewer);
@@ -24,6 +24,8 @@
   window.SealGuardPdf = {
     close,
     open(url, contractId = null, title = '', details = false) {
+      // Desktop uses the original SealGuard side-panel layout. The full-screen
+      // canvas is reserved for compact/mobile layouts.
       if (!url || !matchMedia('(max-width: 900px)').matches) return false;
       if (!overlay) {
         overlay = document.createElement('div');

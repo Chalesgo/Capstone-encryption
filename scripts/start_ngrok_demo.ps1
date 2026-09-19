@@ -53,6 +53,7 @@ $previousEnvironment = @{
     DEBUG = $env:DEBUG
     ALLOWED_HOSTS = $env:ALLOWED_HOSTS
     CSRF_TRUSTED_ORIGINS = $env:CSRF_TRUSTED_ORIGINS
+    PUBLIC_BASE_URL = $env:PUBLIC_BASE_URL
 }
 
 try {
@@ -101,6 +102,9 @@ try {
     $env:SEALGUARD_RUN_STARTUP_INTEGRITY = '0'
     $env:ALLOWED_HOSTS = "localhost,127.0.0.1,$publicHost"
     $env:CSRF_TRUSTED_ORIGINS = $publicUrl
+    # QR access sheets must point at this run's fresh hostname. Do not let a
+    # stale PUBLIC_BASE_URL from .env send phone users to an old tunnel.
+    $env:PUBLIC_BASE_URL = $publicUrl
 
     Write-Host 'Applying database migrations...'
     & $pythonExe $managePy migrate --noinput

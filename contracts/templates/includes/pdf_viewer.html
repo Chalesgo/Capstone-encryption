@@ -1,5 +1,5 @@
 <div class="pdf-overlay{% if viewer_show_verification %} audit-pdf-overlay{% endif %}" id="{{ viewer_prefix }}-overlay" onclick="{{ viewer_close_function }}()"></div>
-<div class="pdf-panel{% if viewer_show_verification %} audit-pdf-panel{% endif %}" id="{{ viewer_prefix }}-panel" aria-hidden="true">
+<div class="pdf-panel system-viewer-panel{% if viewer_show_verification %} audit-pdf-panel{% endif %}" id="{{ viewer_prefix }}-panel" aria-hidden="true">
   <div class="pdf-panel-body{% if viewer_show_verification %} audit-pdf-body{% endif %}">
     <div class="pdf-frame-wrap{% if viewer_show_verification %} audit-pdf-frame-wrap{% endif %}">
       <div class="pdf-floating-actions{% if viewer_show_verification %} audit-pdf-actions{% endif %}">

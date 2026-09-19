@@ -1,0 +1,7 @@
+{% load static %}
+<section class="comparison-pane" aria-label="{{ side }} version">
+<header class="comparison-meta"><h2>{{ side }} · v{{ item.version.version_number }}</h2>
+<dl><dt>Added by</dt><dd>{{ item.version.created_by.username|default:'Unknown account' }}</dd><dt>Uploaded</dt><dd>{{ item.version.created_at|date:'M j, Y, g:i a' }}</dd><dt>Source</dt><dd>{{ item.version.get_source_display }}</dd><dt>Pages</dt><dd>{{ item.pages }}</dd><dt>PDF size</dt><dd>{{ item.size|filesizeformat }}</dd></dl></header>
+{% url 'preview_contract_version' item.version.pk as preview %}
+<iframe title="{{ side }} version {{ item.version.version_number }}" src="{% static 'contracts/mobile-pdf.html' %}?file={{ preview|urlencode }}&amp;embedded=1&amp;comparison=1&amp;title={{ contract.title|urlencode }}%20v{{ item.version.version_number }}" loading="lazy"></iframe>
+</section>

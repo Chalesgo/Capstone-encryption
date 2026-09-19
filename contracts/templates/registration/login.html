@@ -206,6 +206,7 @@
 <div class="auth-shell">
     <div class="auth-side">
         <div>
+            {% block auth_side_content %}
             <span class="auth-side-mark">
                 <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -228,11 +229,13 @@
                     <span>Anyone can verify a document's seal publicly — without signing in.</span>
                 </div>
             </div>
+        {% endblock %}
         </div>
         <div class="auth-side-foot">SealGuard &middot; Barangay Sto. Ni&ntilde;o, Bi&ntilde;an City</div>
     </div>
 
     <div class="auth-main">
+        {% block auth_main_content %}
         <div class="auth-heading">
             <h1>Staff Login</h1>
             <p>Access the contract management portal.</p>
@@ -267,6 +270,7 @@
 
         <p class="auth-footnote">Not a staff member? <a href="/verify/">Verify a document instead</a></p>
         <p class="auth-footnote"><a href="{% url 'password_reset_request' %}">Forgot your password?</a></p>
+        {% endblock %}
     </div>
 </div>
 

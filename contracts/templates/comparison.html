@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Compare revisions{% endblock %}
+{% block content %}
+<style>
+.comparison{max-width:1400px;margin:auto}.comparison h1{font-size:25px;margin-bottom:8px}.comparison .muted{color:#667788;font-size:13px;line-height:1.6}.compare-controls{display:flex;align-items:end;flex-wrap:wrap;gap:16px;background:white;padding:20px;border-radius:14px;margin:20px 0}.compare-controls label{display:grid;gap:7px;font-size:13px;font-weight:600}.compare-controls select{padding:10px;border:1px solid #ddd;border-radius:8px;max-width:100%;font:inherit}.comparison-panes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.comparison-pane{background:white;border:1px solid #e0deda;border-radius:14px;overflow:hidden;min-width:0}.comparison-meta{padding:16px;overflow-wrap:anywhere}.comparison-meta h2{font-size:18px;margin-bottom:8px}.comparison-meta dl{display:grid;grid-template-columns:auto 1fr;gap:5px 12px;font-size:12px}.comparison-meta dt{color:#667788}.comparison-pane iframe{width:100%;height:65vh;min-height:380px;border:0;display:block}.compare-note{padding:16px;background:#fff7ed;border-left:4px solid #f4a34d;border-radius:8px;margin:16px 0;font-size:13px;line-height:1.6}.compare-summary{margin-top:24px}.difference{margin:12px 0;border:1px solid #e0deda;border-radius:10px;overflow:hidden;background:white}.difference h3{font-size:14px;padding:10px 14px;background:#f7f6f4}.difference-columns{display:grid;grid-template-columns:1fr 1fr}.difference pre{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.6 'Segoe UI',sans-serif;padding:14px;margin:0;min-width:0}.difference .before{background:#fff2f0}.difference .after{background:#eef9f2}.compare-back{display:inline-block;margin-bottom:16px;color:#a65e1d}.comparison :focus-visible{outline:2px solid #c87525;outline-offset:3px}@media(max-width:700px){.comparison-panes{grid-template-columns:1fr}.comparison-pane iframe{height:55vh}.compare-controls{align-items:stretch;flex-direction:column}.difference-columns{grid-template-columns:1fr}.comparison-pane{margin-bottom:12px}}
+</style>
+<main class="comparison">
+<a class="compare-back" href="{% url 'contract_list' %}">&larr; Back to documents</a>
+<h1>Compare revisions</h1><p>{{ contract.title }}</p><p class="muted">Document status: {{ contract.get_status_display }}. Compare any two saved versions; the latest two are selected initially.</p>
+{% if versions|length < 2 %}
+<p class="compare-note">This document needs at least two saved versions. Add a revision from the document menu, then return here.</p>
+{% else %}
+<form method="get" class="compare-controls">
+<label for="compare-left">Earlier / left version<select id="compare-left" name="left">{% for version in versions %}<option value="{{ version.version_number }}" {% if version.pk == left_version.pk %}selected{% endif %}>v{{ version.version_number }} · {{ version.created_at|date:"M j, Y, g:i a" }}</option>{% endfor %}</select></label>
+<label for="compare-right">Later / right version<select id="compare-right" name="right">{% for version in versions %}<option value="{{ version.version_number }}" {% if version.pk == right_version.pk %}selected{% endif %}>v{{ version.version_number }} · {{ version.created_at|date:"M j, Y, g:i a" }}</option>{% endfor %}</select></label>
+<button class="btn btn-primary" type="submit">Compare versions</button>
+</form>
+{% if error %}<p class="compare-note" role="alert">{{ error }}</p>{% else %}
+<div class="comparison-panes">
+{% include 'includes/comparison_pane.html' with item=before side='Left' %}
+{% include 'includes/comparison_pane.html' with item=after side='Right' %}
+</div>
+<section class="compare-summary" aria-label="Text differences"><h2>Changes between selected versions</h2>
+<p class="compare-note">{% if identical %}These versions contain exactly the same PDF bytes.{% else %}These PDF files differ.{% endif %} Text comparison includes extractable text, including seals and footers. Images, handwriting, and layout changes must be checked in the viewers above. This comparison is not an integrity verdict.</p>
+{% if limited %}<p class="compare-note">The text summary is limited to the first 100 pages and 60,000 characters per version. Both viewers still show the complete documents.</p>{% endif %}
+{% if no_text %}<p class="compare-note">At least one version has no extractable text. Compare scanned pages visually; no OCR has been performed.</p>{% endif %}
+<p class="muted">{{ differences|length }} text change group{{ differences|length|pluralize }}. Red: left version. Green: right version.</p>
+{% for change in differences %}<article class="difference"><h3>{{ change.kind }} · Group {{ forloop.counter }}</h3><div class="difference-columns"><pre class="before" aria-label="Left version text">{{ change.before|default:'—' }}</pre><pre class="after" aria-label="Right version text">{{ change.after|default:'—' }}</pre></div></article>{% empty %}<p class="muted">No differences found in the extracted text{% if limited %} within the summary limit{% endif %}. Review the pages for visual changes.</p>{% endfor %}
+</section>
+{% endif %}{% endif %}
+</main>
+{% endblock %}

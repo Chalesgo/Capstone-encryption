@@ -103,6 +103,16 @@ $env:DEBUG='False'
 python manage.py verify_integrity
 ```
 
+The local Django `runserver` starts an integrity scan automatically in its serving
+process (including after an autoreload), then triggers another every 24 hours while
+the server remains running. Automatic scans run in the background. Daily triggers
+are skipped when another scan is active; cancelling a scan does not queue a retry.
+Administrators can also use **Run integrity scan** for an extra check and the
+**x** control (tooltip: **Cancel scan**) to request cancellation. Staff see progress
+without these controls. Set `SEALGUARD_RUN_STARTUP_INTEGRITY=0` to disable this
+local automatic scheduler. It does not run during tests, migrations, or shell commands.
+
+For deployments without `runserver`, use an external scheduler instead.
 For daily Windows monitoring, create a Task Scheduler task that runs
 `scripts/run_integrity_scan.ps1` once per day. Failed checks are written to
 the terminal log and dashboard audit log; repeated identical failures are

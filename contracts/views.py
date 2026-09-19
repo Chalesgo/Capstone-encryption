@@ -833,10 +833,12 @@ def bulk_update_status(request):
     contracts = Contract.objects.filter(id__in=ids, is_trashed=False)
     updated = 0
     for contract in contracts:
-        if contract.status == status:
+        if contract.status == status and (status != 'final' or contract.is_public):
             continue
         contract.status = status
-        contract.save(update_fields=['status', 'modified_at'])
+        if status == 'final':
+            contract.is_public = True
+        contract.save(update_fields=['status', 'is_public', 'modified_at'])
         action = 'approved' if status == 'final' else 'edited'
         log_activity(
             request, action, contract=contract,
@@ -898,13 +900,14 @@ def bulk_download_contracts(request):
             try:
                 latest_version = contract.versions.order_by('-version_number').first()
                 version_number = latest_version.version_number if latest_version else 1
-                filename = _contract_pdf_filename(contract, version_number)
+                filename = os.path.splitext(_contract_pdf_filename(contract, version_number))[0] + '.sgpdf'
                 if filename.casefold() in used_names:
                     stem, extension = os.path.splitext(filename)
                     filename = f'{stem}_{contract.id}{extension}'
                 used_names.add(filename.casefold())
-                with contract.file.open('rb') as pdf_file:
-                    archive.writestr(filename, pdf_file.read())
+                from .encrypted_documents import package_bytes
+                archive.writestr(filename, package_bytes(contract, contract.file,
+                    latest_version if latest_version and latest_version.file.name == contract.file.name else None))
                 log_activity(
                     request, 'downloaded', contract=contract,
                     note='Downloaded current contract PDF in bulk ZIP',
@@ -1238,6 +1241,7 @@ def upload_signed_scan(request, contract_id):
             )
             _save_physical_manifest(version, manifest, manifest_signature)
             contract.status = 'final'
+            contract.is_public = True
             contract.file = f'contracts/{final_filename}'
             contract.fingerprint = sealed_cf
             contract.vector_fingerprint = vector_cf
@@ -2129,13 +2133,14 @@ def download_contract(request, contract_id):
         note='Downloaded current contract PDF',
         version_number=latest_version.version_number if latest_version else None,
     )
-    return FileResponse(
-        contract.file.open('rb'),
-        content_type='application/pdf',
+    from .encrypted_documents import package_response
+    return package_response(
+        contract, contract.file,
         filename=_contract_pdf_filename(
             contract,
             latest_version.version_number if latest_version else 1,
         ),
+        version=latest_version if latest_version and latest_version.file.name == contract.file.name else None,
     )
 
 
@@ -2155,10 +2160,11 @@ def download_contract_version(request, version_id):
         note=f'Downloaded version {version.version_number} PDF',
         version_number=version.version_number,
     )
-    return FileResponse(
-        version.file.open('rb'),
-        content_type='application/pdf',
+    from .encrypted_documents import package_response
+    return package_response(
+        version.contract, version.file,
         filename=_contract_pdf_filename(version.contract, version.version_number),
+        version=version,
     )
 
 # New rename view
@@ -2325,6 +2331,8 @@ def update_status(request, pk):
         if status not in {'pending', 'final'}:
             return redirect('contract_list')
         contract.status = status
+        if status == 'final':
+            contract.is_public = True
         contract.save()
         if status == 'final':
             log_activity(request, 'approved', contract=contract)
@@ -2351,9 +2359,40 @@ def publish_contract(request, pk):
     return JsonResponse({'success': False}, status=400)
 from django.db.models import Count, Q
 
+def _reconcile_stale_integrity_scan():
+    """Close scan rows left behind after their worker was interrupted."""
+    active_scans = list(AuditLog.objects.filter(
+        action='integrity_scan', verification_result__in=['Running', 'Cancel requested'],
+    ).order_by('-timestamp', '-id'))
+    if not active_scans:
+        return
+
+    worker_alive = any(
+        thread.name.startswith('sealguard-integrity-') and thread.is_alive()
+        for thread in threading.enumerate()
+    )
+    if worker_alive:
+        return
+
+    # LocMemCache is process-local. After a runserver reload, old Running rows
+    # and cancellation requests remain in SQLite even though their worker is
+    # gone; clear those rows so they cannot hide the next real scan or block it.
+    cache.delete(INTEGRITY_SCAN_CACHE_KEY)
+    cache.delete(INTEGRITY_SCAN_LOCK_KEY)
+    for scan in active_scans:
+        scan.note = (
+            'The integrity scan worker stopped before completion. '
+            'No new integrity results were written.'
+        )
+        scan.verification_result = 'Cancelled'
+        scan.integrity_check = 'Cancelled'
+        scan.save(update_fields=['note', 'verification_result', 'integrity_check'])
+
+
 @login_required
 @workspace_access
 def dashboard(request):
+    _reconcile_stale_integrity_scan()
     total_documents = viewable_contracts(request.user).filter(is_trashed=False).count()
     verified_documents = viewable_contracts(request.user).filter(is_trashed=False, encrypted_cf__gt='').count()
     flagged_documents = visible_logs(request.user).filter(action='reported_tampering').count()
@@ -2484,6 +2523,7 @@ def start_integrity_scan(request):
         return JsonResponse({'success': False, 'error': 'Administrator access required.'}, status=403)
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'POST required.'}, status=405)
+    _reconcile_stale_integrity_scan()
     if cache.get(INTEGRITY_SCAN_LOCK_KEY) or AuditLog.objects.filter(
         action='integrity_scan', verification_result__in=['Running', 'Cancel requested']
     ).exists():

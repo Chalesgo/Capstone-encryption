@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="{% static 'contracts/mobile-pdf-host.js' %}?v=debug-5" data-viewer="{% static 'contracts/mobile-pdf.html' %}?v=debug-5"></script>
+    <script src="{% static 'contracts/mobile-pdf-host.js' %}?v=desktop-panel-1" data-viewer="{% static 'contracts/mobile-pdf.html' %}?v=desktop-panel-1"></script>
     <title>{% block title %}SealGuard{% endblock %} — Barangay Sto. Niño</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -633,6 +633,21 @@
             width: 0%;
             transition: width 0.4s ease;
         }
+        /* The embedded SealGuard viewer owns its controls and document details.
+           Keep the legacy desktop shell in the DOM for its existing scripts,
+           but show only the system viewer's single sidebar and toolbar. */
+        .system-viewer-panel .pdf-floating-actions,
+        .system-viewer-panel .pdf-sidebar,
+        .system-viewer-panel .audit-pdf-actions,
+        .system-viewer-panel .audit-pdf-sidebar {
+            display: none;
+        }
+
+        .system-viewer-panel .pdf-frame-wrap,
+        .system-viewer-panel .audit-pdf-frame-wrap {
+            width: 100%;
+            max-width: none;
+        }
     </style>
 </head>
 <body>
@@ -643,6 +658,7 @@
     </a>
 
     <nav class="sidebar-icons">
+        <a href="{% url 'open_encrypted_document' %}" class="sidebar-icon-link" data-tooltip="Open encrypted document" aria-label="Open encrypted document"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H5v20h14V7zM14 2v5h5"/><rect x="8" y="13" width="8" height="6" rx="1"/><path d="M10 13v-2a2 2 0 0 1 4 0v2"/></svg></a>
         <a href="/verify/" class="sidebar-icon-link" data-tooltip="Verify Document">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -729,7 +745,7 @@
                 <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/>
             </svg>
         </a>
-        {% if user.is_staff or user.is_superuser %}<a href="{% url 'document_approval_queue' %}" class="mobile-nav-link" title="PDF access requests" aria-label="PDF access requests"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V6a4 4 0 0 1 8 0v4"/></svg><span>Requests</span></a>{% endif %}
+        {% if user.is_staff or user.is_superuser %}<a href="{% url 'document_approval_queue' %}" class="mobile-nav-link{% if request.resolver_match.url_name == 'document_approval_queue' %} active{% endif %}" title="PDF access requests" aria-label="PDF access requests"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V6a4 4 0 0 1 8 0v4"/></svg></a>{% endif %}
         <a href="/dashboard/" class="mobile-nav-link{% if request.path == '/dashboard/' %} active{% endif %}" title="Dashboard" aria-label="Dashboard">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>

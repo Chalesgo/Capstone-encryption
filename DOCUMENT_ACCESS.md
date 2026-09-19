@@ -60,3 +60,30 @@ python manage.py makemigrations --check --dry-run
 No browser was available for interactive desktop/phone validation. Email tests used the in-memory backend; this local checkout uses console delivery. Live SMTP, external HTTPS, and real-phone scanning remain deployment checks.
 
 Local migration applied successfully: 6,876 files converted with byte-for-byte verification and zero conversion failures. Final inventory: 6787 media/registered PDF files, 0 unencrypted files, and 0 missing registered paths. Three authorized live previews returned HTTP 200 and matched the decrypted stored bytes. Unreferenced role-test fixtures were cleaned up after verifying their exact dummy payload; the role tests now isolate MEDIA_ROOT and their five tests passed again.
+# Encrypted document downloads
+
+Document and revision downloads, including documents inside bulk ZIPs, now use
+`.sgpdf` packages. The packages contain encrypted PDF bytes and signed metadata
+binding them to a particular document/file and ciphertext digest. Ordinary PDF
+readers cannot open these packages. Keep both the RSA private key and Django
+signing configuration when moving the installation.
+
+Use **Open encrypted document (.sgpdf)** on the document list or visit
+`/open-encrypted/`. SealGuard validates the uploaded package, checks current
+document permission (or the same browser's unexpired, verified guest approval),
+and authenticates/decrypts it in memory. It then opens the matching stored version
+in SealGuard; the exact encrypted file must still be retained and unchanged.
+Uploading does not create a new document or grant access. Revoked access also
+blocks previously downloaded packages from reopening through this flow.
+
+The canvas viewer is used on desktop and mobile. Its download action requests
+an encrypted package from the server; it no longer exports decrypted PDF blobs.
+Previews without a document download route do not offer a download button.
+QR invitation sheets remain ordinary readable PDFs without document contents.
+
+**Boundary:** this protects exported packages, not against extraction by an
+authorized viewer. PDF.js receives decrypted PDF data to render inside the
+browser. Authorized users can capture network responses or screenshots.
+Previously exported plaintext PDFs are not retroactively encrypted. Strictly
+preventing PDF bytes from reaching a browser would require a separate server-side
+page-rendering design; even that cannot prevent screenshots.

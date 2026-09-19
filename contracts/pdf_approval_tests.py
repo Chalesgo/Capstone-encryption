@@ -265,3 +265,75 @@ class EncryptedPDFApprovalTests(TestCase):
             text = ''.join(page.get_text() for page in document)
         self.assertIn(url, links)
         self.assertIn(url, text)
+
+    def test_encrypted_downloads_reopen_only_for_authorized_user(self):
+        from .encrypted_documents import PACKAGE_MAGIC
+        self.client.force_login(self.staff)
+        for route, pk in [('download_contract', self.contract.pk), ('download_contract_version', self.version.pk)]:
+            response = self.client.get(reverse(route, args=[pk]))
+            data = b''.join(response.streaming_content)
+            self.assertTrue(data.startswith(PACKAGE_MAGIC))
+            self.assertNotIn(self.pdf, data)
+            self.assertIn('.sgpdf', response['Content-Disposition'])
+            self.assertIn('attachment', response['Content-Disposition'])
+            def upload(client, payload=data):
+                return client.post(reverse('open_encrypted_document'), {
+                    'document': SimpleUploadedFile('download.sgpdf', payload)})
+            self.assertRedirects(upload(self.client), reverse('preview_contract_version', args=[self.version.pk]), fetch_redirect_response=False)
+            reader = Client()
+            reader.force_login(self.other)
+            self.assertContains(upload(reader), 'Unable to open this file')
+            self.assertContains(upload(Client()), 'Unable to open this file')
+            self.assertContains(upload(self.client, data[:-1] + bytes([data[-1] ^ 1])), 'Unable to open this file')
+            self.assertContains(upload(self.client, self.pdf), 'Unable to open this file')
+
+    def test_bulk_zip_contains_only_encrypted_packages(self):
+        import zipfile
+        from .encrypted_documents import PACKAGE_MAGIC
+        self.client.force_login(self.staff)
+        response = self.client.post(reverse('bulk_download_contracts'), {'ids': [self.contract.pk]})
+        self.assertEqual(response.status_code, 200)
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            self.assertTrue(archive.namelist())
+            for name in archive.namelist():
+                self.assertTrue(name.endswith('.sgpdf'))
+                self.assertTrue(archive.read(name).startswith(PACKAGE_MAGIC))
+
+    def test_guest_package_reopening_requires_live_approval(self):
+        entry = self.request_and_verify()
+        reviewer = self.approve(entry)
+        response = self.client.get(self.view_url + '?download=encrypted')
+        package = b''.join(response.streaming_content)
+        def reopen():
+            return self.client.post(reverse('open_encrypted_document'), {
+                'document': SimpleUploadedFile('guest.sgpdf', package)})
+        self.assertRedirects(reopen(), self.view_url, fetch_redirect_response=False)
+        reviewer.post(reverse('review_document_request', args=[entry.pk]), {'action': 'revoke'})
+        self.assertContains(reopen(), 'Unable to open this file')
+        self.assertEqual(self.client.get(self.view_url + '?download=encrypted').status_code, 404)
+
+    def test_browser_navigation_uses_internal_viewer(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse('preview_contract', args=[self.contract.pk]), HTTP_ACCEPT='text/html')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('mobile-pdf.html?file=', response.url)
+
+    def test_package_permission_is_checked_before_decryption_and_again_after_revocation(self):
+        from unittest.mock import patch
+        from .encrypted_documents import package_bytes
+        package = package_bytes(self.contract, self.contract.file, self.version)
+        self.client.force_login(self.other)
+        def reopen():
+            return self.client.post(reverse('open_encrypted_document'), {
+                'document': SimpleUploadedFile('document.sgpdf', package)})
+        with patch('contracts.encrypted_documents.decrypt_pdf_bytes') as decrypt:
+            self.assertContains(reopen(), 'Unable to open this file')
+            decrypt.assert_not_called()
+        self.contract.collaborators.add(self.other)
+        self.assertEqual(reopen().status_code, 302)
+        self.contract.collaborators.remove(self.other)
+        self.assertContains(reopen(), 'Unable to open this file')
+
+    def test_encrypted_upload_requires_csrf(self):
+        strict = Client(enforce_csrf_checks=True)
+        self.assertEqual(strict.post(reverse('open_encrypted_document')).status_code, 403)

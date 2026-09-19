@@ -23,6 +23,37 @@ class SealGuardRoleTests(TestCase):
             file=SimpleUploadedFile('assigned.pdf', b'%PDF-1.4 test', content_type='application/pdf'),
         )
 
+    def test_final_copy_publishes_document(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse('update_status', args=[self.contract.pk]), {'status': 'final'})
+        self.assertEqual(response.status_code, 302)
+        self.contract.refresh_from_db()
+        self.assertTrue(self.contract.is_public)
+        self.assertEqual(self.contract.status, 'final')
+        self.client.logout()
+        self.assertContains(self.client.get('/verify/'), self.contract.title)
+
+    def test_bulk_final_copy_publishes_existing_private_final(self):
+        self.contract.status = 'final'
+        self.contract.save()
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse('bulk_update_status'), {'ids': [self.contract.pk], 'status': 'final'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['updated'], 1)
+        self.contract.refresh_from_db()
+        self.assertTrue(self.contract.is_public)
+
+    def test_staff_cannot_publish_by_finalizing(self):
+        self.contract.uploaded_by = self.staff
+        self.contract.save()
+        self.client.force_login(self.staff)
+        self.client.post(reverse('update_status', args=[self.contract.pk]), {'status': 'final'})
+        response = self.client.post(reverse('bulk_update_status'), {'ids': [self.contract.pk], 'status': 'final'})
+        self.assertEqual(response.status_code, 403)
+        self.contract.refresh_from_db()
+        self.assertFalse(self.contract.is_public)
+        self.assertNotEqual(self.contract.status, 'final')
+
     def test_user_can_view_assigned_pdf_but_not_mutate_or_download(self):
         self.client.force_login(self.user)
         self.assertEqual(self.client.get(reverse('contract_list')).status_code, 200)

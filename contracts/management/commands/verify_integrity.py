@@ -28,6 +28,23 @@ class Command(BaseCommand):
         if not cache.add(INTEGRITY_SCAN_LOCK_KEY, {'started_at': timezone.now().isoformat()}, INTEGRITY_CACHE_SECONDS):
             self.stdout.write('Integrity scan skipped because another scan is already in progress.')
             return
+        try:
+            return self.run_scan(*args, **options)
+        except Exception:
+            control = cache.get(INTEGRITY_SCAN_CACHE_KEY) or {}
+            scan_id = control.get('scan_log_id')
+            if scan_id:
+                AuditLog.objects.filter(pk=scan_id, verification_result__in=['Running', 'Cancel requested']).update(
+                    verification_result='Interrupted', integrity_check='Incomplete',
+                    note='Integrity scan stopped after an error. Review the server log and run a new scan.',
+                )
+            raise
+        finally:
+            cache.delete(INTEGRITY_SCAN_CACHE_KEY)
+            cache.delete(INTEGRITY_SCAN_LOCK_KEY)
+            close_old_connections()
+
+    def run_scan(self, *args, **options):
         started_at = time.perf_counter()
         scan_started_at = timezone.now()
         close_old_connections()

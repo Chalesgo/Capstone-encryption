@@ -208,6 +208,10 @@
   .integrity-status-banner { display: flex; align-items: center; gap: 9px; width: 100%; box-sizing: border-box; margin: 0 0 16px; padding: 10px 13px; border: 1px solid #f4c54d; border-radius: 9px; background: #fff8e6; color: #8a6200; cursor: pointer; font: inherit; font-size: 12px; text-align: left; }
   .integrity-status-banner:hover { background: #fff1c7; }
   .integrity-status-dot { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; background: #f4a340; box-shadow: 0 0 0 4px rgba(244, 163, 64, .16); animation: integrity-pulse 1.4s ease-in-out infinite; }
+  .integrity-cancel-button { display:inline-flex; align-items:center; justify-content:center; flex:0 0 30px; width:30px; height:30px; padding:0; border:0; border-radius:6px; background:transparent; color:inherit; font-size:24px; line-height:1; cursor:pointer; }
+  .integrity-cancel-button:hover { background:rgba(138,98,0,.12); }
+  .integrity-cancel-button:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
+  .integrity-cancel-button:disabled { opacity:.45; cursor:default; }
   .integrity-status-timer { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 700; }
   .integrity-run-button { display: inline-flex; align-items: center; gap: 7px; margin: 0 0 12px auto; padding: 8px 11px; border: 1px solid #cfd9e3; border-radius: 8px; background: #fff; color: #40566b; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; }
   .integrity-run-button:hover { background: #f4f7fa; border-color: #aebdca; }
@@ -725,7 +729,7 @@
   <span class="integrity-status-dot" aria-hidden="true"></span>
   <span>{% if latest_integrity_scan.verification_result == 'Cancel requested' %}Integrity scan cancellation requested{% else %}Integrity scan in progress{% endif %}</span>
   {% if request.user.is_superuser %}<span class="integrity-status-timer" data-integrity-timer>00:00</span>{% endif %}
-  {% if request.user.is_superuser and latest_integrity_scan.verification_result == 'Running' %}<button type="button" class="integrity-cancel-button" data-integrity-cancel onclick="cancelIntegrityScan(event, {{ latest_integrity_scan.id }})">Cancel scan</button>{% endif %}
+  {% if request.user.is_superuser and latest_integrity_scan.verification_result == 'Running' %}<button type="button" class="integrity-cancel-button" data-integrity-cancel onclick="cancelIntegrityScan(event, {{ latest_integrity_scan.id }})" title="Cancel scan" aria-label="Cancel scan"><span aria-hidden="true">&times;</span></button>{% endif %}
 </div>
 {% endif %}
 
@@ -1047,7 +1051,6 @@
 {% endcomment %}
 <script>
  (function() {
-  window.integrityScanPolls = window.integrityScanPolls || {};
   window.renderIntegrityTimer = function(elapsedMs) {
     const timer = document.querySelector('[data-integrity-timer]');
     if (!timer) return;
@@ -1056,27 +1059,13 @@
     const seconds = String(elapsed % 60).padStart(2, '0');
     timer.textContent = minutes + ':' + seconds;
   };
-  window.startIntegrityScanPolling = function(url, onData) {
-    if (!url) return;
-    const poll = window.integrityScanPolls[url] || { active: false, listeners: [] };
-    window.integrityScanPolls[url] = poll;
-    if (onData && poll.listeners.indexOf(onData) === -1) poll.listeners.push(onData);
-    if (poll.active) return;
-    poll.active = true;
-    function refresh() {
-      fetch(url, { cache: 'no-store' })
-        .then(function(response) { if (!response.ok) throw new Error('Unable to load scan status'); return response.json(); })
-        .then(function(data) {
-          poll.listeners.forEach(function(listener) { listener(data); });
-          if (data.result === 'Running') {
-            window.setTimeout(refresh, 2000);
-          } else {
-            poll.active = false;
-          }
-        })
-        .catch(function() { window.setTimeout(refresh, 3000); });
-    }
-    refresh();
+  window.startIntegrityTimer = function(startedAt) {
+    const started = Date.parse(startedAt || '');
+    if (!Number.isFinite(started)) return;
+    if (window.integrityTimerInterval) window.clearInterval(window.integrityTimerInterval);
+    const update = function() { window.renderIntegrityTimer(Date.now() - started); };
+    update();
+    window.integrityTimerInterval = window.setInterval(update, 1000);
   };
   window.startIntegrityScan = function(event) {
     event.preventDefault();
@@ -1117,9 +1106,7 @@
   };
   const banner = document.querySelector('[data-integrity-started][data-log-url]');
   if (banner) {
-    window.startIntegrityScanPolling(banner.dataset.logUrl, function(data) {
-      if (data.elapsed_ms !== null && data.elapsed_ms !== undefined) window.renderIntegrityTimer(data.elapsed_ms);
-    });
+    window.startIntegrityTimer(banner.dataset.integrityStarted);
   }
  })();
 function styleDashboardStatusFilter(select) {
@@ -1151,13 +1138,15 @@ function openIntegrityScanLog(row) {
   dialog.classList.add('open');
   dialog.setAttribute('aria-hidden', 'false');
   const logUrl = '/dashboard/activity/' + encodeURIComponent(row.dataset.logId) + '/verification-log/';
-  window.startIntegrityScanPolling(logUrl, function(data) {
+  fetch(logUrl, { cache: 'no-store' }).then(function(response) {
+      if (!response.ok) throw new Error('Unable to load scan log');
+      return response.json();
+  }).then(function(data) {
       document.getElementById('integrity-log-summary').textContent = data.note || 'Integrity scan details';
       content.textContent = data.debug_log || 'No debug log was recorded for this scan.';
       content.scrollTop = content.scrollHeight;
-      if (data.elapsed_ms !== null && data.elapsed_ms !== undefined && window.renderIntegrityTimer) {
-        window.renderIntegrityTimer(data.elapsed_ms);
-      }
+  }).catch(function() {
+      content.textContent = 'The integrity scan log could not be loaded.';
   });
 }
 function closeIntegrityScanLog() {

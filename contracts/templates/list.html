@@ -981,6 +981,7 @@
 </div>
 
 <div id="contract-context-menu" class="context-menu">
+  <button type="button" class="context-menu-item" onclick="window.location.href='/contract/' + contextMenuContractId + '/compare/'" style="border:0;background:transparent;width:100%;text-align:left"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="7" height="16" rx="1"/><rect x="14" y="4" width="7" height="16" rx="1"/></svg><span>Compare revisions</span></button>
   <button type="button" class="context-menu-item" id="contract-qr-option" onclick="downloadAccessSheet(contextMenuContractId)" style="border:0;background:transparent;width:100%;text-align:left"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><path d="M14 14h2v2h-2zM18 14h2v6h-6v-2h4zM14 18h2v2h-2z"/></svg><span>Download QR access sheet</span></button>
   <button type="button" class="context-menu-item" id="contract-access-option" onclick="openContractAccess(contextMenuContractId)" style="border:0;background:transparent;width:100%;text-align:left">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="7" r="4"/><path d="M2 21v-3a7 7 0 0 1 14 0v3M20 8v6M17 11h6"/></svg><span>Manage access</span>
@@ -1019,7 +1020,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
       </svg>
-      <span>View PDF</span>
+      <span>View in SealGuard</span>
     </button>
     <button type="button" class="mobile-sheet-action" onclick="mobileSheetDetails()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1064,6 +1065,7 @@
             onclick="closeMobileEditSheet()">&times;</button>
   </div>
   <div class="mobile-sheet-actions">
+    <button type="button" class="mobile-sheet-action" onclick="window.location.href='/contract/' + mobileContractEditId + '/compare/'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="7" height="16" rx="1"/><rect x="14" y="4" width="7" height="16" rx="1"/></svg><span>Compare revisions</span></button>
     <button type="button" class="mobile-sheet-action" id="mobile-edit-qr" onclick="downloadAccessSheet(mobileContractEditId)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><path d="M14 14h2v2h-2zM18 14h2v6h-6v-2h4zM14 18h2v2h-2z"/></svg><span>Download QR access sheet</span></button>
     <button type="button" class="mobile-sheet-action" id="mobile-edit-access" onclick="openContractAccess(mobileContractEditId)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="7" r="4"/><path d="M2 21v-3a7 7 0 0 1 14 0v3M20 8v6M17 11h6"/></svg><span>Manage access</span></button>
     <button type="button" class="mobile-sheet-action" onclick="mobileEditRename()">
@@ -1091,7 +1093,7 @@
 <div class="modal-overlay" id="publish-modal">
   <div class="modal">
     <h3>Mark as Final copy?</h3>
-    <p id="publish-modal-message">This will mark the PDF as the official Final copy. Confirm that the document is complete, verified, and no longer a draft. Only an Admin can change this status; marking it final does not publish the PDF.</p>
+    <p id="publish-modal-message">This will mark the PDF as the official Final copy and publish it in Public Verified Documents, where anyone can view it. Confirm that the document is complete, verified, and approved for public access. Only an Admin can change this status.</p>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closePublishModal()">Cancel</button>
       <button class="btn btn-primary" id="publish-modal-confirm" onclick="confirmToggleFinalCopy()">Yes, Mark as Final copy</button>
@@ -1285,7 +1287,7 @@
         <div class="action-btns">
 
           <!-- View PDF -->
-          <button class="icon-btn" title="View PDF"
+          <button class="icon-btn" title="View in SealGuard"
                   onclick="openPdfPreview({{ contract.id }}, '{% url 'preview_contract' contract.id %}', '{{ contract.title|escapejs }}', false, '{% if not read_only_user %}{% url 'download_contract' contract.id %}{% endif %}')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -1687,7 +1689,7 @@ function applyFilters() {
     choiceTitle.textContent = type === 'folder' ? 'Move selected documents' : 'Change document status';
     choiceMessage.textContent = type === 'folder'
       ? 'Choose a destination for ' + ids.length + ' selected document(s).'
-      : 'Choose the new status for ' + ids.length + ' selected document(s).';
+      : 'Choose the new status for ' + ids.length + ' selected document(s). Final copy publishes these documents in Public Verified Documents, where anyone can view them.';
     choiceSelect.innerHTML = '';
     choices.forEach(function(choice) {
       const option = document.createElement('option');
@@ -2809,7 +2811,7 @@ function openFinalCopyModal(id) {
   const confirmBtn = document.getElementById('publish-modal-confirm');
   msg.textContent = isFinal
     ? 'This will return the PDF to Draft status. Only an Admin can change this status.'
-    : 'This will mark the PDF as the official Final copy. Confirm that it is complete and verified. Only an Admin can change this status; marking it final does not publish the PDF.';
+    : 'This will mark the PDF as the official Final copy and publish it in Public Verified Documents, where anyone can view it. Confirm that it is complete, verified, and approved for public access. Only an Admin can change this status.';
   confirmBtn.textContent = isFinal ? 'Yes, Return to Draft' : 'Yes, Mark as Final copy';
   confirmBtn.className = isFinal ? 'btn btn-danger' : 'btn btn-primary';
   modal.dataset.contractId = id;

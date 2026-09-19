@@ -1,6 +1,33 @@
 from django.shortcuts import redirect
 
 
+class InternalPDFViewerMiddleware:
+    """Route browser PDF navigation through the SealGuard canvas viewer.
+
+    PDF.js still receives authorized PDF bytes. This is a UI boundary, not
+    protection against an authorized user extracting network responses.
+    """
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        if (response.status_code == 200
+                and response.get('Content-Type', '').split(';')[0] == 'application/pdf'
+                and 'attachment' not in response.get('Content-Disposition', '')):
+            response['Cache-Control'] = 'private, no-store'
+            response['X-Content-Type-Options'] = 'nosniff'
+            if (request.META.get('HTTP_SEC_FETCH_MODE') == 'navigate'
+                    or 'text/html' in request.META.get('HTTP_ACCEPT', '')):
+                from urllib.parse import urlencode
+                from django.templatetags.static import static
+                response.close()
+                navigation = redirect(static('contracts/mobile-pdf.html') + '?' + urlencode({'file': request.get_full_path()}))
+                navigation['Cache-Control'] = 'private, no-store'
+                return navigation
+        return response
+
+
 class NullOriginApprovalMiddleware:
     """Keep token validation for QR scanners that submit with Origin: null.
 
