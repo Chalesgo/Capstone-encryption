@@ -45,17 +45,10 @@ services:
         value: "True"
       - key: SECURE_HSTS_PRELOAD
         value: "True"
+      # Free Render services cannot send SMTP traffic. The console backend
+      # records the message in the app's outgoing-email log and writes it to
+      # the service log, which is sufficient for this temporary test service.
       - key: EMAIL_BACKEND
-        value: django.core.mail.backends.smtp.EmailBackend
-      - key: EMAIL_HOST
-        value: smtp.gmail.com
-      - key: EMAIL_PORT
-        value: "587"
-      - key: EMAIL_USE_TLS
-        value: "True"
-      - key: EMAIL_HOST_USER
-        sync: false
-      - key: EMAIL_HOST_PASSWORD
-        sync: false
+        value: django.core.mail.backends.console.EmailBackend
       - key: DEFAULT_FROM_EMAIL
-        sync: false
+        value: test@example.com
