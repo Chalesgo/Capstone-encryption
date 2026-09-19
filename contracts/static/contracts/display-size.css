@@ -1,0 +1,26 @@
+#sg-display-size {
+  position: fixed; bottom: 12px; left: 12px; z-index: 20000;
+  color: #334455; font: 13px/1.5 'DM Sans', system-ui, sans-serif;
+}
+#sg-display-size summary {
+  display: grid; place-items: center; list-style: none; cursor: pointer;
+  width: 42px; height: 42px; border: 1px solid #dfe3e8; border-radius: 12px;
+  background: #fff; color: #334455; font-size: 18px; font-weight: 700;
+  box-shadow: 0 2px 10px #15253618;
+}
+#sg-display-size summary::-webkit-details-marker { display: none; }
+#sg-display-size summary:hover, #sg-display-size[open] summary { background: #eef2ff; }
+#sg-display-size .sg-size-panel {
+  position: absolute; bottom: 50px; left: 0; width: 180px;
+  box-sizing: border-box; padding: 14px; border: 1px solid #dfe3e8;
+  border-radius: 12px; background: #fff; box-shadow: 0 6px 24px #15253620;
+}
+#sg-display-size label { display: block; margin: 0 0 8px; font-weight: 700; color: #334455; }
+#sg-display-size select, #sg-display-size button {
+  box-sizing: border-box; width: 100%; min-height: 36px; padding: 6px;
+  font: inherit; color: #334455; background: #fff;
+  border: 1px solid #cfd9e3; border-radius: 6px; cursor: pointer;
+}
+#sg-display-size p { margin: 8px 0; color: #667788; font-size: 12px; }
+#sg-display-size :focus-visible { outline: 2px solid #3b5bdb; outline-offset: 3px; }
+@media print { #sg-display-size { display: none; } }

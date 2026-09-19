@@ -5,6 +5,8 @@
 
 {% block extrastyle %}
 {{ block.super }}
+<link rel="stylesheet" href="{% static 'contracts/display-size.css' %}">
+<script src="{% static 'contracts/display-size.js' %}"></script>
 <link rel="stylesheet" href="{% static 'contracts/sealguard-admin.css' %}?v=5">
 <style>
   .sealguard-link-overlay { display:none !important; position:fixed !important; inset:0 !important; z-index:9999 !important; align-items:center !important; justify-content:center !important; padding:20px !important; background:rgba(15,23,42,.52) !important; }
