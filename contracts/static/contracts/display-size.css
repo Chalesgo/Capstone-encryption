@@ -21,7 +21,10 @@
   font: inherit; color: #334455; background: #fff;
   border: 1px solid #cfd9e3; border-radius: 6px; cursor: pointer;
 }
-#sg-display-size p { margin: 8px 0; color: #667788; font-size: 12px; }
+#sg-display-size .sg-size-controls { display: flex; align-items: center; gap: 8px; }
+#sg-display-size select { flex: 1; min-width: 0; }
+#sg-display-size button { display: grid; place-items: center; flex: 0 0 36px; width: 36px; }
+#sg-display-size button:hover { background: #eef2ff; }
 #sg-display-size :focus-visible { outline: 2px solid #3b5bdb; outline-offset: 3px; }
 @media print { #sg-display-size { display: none; } }
 /* Keep wide tables inside the available content width at enlarged sizes.
@@ -38,7 +41,7 @@
   position: static; margin: 14px 0; text-align: left;
 }
 #sg-display-size.sg-size-inline .sg-size-panel {
-  position: static; width: 100%; box-shadow: none; background: #f7f6f4;
+  position: static; width: 100%; padding: 10px 12px; box-shadow: none; background: #f7f6f4;
 }
 #sg-display-size.sg-size-admin {
   position: relative; top: auto; right: auto; display: inline-block;

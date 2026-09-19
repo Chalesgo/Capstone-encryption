@@ -33,12 +33,15 @@
     control.innerHTML = `
       ${slot ? '' : '<summary title="Change display size" aria-label="Display size"><span aria-hidden="true">Aa</span></summary>'}
       <div class="sg-size-panel">
-        <label for="sg-size-select">Display size</label>
-        <select id="sg-size-select" aria-describedby="sg-size-help">
-          ${levels.map(level => `<option value="${level}">${level}%${level === 100 ? ' (default)' : ''}</option>`).join('')}
-        </select>
-        <p id="sg-size-help">Enlarge text and controls. Saved in this browser.</p>
-        <button type="button">Reset to 100%</button>
+        <label for="sg-size-select">Display Size</label>
+        <div class="sg-size-controls">
+          <select id="sg-size-select">
+            ${levels.map(level => `<option value="${level}">${level}%</option>`).join('')}
+          </select>
+          <button type="button" aria-label="Reset display size to 100%" title="Reset to 100%">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11a9 9 0 1 1 2.6 7.4"/><path d="M3 4v7h7"/></svg>
+          </button>
+        </div>
       </div>`;
     (slot || adminTools || document.body).appendChild(control);
     select = control.querySelector('select');
