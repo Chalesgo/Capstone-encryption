@@ -31,6 +31,12 @@ services:
         value: "True"
       - key: SESSION_COOKIE_SECURE
         value: "True"
+      # Temporary Free-tier test account. Add the values in Render's
+      # Environment page; never commit the password to this repository.
+      - key: SEALGUARD_BOOTSTRAP_USERNAME
+        sync: false
+      - key: SEALGUARD_BOOTSTRAP_PASSWORD
+        sync: false
       - key: CSRF_COOKIE_SECURE
         value: "True"
       - key: SECURE_HSTS_SECONDS

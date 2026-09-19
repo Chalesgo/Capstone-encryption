@@ -7,6 +7,7 @@ set -o pipefail
 mkdir -p "${DATA_ROOT}/media"
 
 python manage.py migrate --noinput
+python manage.py bootstrap_account
 
 # The attached disk limits this service to one instance. Keep one Gunicorn
 # worker as well so SQLite and the daily integrity scheduler have one owner.
