@@ -3,6 +3,7 @@ media/
 db.sqlite3
 .env
 *.pem
+.local-dev/
 *.sqlite3
 *.sqlite3-wal
 *.sqlite3-shm

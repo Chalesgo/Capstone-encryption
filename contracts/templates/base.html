@@ -502,6 +502,50 @@
             background: #fff;
         }
 
+        /* Password reveal controls show the value only while the eye is held. */
+        .password-reveal-wrap {
+            position: relative;
+            width: 100%;
+        }
+
+        .password-reveal-wrap > input[type="password"],
+        .password-reveal-wrap > input[type="text"] {
+            padding-right: 44px !important;
+        }
+
+        .password-reveal-button {
+            position: absolute;
+            z-index: 1;
+            right: 7px;
+            top: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px;
+            height: 30px;
+            padding: 0;
+            transform: translateY(-50%);
+            border: 0;
+            border-radius: 6px;
+            background: transparent;
+            color: #78879a;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+
+        .password-reveal-button:hover,
+        .password-reveal-button:focus-visible,
+        .password-reveal-button.is-visible {
+            color: #3a5a9e;
+            background: #eef3ff;
+        }
+
+        .password-reveal-button svg {
+            width: 18px;
+            height: 18px;
+            pointer-events: none;
+        }
+
         /* ── Badges ── */
         .badge {
             display: inline-flex;
@@ -904,6 +948,49 @@ function closeProfileModal(event) {
     const trigger = document.getElementById('profile-trigger');
     if (trigger) trigger.setAttribute('aria-expanded', 'false');
 }
+
+function initHoldPasswordReveal(root) {
+    (root || document).querySelectorAll('input[type="password"]:not([data-hold-eye-ready])').forEach(function(input) {
+        input.dataset.holdEyeReady = 'true';
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'password-reveal-wrap';
+        input.parentNode.insertBefore(wrapper, input);
+        wrapper.appendChild(input);
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'password-reveal-button';
+        button.setAttribute('aria-label', 'Hold to show password');
+        button.title = 'Hold to show password';
+        button.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/></svg>';
+        wrapper.insertBefore(button, input);
+
+        const hide = function() {
+            input.type = 'password';
+            button.classList.remove('is-visible');
+        };
+        const show = function(event) {
+            if (event) event.preventDefault();
+            input.type = 'text';
+            button.classList.add('is-visible');
+        };
+
+        button.addEventListener('pointerdown', show);
+        button.addEventListener('pointerup', hide);
+        button.addEventListener('pointercancel', hide);
+        button.addEventListener('pointerleave', hide);
+        button.addEventListener('blur', hide);
+        button.addEventListener('keydown', function(event) {
+            if (event.key === ' ' || event.key === 'Enter') show(event);
+        });
+        button.addEventListener('keyup', function(event) {
+            if (event.key === ' ' || event.key === 'Enter') hide();
+        });
+    });
+}
+
+initHoldPasswordReveal(document);
 
 document.addEventListener('keydown', function(event) {
     if (event.key === 'Escape') closeProfileModal();

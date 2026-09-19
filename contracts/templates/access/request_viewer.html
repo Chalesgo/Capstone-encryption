@@ -1,0 +1,43 @@
+{% load static %}
+{% if can_open or public_access %}
+<style>
+  #approved-viewer { position:fixed; inset:0 0 0 auto; margin:0; padding:0; width:72vw; min-width:640px; max-width:100vw; height:100dvh; max-height:100dvh; border:0; background:#e9edf2; box-shadow:-8px 0 32px #0003; }
+  #approved-viewer[open] { animation:approved-viewer-in .3s ease both; }
+  #approved-viewer::backdrop { background:#0006; }
+  #approved-viewer iframe { display:block; width:100%; height:100%; border:0; }
+  @keyframes approved-viewer-in { from { transform:translateX(100%); } to { transform:translateX(0); } }
+  @media(max-width:900px) { #approved-viewer { width:100%; min-width:0; } }
+  @media(prefers-reduced-motion:reduce) { #approved-viewer[open] { animation:none; } }
+</style>
+<dialog id="approved-viewer" aria-label="Approved document viewer"><iframe id="approved-viewer-frame" title="Approved PDF preview"></iframe></dialog>
+<script>
+(() => {
+  const button = document.getElementById('approved-view-button');
+  const dialog = document.getElementById('approved-viewer');
+  const frame = document.getElementById('approved-viewer-frame');
+  let previousOverflow;
+  button.addEventListener('click', event => {
+    event.preventDefault();
+    const viewer = new URL('{% static "contracts/mobile-pdf.html" %}', location.href);
+    viewer.searchParams.set('file', button.href);
+    viewer.searchParams.set('embedded', '1');
+    viewer.searchParams.set('title', '{{ link.contract.title|escapejs }}');
+    {% if public_access %}viewer.searchParams.set('contract', '{{ link.contract_id }}');{% endif %}
+    // Keep the session-approved URL: it grants access to only the approved version.
+    frame.src = viewer.href;
+    previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    dialog.showModal();
+  });
+  window.addEventListener('message', event => {
+    if (event.origin === location.origin && event.source === frame.contentWindow && event.data?.type === 'sealguard-pdf-close') dialog.close();
+  });
+  dialog.addEventListener('click', event => { if (event.target === dialog && event.clientX < dialog.getBoundingClientRect().left) dialog.close(); });
+  dialog.addEventListener('close', () => {
+    frame.src = 'about:blank';
+    document.body.style.overflow = previousOverflow;
+    button.focus();
+  });
+})();
+</script>
+{% endif %}

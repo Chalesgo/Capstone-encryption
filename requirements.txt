@@ -7,3 +7,4 @@ pycryptodome
 qrcode[pil]
 python-decouple
 reportlab>=4.0,<5
+uvicorn>=0.30,<1

@@ -33,6 +33,27 @@ class DocumentAccessTests(TestCase):
     def login(self, user):
         self.client.force_login(user)
 
+    def test_public_viewer_metadata_is_available_without_login(self):
+        self.contract.is_public = True
+        self.contract.save()
+        response = self.client.get(reverse('contract_version_history', args=[self.contract.pk]), {'metadata_only': '1'})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data['created'])
+        self.assertTrue(data['encrypted'])
+        self.assertEqual(data['title'], self.contract.title)
+        self.assertEqual(data['versions'][0]['created_by'], self.owner.username)
+        self.assertEqual(data['versions'][0]['version_number'], 1)
+        self.assertIn('no-store', response['Cache-Control'])
+
+    def test_anonymous_viewer_cannot_read_private_or_trashed_metadata(self):
+        url = reverse('contract_version_history', args=[self.contract.pk])
+        self.assertEqual(self.client.get(url).status_code, 404)
+        self.contract.is_public = True
+        self.contract.is_trashed = True
+        self.contract.save()
+        self.assertEqual(self.client.get(url).status_code, 404)
+
     def test_file_access_matrix_including_direct_media(self):
         urls = [reverse(name, args=[pk]) for name, pk in [
             ('preview_contract', self.contract.pk), ('download_contract', self.contract.pk),

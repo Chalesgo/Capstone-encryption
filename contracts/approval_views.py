@@ -6,7 +6,7 @@ from django import forms
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import make_password, check_password
-from django.db import transaction
+from django.db import transaction, OperationalError
 from django.db.models import Q
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -16,7 +16,7 @@ from django.utils.crypto import salted_hmac
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from .access import can_share, can_view, is_admin, is_staff_user
+from .access import can_share, is_admin, is_staff_user
 from .emailing import send_sealguard_mail
 from .models import Contract, DocumentAccessLink, DocumentAccessRequest
 from .pdf_storage import pdf_storage, PDFDecryptionError
@@ -57,7 +57,7 @@ def request_access(request, token):
     if request.method not in ('GET', 'POST'):
         raise Http404
     entry = _session_request(request, link)
-    if not link.is_active and not entry:
+    if not link.is_active and not entry and not link.contract.is_public:
         response = render(request, 'access/obsolete.html', {'link': link})
         response['Referrer-Policy'] = 'no-referrer'
         return response
@@ -71,26 +71,40 @@ def request_access(request, token):
             request.session['document_access_requests'] = mapping
             return redirect('request_document_access', token=token)
         if action == 'verify' and entry and entry.status == 'email_pending':
-            with transaction.atomic():
-                entry = DocumentAccessRequest.objects.select_for_update().get(pk=entry.pk)
-                if entry.otp_attempts >= 5 or entry.otp_expires_at <= timezone.now():
-                    error = 'This code has expired or has too many attempts. Start a new request.'
-                elif entry.status != 'email_pending':
-                    error = 'This code has already been used.'
-                else:
-                    entry.otp_attempts += 1
-                    if check_password(request.POST.get('code', '')[:12], entry.otp_hash):
-                        entry.status = 'pending'
-                        entry.email_verified_at = timezone.now()
-                        entry.otp_hash = ''
+            now = timezone.now()
+            if entry.otp_attempts >= 5 or entry.otp_expires_at <= now:
+                error = 'This code has expired or has too many attempts. Start a new request.'
+            else:
+                # Hash verification is deliberately outside the write transaction.
+                # SQLite cannot reliably upgrade a SELECT transaction to a writer
+                # while another request is writing (select_for_update is a no-op).
+                correct = check_password(request.POST.get('code', '')[:12], entry.otp_hash)
+                updates = {'otp_attempts': entry.otp_attempts + 1}
+                if correct:
+                    updates.update(status='pending', email_verified_at=now, otp_hash='')
+                try:
+                    if correct:
                         request.session.cycle_key()
+                    with transaction.atomic():
+                        changed = DocumentAccessRequest.objects.filter(
+                            pk=entry.pk, status='email_pending', otp_hash=entry.otp_hash,
+                            otp_attempts=entry.otp_attempts, otp_expires_at__gt=timezone.now(),
+                        ).update(**updates)
+                        if changed and correct:
+                            log_activity(request, 'edited', contract=link.contract,
+                                         note=f'PDF access requested; request={entry.pk}; email verified')
+                    if not changed:
+                        error = 'This request changed or the code expired. Refresh the page and try again.'
+                    elif correct:
+                        # Session writes must not extend the document transaction.
                         verified = request.session.get('verified_document_requests', [])
                         request.session['verified_document_requests'] = (verified + [str(entry.pk)])[-20:]
-                        log_activity(request, 'edited', contract=link.contract,
-                                     note=f'PDF access requested; request={entry.pk}; email verified')
                     else:
                         error = 'The code is incorrect. Please try again.'
-                    entry.save(update_fields=['otp_attempts', 'status', 'email_verified_at', 'otp_hash'])
+                except OperationalError as exc:
+                    if 'locked' not in str(exc).lower():
+                        raise
+                    error = 'The system is busy saving another request. Please submit your verification code again shortly.'
             if not error:
                 return redirect('request_document_access', token=token)
         elif action == 'request':
@@ -142,12 +156,10 @@ def request_access(request, token):
                             return redirect('request_document_access', token=token)
         elif action != 'verify':
             error = 'Choose a valid action.'
-    own_access = can_view(request.user, link.contract)
     response = render(request, 'access/request.html', {
         'link': link, 'entry': entry, 'form': form, 'error': error,
+        'public_access': link.contract.is_public,
         'can_open': _approved(entry) and _verified_in_session(request, entry) if entry else False,
-        'own_access': own_access,
-        'email_delivery_local': settings.EMAIL_BACKEND.endswith('console.EmailBackend'),
     })
     response['Referrer-Policy'] = 'no-referrer'
     return response

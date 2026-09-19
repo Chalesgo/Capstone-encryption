@@ -1026,18 +1026,28 @@ def verify_physical_qr(request):
 
     page_number = int(payload['p'])
     total_pages = int(payload['n'])
-    return JsonResponse({
+    try:
+        with open_pdf(manifest_record.version.file.path) as document:
+            page = document.load_page(page_number - 1)
+            scale = min(2, 1800 / max(page.rect.width, page.rect.height))
+            image = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False).tobytes('png')
+    except (OSError, ValueError, RuntimeError):
+        return JsonResponse({'valid': False, 'message': 'The registered page is unavailable. Please contact staff.'}, status=410)
+    response = JsonResponse({
         'valid': True,
         'contract_id': contract.id,
         'title': contract.title,
         'version': manifest_record.version.version_number,
         'page': page_number,
         'total_pages': total_pages,
+        'page_image': 'data:image/png;base64,' + base64.b64encode(image).decode('ascii'),
         'message': (
             f'Registered QR confirmed: page {page_number} of {total_pages}. '
             'Capture the complete page content to finish verification.'
         ),
     })
+    response['Cache-Control'] = 'private, no-store'
+    return response
 
 
 def verify_physical(request):
@@ -1356,7 +1366,6 @@ def mark_contract_viewed(request, contract_id):
     )
     return JsonResponse({'success': True})
 
-@login_required
 @view_document_access
 @never_cache
 def contract_version_history(request, contract_id):

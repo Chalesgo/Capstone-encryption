@@ -2563,6 +2563,29 @@ class PhysicalVerificationTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(response.json()['valid'])
 
+    def test_physical_qr_preview_contains_only_the_scanned_version_page(self):
+        import base64
+        # A newer version must not replace the page identified by the old QR.
+        self.issue_document('New revision', ['Different newer page'], contract=self.contract, version_number=2)
+        response = self.client.post(reverse('verify_physical_qr'), {'qr_token': self.tokens[1]})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Cache-Control'], 'private, no-store')
+        data = response.json()
+        self.assertEqual((data['version'], data['page']), (1, 2))
+        with fitz.open(stream=self.pdf_bytes, filetype='pdf') as document:
+            page = document[1]
+            scale = min(2, 1800 / max(page.rect.width, page.rect.height))
+            expected = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False).tobytes('png')
+        self.assertEqual(base64.b64decode(data['page_image'].split(',', 1)[1]), expected)
+        self.assertNotIn('preview_url', data)
+
+    def test_physical_qr_preview_rejects_trashed_document(self):
+        self.contract.is_trashed = True
+        self.contract.save()
+        response = self.client.post(reverse('verify_physical_qr'), {'qr_token': self.tokens[0]})
+        self.assertEqual(response.status_code, 410)
+        self.assertNotIn('page_image', response.json())
+
     def mutate_pdf(self, callback):
         document = fitz.open(stream=self.pdf_bytes, filetype='pdf')
         callback(document)

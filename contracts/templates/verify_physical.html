@@ -2,6 +2,11 @@
 {% block title %}Physical Document Verification{% endblock %}
 {% block content %}
 <div class="physical-shell">
+  <dialog id="registered-page-dialog" aria-labelledby="registered-page-title">
+    <header class="registered-page-heading"><div><h2 id="registered-page-title">Registered page</h2><p id="registered-page-label"></p></div><button type="button" class="btn btn-outline" id="registered-page-close" autofocus>Continue scanning</button></header>
+    <p>Compare this registered page with your physical copy. A matching QR identifies the page; it does not verify the printed contents.</p>
+    <img id="registered-page-image" alt="Registered page corresponding to the scanned QR code">
+  </dialog>
   <header class="physical-header"><h1>Physical Document Verification</h1><p>Scan each page QR in page order, then upload one PDF containing the same scanned pages.</p></header>
   {% if result %}<section class="result result-{{ result }}" id="result-sheet" role="status" aria-live="polite">
     <button type="button" class="sheet-close" id="result-close" aria-label="Close">&times;</button>
@@ -45,6 +50,7 @@
   </div>
   <div class="physical-sheet-backdrop" id="sheet-backdrop"></div>
   <div class="physical-fabs">
+    <a href="{% url 'public_verify' %}" class="fab fab-exit" title="Exit physical verification" aria-label="Exit physical verification and return to Verify Document"><svg class="fab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></a>
     <button type="button" class="fab fab-tokens" id="fab-tokens" aria-label="View scanned pages"><svg class="fab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3h11a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M3 7v12a2 2 0 0 0 2 2"/><path d="M10 8h7M10 12h7M10 16h4"/></svg><span class="fab-badge" id="fab-tokens-badge" hidden>0</span></button>
     <button type="button" class="fab fab-capture" id="fab-capture" aria-label="Photograph complete page" hidden><svg class="fab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4 16 6h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l1.5-2z"/><circle cx="12" cy="12.5" r="3.5"/></svg></button>
     <button type="button" class="fab fab-files" id="fab-files" aria-label="Choose existing page images or PDF"><svg class="fab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3-3 3 3"/></svg></button>
@@ -61,8 +67,19 @@
   </section>
 </div>
 <style>
+#registered-page-dialog { width:min(900px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); margin:auto; padding:18px; border:1px solid #e3e9ef; border-radius:14px; background:#f7f6f4; color:#243443; overflow:auto; }
+#registered-page-dialog::backdrop { background:rgba(15,23,42,.65); }
+.registered-page-heading { position:sticky; top:-18px; display:flex; align-items:center; justify-content:space-between; gap:12px; background:#f7f6f4; padding:12px 0; }
+.registered-page-heading h2 { font-size:18px; margin:0; }
+#registered-page-dialog p { font-size:13px; line-height:1.5; margin:6px 0 12px; }
+#registered-page-image { display:block; width:100%; height:auto; background:white; }
 .physical-shell{max-width:980px;margin:0 auto}.physical-header{margin-bottom:20px}.physical-header h1{font-size:26px;color:#1a1a2e;margin:0 0 6px}.physical-header p{color:#667788}.physical-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr);gap:20px}.scanner-panel,.upload-panel{border:1px solid #dfe3e8;padding:18px;background:#fff;border-radius:12px}.camera-stage{position:relative;overflow:hidden;border-radius:10px;background:#111827}#preview{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;background:#111827}.scan-guide,.page-capture-guide{position:absolute;top:12px;left:12px;right:12px;z-index:2;display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:10px;background:rgba(15,23,42,.78);color:#fff;backdrop-filter:blur(5px)}.page-capture-guide[hidden]{display:none}.scan-guide span,.page-capture-guide span,.upload-step-heading>span,.loading-step{flex:0 0 auto;padding:4px 8px;border-radius:999px;background:#e9edff;color:#3349bf;font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase}.scan-guide strong,.page-capture-guide strong{font-size:13px}.scanner-panel.page-capture-mode .scan-guide{display:none}.scanner-panel.page-capture-mode .camera-stage:after{content:"";position:absolute;inset:17% 8%;border:2px solid rgba(255,255,255,.88);border-radius:8px;box-shadow:0 0 0 999px rgba(15,23,42,.18);pointer-events:none}.scanner-panel.page-capture-mode .page-capture-guide,.scanner-panel.page-capture-mode .camera-overlay{z-index:3}.camera-overlay{position:absolute;inset:auto 12px 12px;display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:10px;background:rgba(15,23,42,.78);backdrop-filter:blur(5px);color:#fff}.camera-overlay #status{margin:0;color:#fff;font-size:13px;line-height:1.35}.camera-live{flex:0 0 auto;padding:4px 7px;border-radius:999px;background:#dc2626;color:#fff;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}.camera-actions{display:flex;gap:9px;justify-content:flex-end}.camera-actions .btn{margin:0}#camera-expand{display:none}.upload-panel{display:flex;flex-direction:column;gap:14px;align-self:start}.upload-step-heading{padding-right:30px}.upload-step-heading h2{margin:10px 0 6px;color:#1a1a2e;font-size:20px}.upload-step-heading p{margin:0;color:#667085;font-size:13px;line-height:1.55}.upload-panel label{color:#263746;font-size:13px;font-weight:700}.upload-panel input{border:1px solid #cbd2d9;padding:10px;border-radius:8px;background:#f8fafc}.upload-panel small{color:#667085;line-height:1.45}.token-list{min-height:44px;padding:10px;background:#f5f7f9;margin:10px 0}.qr-check-result{margin:-2px 0 10px;padding:11px 12px;border-radius:9px;font-size:13px;line-height:1.4}.qr-check-result.valid{color:#166534;background:#dcfce7}.qr-check-result.invalid{color:#991b1b;background:#fee2e2}.result{padding:16px;border-left:4px solid #6b7280;background:#f7f8fa;margin-bottom:18px}.result-verified{border-color:#15803d;background:#f0fdf4}.result-differences{border-color:#b91c1c;background:#fff7f7}.result-manual_review{border-color:#b7791f;background:#fffbeb}.result-invalid,.result-error{border-color:#6b7280}.result p{margin:5px 0 0}.page-result{margin-top:8px;font-size:13px}.physical-loading{position:fixed;inset:0;z-index:1300;display:grid;place-items:center;padding:20px;background:rgba(15,23,42,.62)}.physical-loading[hidden]{display:none}.physical-loading-card{width:min(440px,100%);padding:30px 28px;border-radius:18px;background:#fff;box-shadow:0 22px 60px rgba(15,23,42,.28);text-align:center;color:#172033}.physical-loading-card strong{display:block;font-size:19px;margin-top:12px}.physical-loading-card p{margin:9px 0 20px;color:#667085;font-size:14px}.physical-spinner{width:42px;height:42px;margin:0 auto 18px;border:4px solid #dbe4ff;border-top-color:#3f5bd8;border-radius:50%;animation:physical-spin .85s linear infinite}.physical-loading-track{height:6px;border-radius:999px;background:#e8edf7;overflow:hidden}.physical-loading-track span{display:block;width:12%;height:100%;border-radius:inherit;background:#3f5bd8;transition:width .35s ease}@keyframes physical-spin{to{transform:rotate(360deg)}}
 @media(max-width:760px){
+/* The camera uses floating controls instead of the workspace navigation. */
+.topbar,.public-mobile-topbar{display:none!important}
+body{overflow:hidden}
+.fab-exit{background:#263746;text-decoration:none}
+.fab-exit:focus-visible{outline:3px solid #f4a34d;outline-offset:3px}
 body.camera-view-active{overflow:hidden}
 .physical-shell{width:100%;max-width:none;padding:0}
 .physical-header{display:none}
@@ -221,6 +238,9 @@ async function validateScannedCode(value) {
     tokens.push(value);
     statusNode.textContent = `Registered page ${result.page} of ${result.total_pages}.`;
     setQrResult(true, `${result.title} - Version ${result.version}. ${result.message}`);
+    document.getElementById('registered-page-label').textContent = `${result.title} — Version ${result.version}, page ${result.page} of ${result.total_pages}`;
+    document.getElementById('registered-page-image').src = result.page_image;
+    document.getElementById('registered-page-dialog').showModal();
     renderTokens();
   } catch (error) {
     hideQrLoading();
@@ -230,6 +250,7 @@ async function validateScannedCode(value) {
 }
 
 function maybeAutoSubmit() {
+  if (document.getElementById('registered-page-dialog').open) return;
   if (!submitted && expectedTotal && tokens.length >= expectedTotal && physicalFile.files.length) {
     statusNode.textContent = 'QR codes and complete pages captured. Starting verification...';
     window.setTimeout(() => physicalForm.requestSubmit(), 250);
@@ -385,7 +406,13 @@ async function detectQrValue() {
   return '';
 }
 
+document.getElementById('registered-page-close').onclick = () => document.getElementById('registered-page-dialog').close();
+document.getElementById('registered-page-dialog').addEventListener('close', () => {
+  document.getElementById('registered-page-image').removeAttribute('src');
+  maybeAutoSubmit();
+});
 async function scanFrame(now) {
+  if (document.getElementById('registered-page-dialog').open) { requestAnimationFrame(scanFrame); return; }
   if (!submitted && !awaitingPageCapture && (!expectedTotal || tokens.length < expectedTotal) && !scannerBusy && now - lastFrameAt >= 220 && video.readyState === video.HAVE_ENOUGH_DATA) {
     scannerBusy = true;
     lastFrameAt = now;

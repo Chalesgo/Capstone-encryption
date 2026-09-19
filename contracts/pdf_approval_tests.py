@@ -68,6 +68,56 @@ class EncryptedPDFApprovalTests(TestCase):
         self.assertEqual(entry.otp_hash, '')
         return entry
 
+    def test_qr_request_form_is_shown_even_with_existing_document_access(self):
+        for public in (False, True):
+            self.contract.is_public = public
+            self.contract.save()
+            for user in (None, self.staff):
+                self.client.logout()
+                if user:
+                    self.client.force_login(user)
+                response = self.client.get(self.url)
+                if public:
+                    self.assertContains(response, 'This is a public document')
+                    self.assertContains(response, 'No account, sign-in, or access request is needed')
+                    self.assertContains(response, 'id="approved-view-button"')
+                    self.assertNotContains(response, 'Send verification code')
+                else:
+                    self.assertContains(response, 'Full name')
+                    self.assertContains(response, 'Send verification code')
+                    self.assertNotContains(response, 'id="approved-view-button"')
+                self.assertNotContains(response, 'You already have access')
+                self.assertEqual(self.client.get(self.view_url).status_code, 404)
+
+    def test_code_verification_lock_is_retryable_and_does_not_approve(self):
+        from unittest.mock import patch
+        from django.db import OperationalError
+        self.client.post(self.url, {'action': 'request', 'name': 'Guest',
+            'email': 'guest@example.com', 'reason': 'Review'})
+        code = re.search(r'\b(\d{6})\b', mail.outbox[-1].body).group(1)
+        with patch('django.db.models.query.QuerySet.update', side_effect=OperationalError('database is locked')):
+            response = self.client.post(self.url, {'action': 'verify', 'code': code})
+        self.assertContains(response, 'Please submit your verification code again shortly')
+        entry = DocumentAccessRequest.objects.get(link=self.link)
+        self.assertEqual(entry.status, 'email_pending')
+        self.assertEqual(entry.otp_attempts, 0)
+        self.assertEqual(self.client.get(self.view_url).status_code, 404)
+        self.assertEqual(self.client.post(self.url, {'action': 'verify', 'code': code}).status_code, 302)
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, 'pending')
+        reviewer = Client()
+        reviewer.force_login(self.staff)
+        self.assertContains(reviewer.get(reverse('document_approval_queue')), 'guest@example.com')
+
+    def test_approved_request_uses_embedded_panel_and_scoped_view_url(self):
+        entry = self.request_and_verify()
+        self.approve(entry)
+        response = self.client.get(self.url)
+        self.assertContains(response, 'id="approved-viewer"')
+        self.assertContains(response, 'id="approved-view-button"')
+        self.assertContains(response, self.view_url)
+        self.assertNotContains(response, reverse('preview_contract', args=[self.contract.pk]))
+
     def approve(self, entry):
         reviewer = Client()
         reviewer.force_login(self.staff)
