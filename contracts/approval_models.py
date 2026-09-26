@@ -4,6 +4,11 @@ from django.conf import settings
 
 
 class DocumentAccessLink(models.Model):
+    category = models.CharField(max_length=20, choices=[('pdf', 'PDF access request'), ('sgpdf', 'SGPDF decryption request')], default='pdf')
+    requested_version = models.ForeignKey('ContractVersion', null=True, blank=True, on_delete=models.SET_NULL)
+    requested_file = models.CharField(max_length=255, blank=True)
+    ciphertext_sha256 = models.CharField(max_length=64, blank=True)
+    upload_name = models.CharField(max_length=255, blank=True)
     contract = models.ForeignKey('Contract', on_delete=models.CASCADE, related_name='access_links')
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -12,6 +17,7 @@ class DocumentAccessLink(models.Model):
 
 
 class DocumentAccessRequest(models.Model):
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
     STATUS_CHOICES = [
         ('email_pending', 'Verify email'), ('pending', 'Awaiting staff approval'),
         ('approved', 'Approved'), ('rejected', 'Rejected'), ('revoked', 'Revoked'),
@@ -19,7 +25,9 @@ class DocumentAccessRequest(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     link = models.ForeignKey(DocumentAccessLink, on_delete=models.CASCADE, related_name='requests')
     name = models.CharField(max_length=120)
-    email = models.EmailField()
+    email = models.EmailField(blank=True)
+    phone_number = models.CharField(max_length=16, blank=True)
+    contact_channel = models.CharField(max_length=5, choices=[('email', 'Email'), ('sms', 'SMS')], default='email')
     organization = models.CharField(max_length=160, blank=True)
     reason = models.TextField(max_length=1000)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='email_pending')

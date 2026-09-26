@@ -19,6 +19,10 @@ class Folder(models.Model):
 
 class AccountSecurity(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='account_security')
+    phone_number = models.CharField(max_length=16, blank=True, null=True, unique=True)
+    phone_verified = models.BooleanField(default=False)
+    email_verified = models.BooleanField(default=True)
+    preferred_channel = models.CharField(max_length=5, choices=[('email', 'Email'), ('sms', 'SMS')], default='email')
     must_change_password = models.BooleanField(default=False)
     password_changed_at = models.DateTimeField(null=True, blank=True)
 
@@ -30,6 +34,9 @@ class PasswordResetRequest(models.Model):
     STATUS_CHOICES = [('pending', 'Pending approval'), ('approved', 'Approved'), ('used', 'Completed'), ('rejected', 'Rejected')]
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='password_reset_requests')
     email = models.EmailField()
+    phone_number = models.CharField(max_length=16, blank=True)
+    channel = models.CharField(max_length=5, choices=[('email', 'Email'), ('sms', 'SMS')], default='email')
+    attempts = models.PositiveSmallIntegerField(default=0)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     otp = models.CharField(max_length=128, blank=True)
     expires_at = models.DateTimeField(null=True, blank=True)
@@ -58,6 +65,22 @@ class EmailMessageLog(models.Model):
 
     def __str__(self):
         return f'{self.subject} → {self.recipient}'
+
+
+class SMSMessageLog(models.Model):
+    recipient = models.CharField(max_length=16)
+    subject = models.CharField(max_length=255)
+    body = models.TextField()
+    sent_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=12, choices=[('queued', 'Queued'), ('sent', 'Sent'), ('failed', 'Failed')], default='queued')
+
+    class Meta:
+        ordering = ['-sent_at']
+        verbose_name = 'Outgoing SMS'
+        verbose_name_plural = 'Outgoing SMS inbox'
+
+    def __str__(self):
+        return f'{self.subject} to {self.recipient}'
 
 
 class NotificationClearState(models.Model):

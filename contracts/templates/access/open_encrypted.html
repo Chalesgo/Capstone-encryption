@@ -52,6 +52,7 @@
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
   <span><strong>Permission is required.</strong> Sign in with an authorized account, or use the browser where staff approved your request. Uploading a file does not grant access.</span>
 </div>
+    {% if request_url %}<p class="auth-footnote"><a class="btn btn-primary" href="{{ request_url }}"><strong>Request PDF access</strong></a></p>{% endif %}
     <form method="post" enctype="multipart/form-data" class="auth-form">{% csrf_token %}
       {% if error %}<div class="auth-error" role="alert">{{ error }}</div>{% endif %}
       <div class="form-group">

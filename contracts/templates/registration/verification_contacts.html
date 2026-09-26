@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block title %}Verification contacts{% endblock %}
+{% block content %}
+<section style="max-width:560px;margin:2rem auto;background:white;padding:2rem;border-radius:14px">
+<h1>Verification contacts</h1>
+<p>Verify a contact to use it for recovery and account messages. The contact you verify becomes your preferred delivery channel.</p>
+<p><strong>Email:</strong> {{ user.email|default:'Not added' }} &mdash; {% if security.email_verified and user.email %}Verified{% else %}Not verified{% endif %}</p>
+<p><strong>Mobile:</strong> {{ security.phone_number|default:'Not added' }} &mdash; {% if security.phone_verified %}Verified{% else %}Not verified{% endif %}</p>
+{% if error %}<p role="alert" style="color:#b91c1c">{{ error }}</p>{% endif %}
+{% if notice %}<p role="status">{{ notice }}</p>{% endif %}
+{% if pending %}
+<p>Code requested by {{ pending.channel|upper }} for {{ pending.recipient }}. It expires in 10 minutes.</p>
+<form method="post">{% csrf_token %}<input type="hidden" name="action" value="verify">
+<p><label for="id_otp">Six-digit code</label><input id="id_otp" name="otp" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></p>
+<button class="btn btn-primary">Verify contact</button></form>
+<form method="post" style="margin-top:1rem">{% csrf_token %}<button class="btn btn-outline" name="action" value="restart">Change contact or request another code</button></form>
+{% else %}
+<form method="post">{% csrf_token %}{{ form.as_p }}<button class="btn btn-primary">Send verification code</button></form>
+{% endif %}
+</section>
+{% endblock %}

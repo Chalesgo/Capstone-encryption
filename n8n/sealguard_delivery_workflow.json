@@ -1,0 +1,157 @@
+{
+  "name": "SealGuard Delivery (Email and SMS)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sealguard/delivery",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "2fdb0df4-e100-4c11-b7b1-2cb2f6e8a101",
+      "name": "SealGuard Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "mode": "rules",
+        "options": {},
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.channel }}",
+                    "rightValue": "sms",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "sms"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.channel }}",
+                    "rightValue": "email",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "email"
+            }
+          ]
+        }
+      },
+      "id": "56a0b6c2-b790-4c02-b661-96d62ca36a02",
+      "name": "Route by channel",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "REPLACE_WITH_APPROVED_TWILIO_NUMBER",
+        "to": "={{ $json.body.recipient }}",
+        "message": "={{ $json.body.body }}",
+        "options": {}
+      },
+      "id": "c7f4f967-ae34-4c78-a823-c2b9f85e6a03",
+      "name": "Send SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [520, -120]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":true,\"channel\":\"sms\"}"
+      },
+      "id": "d4d45dc5-ef61-4dad-92b6-5c7dfe6c1a04",
+      "name": "Respond SMS",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [760, -120]
+    },
+    {
+      "parameters": {
+        "fromEmail": "REPLACE_WITH_APPROVED_SENDER_EMAIL",
+        "toEmail": "={{ $json.body.recipient }}",
+        "subject": "={{ $json.body.subject }}",
+        "emailFormat": "text",
+        "text": "={{ $json.body.body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "725aa3d8-99e5-4c52-bf95-f0d33b8b8a05",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [520, 120]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":true,\"channel\":\"email\"}"
+      },
+      "id": "99ac55b7-bded-44cf-91d2-a79e9e1b2a06",
+      "name": "Respond Email",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [760, 120]
+    }
+  ],
+  "connections": {
+    "SealGuard Webhook": {
+      "main": [[{"node": "Route by channel", "type": "main", "index": 0}]]
+    },
+    "Route by channel": {
+      "main": [
+        [{"node": "Send SMS", "type": "main", "index": 0}],
+        [{"node": "Send Email", "type": "main", "index": 0}]
+      ]
+    },
+    "Send SMS": {
+      "main": [[{"node": "Respond SMS", "type": "main", "index": 0}]]
+    },
+    "Send Email": {
+      "main": [[{"node": "Respond Email", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

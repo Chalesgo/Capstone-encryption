@@ -10,9 +10,42 @@ from .models import Contract, Tutorial
 from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm
 
 
+from .messaging import normalize_phone
+
+
+class PhoneField(forms.CharField):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('widget', forms.TextInput(attrs={'type': 'tel', 'autocomplete': 'tel', 'placeholder': '0917 123 4567 or +639171234567'}))
+        super().__init__(*args, **kwargs)
+
+    def clean(self, value):
+        value = super().clean(value)
+        return normalize_phone(value) if value else value
+
+
+class ContactVerificationForm(forms.Form):
+    channel = forms.ChoiceField(choices=[('sms', 'SMS'), ('email', 'Email')], label='Verify using')
+    phone_number = PhoneField(required=False, label='Mobile number (for SMS)')
+
+    def clean(self):
+        data = super().clean()
+        if data.get('channel') == 'sms' and not data.get('phone_number'):
+            self.add_error('phone_number', 'Enter your mobile number.')
+        return data
+
+
 class StaffRegistrationForm(forms.Form):
     username = forms.CharField(max_length=150, label='Username')
     email = forms.EmailField(label='Work email')
+    phone_number = PhoneField(label='Mobile number')
+    channel = forms.ChoiceField(choices=[('email', 'Email'), ('sms', 'SMS')], label='Send verification code by', required=False)
+
+    def clean_phone_number(self):
+        from .models import AccountSecurity
+        value = self.cleaned_data['phone_number']
+        if AccountSecurity.objects.filter(phone_number=value).exists():
+            raise ValidationError('That mobile number is already in use.')
+        return value
 
     def clean_username(self):
         value = self.cleaned_data['username'].strip()
@@ -27,7 +60,14 @@ class StaffPasswordChangeForm(PasswordChangeForm):
 
 
 class PasswordResetRequestForm(forms.Form):
-    identifier = forms.EmailField(max_length=254, label='Email connected to your SealGuard account')
+    channel = forms.ChoiceField(choices=[('email', 'Email'), ('sms', 'SMS')], label='Send verification code by', required=False)
+    identifier = forms.CharField(max_length=254, label='Registered email or verified mobile number')
+
+    def clean_identifier(self):
+        value = self.cleaned_data['identifier'].strip()
+        if self.cleaned_data.get('channel') == 'sms':
+            return normalize_phone(value)
+        return forms.EmailField().clean(value)
 
 
 class ApprovedPasswordResetForm(SetPasswordForm):

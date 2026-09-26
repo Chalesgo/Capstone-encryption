@@ -36,6 +36,7 @@ function setTitle(title) {
 setTitle(params.get('title') || 'Document');
 
 let sidebarPinned = false;
+const sidebarHidden = params.get('hide_sidebar') === '1';
 function panel(mode) {
   if (sidebarPinned) {
     document.body.classList.remove('versions-open', 'details-open');
@@ -61,7 +62,7 @@ function panel(mode) {
   document.querySelector('.floating-controls').inert = open;
   document.querySelector('.corner-actions').inert = open;
   (open ? get(details ? 'close-details' : 'close-versions') : get('details-toggle')).focus();
-  if (open && !versionsLoaded) loadVersions();
+  if (open && !versionsLoaded && !sidebarHidden) loadVersions();
 }
 function sheet(open) { panel(open ? 'versions' : null); if (!open) get('versions-toggle').focus(); }
 get('details-toggle').onclick = () => panel('details');
@@ -186,7 +187,8 @@ let sidebarViewport = window;
 try { if (params.get('embedded') === '1' && parent.location.origin === location.origin) sidebarViewport = parent; } catch (_) {}
 const desktopSidebar = sidebarViewport.matchMedia('(min-width: 901px)');
 function syncSidebar() {
-  sidebarPinned = desktopSidebar.matches && params.get('comparison') !== '1' && params.get('hide_sidebar') !== '1';
+  sidebarPinned = desktopSidebar.matches && params.get('comparison') !== '1' && !sidebarHidden;
+  document.body.classList.toggle('sidebar-hidden', sidebarHidden);
   document.body.classList.toggle('sidebar-pinned', sidebarPinned);
   if (!sidebarPinned) {
     get('pdf-sidebar').setAttribute('role', 'dialog');
@@ -197,7 +199,7 @@ function syncSidebar() {
 }
 desktopSidebar.addEventListener('change', syncSidebar);
 syncSidebar();
-loadVersions();
+if (!sidebarHidden) loadVersions();
 if (params.get('details') === '1') panel('details');
 
 function controls() {
@@ -272,6 +274,21 @@ function goPage(number) {
 }
 get('previous').onclick = () => goPage(Math.max(1, pageNumber - 1));
 get('next').onclick = () => goPage(Math.min(records.length, pageNumber + 1));
+function setZoom(nextZoom) {
+  const oldZoom = zoom;
+  zoom = Math.max(0.5, Math.min(4, Number(nextZoom.toFixed(2))));
+  if (zoom === oldZoom) return;
+  const center = (scroller.scrollTop + scroller.clientHeight / 2) / oldZoom;
+  layout();
+  scroller.scrollTop = Math.max(0, center * zoom - scroller.clientHeight / 2);
+  controls();
+  schedulePaint();
+}
+scroller.addEventListener('wheel', event => {
+  if (!event.ctrlKey || !pdf) return;
+  event.preventDefault();
+  setZoom(zoom + (event.deltaY < 0 ? 0.15 : -0.15));
+}, {passive:false});
 
 function touches(event) {
   const [a,b] = event.touches;
@@ -289,7 +306,7 @@ scroller.addEventListener('touchmove', event => {
   if (!pinch || event.touches.length !== 2) return;
   event.preventDefault();
   const point = touches(event);
-  zoom = Math.max(1,Math.min(4,pinch.zoom*point.distance/pinch.distance));
+  zoom = Math.max(0.5,Math.min(4,pinch.zoom*point.distance/pinch.distance));
   layout();
   scroller.scrollTop = pinch.record.box.offsetTop + stack.offsetTop + pinch.fraction*pinch.record.box.offsetHeight-point.y;
   scroller.scrollLeft = pinch.x*zoom-point.x;
@@ -302,6 +319,31 @@ let resizeTimer;
 window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { layout(); goPage(pageNumber); schedulePaint(); },150); });
 get('close').onclick = () => { if (parent === window) location.assign('/open-encrypted/'); else parent.postMessage({type:'sealguard-pdf-close'}, location.origin); };
 let encryptedDownloadUrl = null;
+let adminPdfDownloadUrl = null;
+function closeDownloadMenu() {
+  get('download-menu').hidden = true;
+  get('download-options').setAttribute('aria-expanded', 'false');
+}
+get('download-options').onclick = () => {
+  const open = get('download-menu').hidden;
+  get('download-menu').hidden = !open;
+  get('download-options').setAttribute('aria-expanded', String(open));
+  if (open) get('download-pdf').focus();
+};
+get('download-pdf').onclick = () => {
+  closeDownloadMenu();
+  if (adminPdfDownloadUrl) location.assign(adminPdfDownloadUrl);
+};
+document.addEventListener('pointerdown', event => {
+  if (!get('download-actions').contains(event.target)) closeDownloadMenu();
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !get('download-menu').hidden) {
+    event.stopImmediatePropagation();
+    closeDownloadMenu();
+    get('download-options').focus();
+  }
+}, true);
 get('download').title = 'Download encrypted document (.sgpdf)';
 get('download').setAttribute('aria-label', 'Download encrypted document');
 get('download').onclick = () => {
@@ -337,6 +379,15 @@ try {
   }
   get('download').disabled = !encryptedDownloadUrl;
   get('download').hidden = !encryptedDownloadUrl;
+  const adminDownload = response.headers.get('X-SealGuard-PDF-Download');
+  if (adminDownload && encryptedDownloadUrl) {
+    const url = new URL(adminDownload, location.origin);
+    if (url.origin === location.origin) {
+      adminPdfDownloadUrl = url.href;
+      get('download-options').hidden = false;
+      get('download-actions').classList.add('has-options');
+    }
+  }
   const first = await pdf.getPage(1);
   const base = first.getViewport({scale:1});
   for (let number=1;number<=pdf.numPages;number++) {

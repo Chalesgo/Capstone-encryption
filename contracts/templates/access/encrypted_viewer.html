@@ -19,6 +19,7 @@
   const viewer = new URL('{% static "contracts/mobile-pdf.html" %}', location.href);
   viewer.searchParams.set('file', source.href);
   viewer.searchParams.set('embedded', '1');
+  viewer.searchParams.set('hide_sidebar', '1');
   viewer.searchParams.set('title', '{{ viewer_title|escapejs }}');
   frame.src = viewer.href;
   const close = () => history.back();

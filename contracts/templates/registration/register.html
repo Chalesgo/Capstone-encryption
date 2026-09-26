@@ -171,6 +171,23 @@
         font-size: 12px;
     }
 
+.channel-field{margin-bottom:1.1rem}
+.channel-legend{display:block;font-size:12.5px;font-weight:600;color:#445566;margin-bottom:8px}
+.channel-options{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.channel-option{position:relative;display:block;cursor:pointer;margin:0}
+.channel-option input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.channel-card{display:flex;align-items:center;gap:10px;padding:11px 12px;border:1px solid #e0deda;border-radius:10px;background:#fff;transition:border-color .18s ease,background .18s ease,box-shadow .18s ease}
+.channel-card:hover{border-color:#d3cabb}
+.channel-icon{display:grid;place-items:center;width:32px;height:32px;border-radius:9px;background:#f4f2ee;color:#8a94a6;flex-shrink:0;transition:background .18s ease,color .18s ease}
+.channel-icon svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.channel-text{display:flex;flex-direction:column;gap:1px;min-width:0;line-height:1.25}
+.channel-name{font-size:13px;font-weight:600;color:#1a1a2e}
+.channel-hint{font-size:11px;color:#8a94a6}
+.channel-option input:checked+.channel-card{border-color:#f4a34d;background:#fff8f0;box-shadow:0 1px 3px rgba(244,163,77,.22)}
+.channel-option input:checked+.channel-card .channel-icon{background:#f4a34d;color:#fff}
+.channel-option input:focus-visible+.channel-card{border-color:#f4a34d;box-shadow:0 0 0 3px rgba(244,163,77,.28)}
+@media (max-width:420px){.channel-options{grid-template-columns:1fr}}
+
     .otp-input {
         width: 100%;
         padding: 12px 14px;
@@ -249,7 +266,7 @@
                 <span class="auth-progress-line"></span>
                 <div class="auth-progress-step {% if otp_sent %}current{% endif %}">
                     <span class="auth-progress-dot">2</span>
-                    <span>Verify email</span>
+                    <span>Verify contact</span>
                 </div>
             </div>
         </div>
@@ -262,7 +279,7 @@
         {% elif not otp_sent %}
             <div class="auth-heading">
                 <h1>Create Staff Account</h1>
-                <p>Verify your email before your SealGuard account is created.</p>
+                <p>Add your email and mobile number, then choose where to receive your verification code.</p>
             </div>
 
             {% if error %}<div class="auth-error">{{ error }}</div>{% endif %}
@@ -271,18 +288,26 @@
                 {% csrf_token %}
                 <input type="hidden" name="invite" value="{{ invite }}">
                 {% for field in form %}
+                    {% if field.name == 'channel' %}
+                    <div class="form-group channel-field">
+                        <span class="channel-legend">{{ field.label }}</span>
+                        <div class="channel-options" role="radiogroup" aria-label="{{ field.label }}">{% for value, text in field.field.choices %}<label class="channel-option"><input type="radio" name="channel" value="{{ value }}"{% if field.value %}{% if field.value|stringformat:'s' == value|stringformat:'s' %} checked{% endif %}{% elif forloop.first %} checked{% endif %}><span class="channel-card"><span class="channel-icon" aria-hidden="true">{% if value == 'sms' %}<svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/><path d="M8 10h.01M12 10h.01M16 10h.01"/></svg>{% else %}<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7.5 8.4 5.6a1 1 0 0 0 1.2 0L21 7.5"/></svg>{% endif %}</span><span class="channel-text"><span class="channel-name">{{ text }}</span><span class="channel-hint">{% if value == 'sms' %}Text message{% else %}Email inbox{% endif %}</span></span></span></label>{% endfor %}</div>
+                        {% if field.errors %}<ul class="errorlist">{% for error in field.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+                    </div>
+                    {% else %}
                     <div class="form-group">
                         <label for="{{ field.id_for_label }}">{{ field.label }}</label>
                         {{ field }}
                         {% if field.errors %}<ul class="errorlist">{% for error in field.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
                     </div>
+                    {% endif %}
                 {% endfor %}
                 <button class="btn btn-primary auth-submit" type="submit">Send verification code</button>
             </form>
         {% else %}
             <div class="auth-heading">
-                <h1>Check your email</h1>
-                <p>Enter the 6-digit code to verify your address and finish creating your account.</p>
+                <h1>Check your {{ channel|default:"email"|upper }}</h1>
+                <p>Enter the 6-digit code to verify your contact and finish creating your account.</p>
             </div>
 
             {% if error %}<div class="auth-error">{{ error }}</div>{% endif %}
@@ -296,9 +321,10 @@
                     <label for="id_otp">Verification code</label>
                     <input class="otp-input" id="id_otp" name="otp" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="one-time-code" placeholder="&middot;&middot;&middot;&middot;&middot;&middot;">
                 </div>
-                <p class="otp-sent-to">Code sent to <strong>{{ email|default:form.email.value }}</strong></p>
+                <p class="otp-sent-to">Code requested for <strong>{{ recipient }}</strong></p>
                 <button class="btn btn-primary auth-submit" type="submit">Verify and create account</button>
             </form>
+            <form method="post" style="margin-top:1rem">{% csrf_token %}<input type="hidden" name="invite" value="{{ invite }}"><button class="btn btn-outline" name="action" value="restart">Change details or request another code</button></form>
         {% endif %}
 
         <p class="auth-footnote">Already have an account? <a href="{% url 'login' %}">Back to sign in</a></p>

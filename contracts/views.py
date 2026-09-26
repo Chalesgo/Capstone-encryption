@@ -54,7 +54,8 @@ from django.urls import reverse
 from django.core.files import File
 from django.contrib.auth.models import User
 from django.contrib.auth import login
-from .emailing import send_sealguard_mail
+from .messaging import issue_challenge, check_challenge, notify_account, valid_code, reset_contact_valid
+from django.core.exceptions import ValidationError
 from django.utils.dateparse import parse_date
 from .physical_verification import (
     build_manifest, compare_page, decode_page_token, sign_manifest,
@@ -1597,6 +1598,7 @@ def create_staff_invitation(request):
     return JsonResponse({'success': True, 'url': request.build_absolute_uri(f'/accounts/register/?invite={token}')})
 
 
+@never_cache
 def staff_register(request):
     if request.user.is_authenticated:
         return redirect('contract_list')
@@ -1613,24 +1615,49 @@ def staff_register(request):
     pending_key = f'sealguard:staff-registration:{request.session.session_key}'
     pending = cache.get(pending_key)
     form = StaffRegistrationForm(request.POST or None)
-    if request.method == 'POST' and request.POST.get('otp'):
-        code = request.POST.get('otp', '').strip()
-        if not pending or not secrets.compare_digest(str(pending.get('otp')), code):
-            return render(request, 'registration/register.html', {'form': form, 'otp_sent': True, 'error': 'That verification code is invalid or expired.'})
-        username, email = pending['username'], pending['email']
-        if User.objects.filter(username__iexact=username).exists() or User.objects.filter(email__iexact=email).exists():
-            cache.delete(pending_key)
-            return render(request, 'registration/register.html', {'form': form, 'error': 'An account with that username or email already exists.'})
-        user = User.objects.create_user(username=username, email=email, password=STAFF_DEFAULT_PASSWORD, is_staff=True)
-        AccountSecurity.objects.create(user=user, must_change_password=True)
-        invite.used_at = timezone.now()
-        invite.save(update_fields=['used_at'])
+    context = {'form': form, 'invite': invite_token, 'otp_sent': bool(pending),
+               'recipient': pending.get('recipient', '') if pending else '',
+               'channel': pending.get('channel', 'email') if pending else 'email'}
+    if request.method == 'POST' and request.POST.get('action') == 'restart':
         cache.delete(pending_key)
-        send_sealguard_mail(
-            'Your SealGuard account is ready',
-            f'Your username is {username}. Your temporary password is {STAFF_DEFAULT_PASSWORD}. Sign in once, then change it immediately.',
-            [email], fail_silently=True,
-        )
+        return redirect(request.path)
+    if request.method == 'POST' and request.POST.get('otp'):
+        verified = check_challenge(pending_key, request.POST.get('otp', '').strip())
+        if not verified:
+            context.update(otp_sent=bool(cache.get(pending_key)), error='That code is invalid or expired. Codes allow five attempts; request a new code if needed.')
+            return render(request, 'registration/register.html', context)
+        username, email = verified['username'], verified['email']
+        from django.db import IntegrityError, transaction
+        try:
+            with transaction.atomic():
+                claimed = StaffInvitation.objects.filter(pk=invite.pk, used_at__isnull=True, expires_at__gt=timezone.now()).update(used_at=timezone.now())
+                if not claimed or User.objects.filter(email__iexact=email).exists():
+                    raise IntegrityError('Invitation used or email already registered')
+                # Use Django's password setter so the temporary credential is
+                # encoded exactly like every other account password.
+                user = User(username=username, email=email, is_staff=True)
+                user.set_password(STAFF_DEFAULT_PASSWORD)
+                user.save()
+                AccountSecurity.objects.create(user=user, must_change_password=True,
+                    phone_number=verified['phone_number'], phone_verified=verified['channel'] == 'sms',
+                    email_verified=verified['channel'] == 'email', preferred_channel=verified['channel'])
+        except IntegrityError:
+            context.update(otp_sent=False, error='These account details or invitation have already been used. Please try again.')
+            return render(request, 'registration/register.html', context)
+        # The invitation is single-use. Clear its browser state and return the
+        # new account to the required first-password screen instead of
+        # revisiting the consumed invitation URL.
+        request.session.pop('staff_invite_token', None)
+        cache.delete(pending_key)
+        # Delivery is an audit/notification concern and must not prevent the
+        # completed registration from reaching the password screen.
+        try:
+            delivered = notify_account(user, 'Your SealGuard account is ready',
+                f'Your username is {username}. Your temporary password is {STAFF_DEFAULT_PASSWORD}. Sign in once, then change it immediately.')
+            logger.info('staff registration completed; user_id=%s invitation_id=%s notification_delivered=%s',
+                        user.pk, invite.pk, delivered)
+        except Exception:
+            logger.exception('staff registration notification failed; user_id=%s invitation_id=%s', user.pk, invite.pk)
         login(request, user)
         return redirect('password_change_required')
     if request.method == 'POST' and form.is_valid():
@@ -1638,11 +1665,15 @@ def staff_register(request):
         if User.objects.filter(email__iexact=email).exists():
             form.add_error('email', 'That email address is already in use.')
         else:
-            otp = f'{secrets.randbelow(1000000):06d}'
-            cache.set(pending_key, {'otp': otp, 'username': form.cleaned_data['username'], 'email': email}, STAFF_REGISTRATION_OTP_TTL)
-            send_sealguard_mail('SealGuard email verification code', f'Your SealGuard account verification code is {otp}. It expires in 10 minutes.', [email], fail_silently=True)
-            return render(request, 'registration/register.html', {'form': form, 'otp_sent': True, 'email': email, 'invite': invite_token})
-    return render(request, 'registration/register.html', {'form': form, 'otp_sent': bool(pending), 'email': pending.get('email') if pending else '', 'invite': invite_token})
+            channel = form.cleaned_data.get('channel') or 'email'
+            recipient = form.cleaned_data['phone_number'] if channel == 'sms' else email
+            try:
+                pending = issue_challenge(pending_key, channel, recipient, 'SealGuard account verification code',
+                    {'username': form.cleaned_data['username'], 'email': email, 'phone_number': form.cleaned_data['phone_number']})
+                context.update(otp_sent=True, recipient=recipient, channel=channel)
+            except ValidationError as exc:
+                context['error'] = exc.messages[0]
+    return render(request, 'registration/register.html', context)
 
 
 @login_required
@@ -1660,7 +1691,13 @@ def password_change_required(request):
     return render(request, 'registration/password_change_required.html', {'form': form})
 
 
+@never_cache
 def password_reset_request(request):
+    if request.method == 'POST' and request.POST.get('stage') == 'restart':
+        logger.info('password reset flow restarted; session=%s', request.session.session_key)
+        request.session.pop('password_reset_verified_id', None)
+        request.session.pop('password_reset_request_id', None)
+        return redirect('password_reset_request')
     reset = None
     step = 'email'
     verified_id = request.session.get('password_reset_verified_id')
@@ -1678,7 +1715,7 @@ def password_reset_request(request):
         reset = PasswordResetRequest.objects.filter(
             pk=request.POST.get('request_id'), status='approved', user__is_active=True,
         ).select_related('user').first()
-        if not reset or request.session.get('password_reset_verified_id') != reset.pk or not reset.expires_at or reset.expires_at < timezone.now():
+        if not reset or not reset_contact_valid(reset) or request.session.get('password_reset_verified_id') != reset.pk or not reset.expires_at or reset.expires_at < timezone.now():
             request.session.pop('password_reset_verified_id', None)
             return render(request, 'registration/password_reset.html', {'reset_form': reset_form, 'error': 'Your verification session expired. Request a new code.', 'step': 'email'})
         form = ApprovedPasswordResetForm(reset.user, request.POST)
@@ -1687,39 +1724,61 @@ def password_reset_request(request):
             reset.status = 'used'
             reset.otp = ''
             reset.save(update_fields=['status', 'otp'])
+            logger.info('password reset completed; reset_id=%s user_id=%s', reset.pk, reset.user_id)
             request.session.pop('password_reset_verified_id', None)
             request.session.pop('password_reset_request_id', None)
             return redirect('login')
         return render(request, 'registration/password_reset.html', {'reset_form': reset_form, 'reset': reset, 'form': form, 'step': 'password'})
     if request.method == 'POST' and request.POST.get('stage') == 'verify':
         reset = PasswordResetRequest.objects.filter(pk=request.POST.get('request_id'), status='approved').select_related('user').first()
-        if not reset or not reset.expires_at or reset.expires_at < timezone.now() or not secrets.compare_digest(request.POST.get('otp', ''), reset.otp):
+        if reset and request.session.get('password_reset_request_id') == reset.pk:
+            from django.db.models import F
+            claimed = PasswordResetRequest.objects.filter(pk=reset.pk, attempts__lt=5).update(attempts=F('attempts') + 1)
+        else:
+            claimed = False
+        if not claimed or not reset_contact_valid(reset) or not reset.expires_at or reset.expires_at < timezone.now() or not valid_code(request.POST.get('otp', ''), reset.otp):
+            logger.warning('password reset code rejected; reset_id=%s claimed=%s', reset.pk if reset else None, claimed)
             return render(request, 'registration/password_reset.html', {'reset_form': reset_form, 'reset': reset, 'error': 'That verification code is invalid or expired.', 'step': 'verify'})
         request.session['password_reset_verified_id'] = reset.pk
+        logger.info('password reset code accepted; reset_id=%s user_id=%s', reset.pk, reset.user_id)
         return render(request, 'registration/password_reset.html', {'reset_form': reset_form, 'reset': reset, 'form': ApprovedPasswordResetForm(reset.user), 'step': 'password'})
     if request.method == 'POST' and reset_form.is_valid():
         identifier = reset_form.cleaned_data['identifier'].strip()
-        user = User.objects.filter(
-            is_active=True, is_staff=True, is_superuser=False,
-            email__iexact=identifier,
-        ).first()
+        channel = reset_form.cleaned_data.get('channel') or 'email'
+        users = User.objects.filter(is_active=True, is_staff=True, is_superuser=False)
+        if channel == 'sms':
+            user = users.filter(account_security__phone_number=identifier, account_security__phone_verified=True).first()
+        else:
+            user = users.filter(email__iexact=identifier).exclude(account_security__email_verified=False).first()
         if user:
+            logger.info('password reset identifier matched; user_id=%s channel=%s', user.pk, channel)
             session_request_id = request.session.get('password_reset_request_id')
-            reset = PasswordResetRequest.objects.filter(pk=session_request_id, user=user).first() if session_request_id else None
+            reset = PasswordResetRequest.objects.filter(pk=session_request_id, user=user, channel=channel).first() if session_request_id else None
             if reset and reset.status == 'approved' and reset.expires_at and reset.expires_at >= timezone.now():
+                logger.info('password reset awaiting code; reset_id=%s status=approved', reset.pk)
                 request.session['password_reset_request_id'] = reset.pk
                 return render(request, 'registration/password_reset.html', {'reset_form': reset_form, 'reset': reset, 'step': 'verify'})
             if reset and reset.status == 'pending':
+                logger.info('password reset still pending admin approval; reset_id=%s', reset.pk)
                 return render(request, 'registration/password_reset.html', {'reset_form': reset_form, 'pending': True, 'step': 'email'})
-            reset = PasswordResetRequest.objects.create(user=user, email=user.email, status='pending')
+            from .messaging import code_digest
+            throttle = 'sealguard:reset-request:' + code_digest(str(user.pk))
+            if not cache.add(throttle, True, 60):
+                logger.warning('password reset request throttled; user_id=%s channel=%s', user.pk, channel)
+                return render(request, 'registration/password_reset.html', {'reset_form': reset_form, 'pending': True, 'step': 'email'})
+            reset = PasswordResetRequest.objects.create(user=user, email=user.email, channel=channel,
+                phone_number=identifier if channel == 'sms' else '', status='pending')
             request.session['password_reset_request_id'] = reset.pk
-            for admin_user in User.objects.filter(is_active=True, is_superuser=True).exclude(email=''):
-                send_sealguard_mail(
+            logger.info('password reset request created; reset_id=%s user_id=%s channel=%s', reset.pk, user.pk, channel)
+            for admin_user in User.objects.filter(is_active=True, is_superuser=True):
+                admin_notified = notify_account(admin_user,
                     'SealGuard password reset approval required',
                     f'{user.username} requested a password reset. Review request #{reset.pk} in the Admin Portal.',
-                    [admin_user.email], fail_silently=True,
                 )
+                logger.info('password reset admin notification attempted; reset_id=%s admin_user_id=%s channel=%s delivered=%s',
+                            reset.pk, admin_user.pk, getattr(getattr(admin_user, 'account_security', None), 'preferred_channel', 'email'), admin_notified)
             return render(request, 'registration/password_reset.html', {'reset_form': reset_form, 'pending': True, 'step': 'email'})
+        logger.info('password reset identifier did not match an eligible account; channel=%s', channel)
         return render(request, 'registration/password_reset.html', {'reset_form': reset_form, 'pending': True, 'step': 'email'})
     return render(request, 'registration/password_reset.html', {'reset_form': reset_form, 'reset': reset, 'step': step})
 
@@ -1747,6 +1806,17 @@ def public_verify(request):
             request.session['verify_debug_log'] = []
             request.session['verify_filename_hint'] = None
             return redirect(reverse('public_verify'))
+
+        from .encrypted_documents import PACKAGE_MAGIC
+        header = uploaded_file.read(len(PACKAGE_MAGIC))
+        uploaded_file.seek(0)
+        if uploaded_file.name.lower().endswith('.sgpdf') or header == PACKAGE_MAGIC:
+            _clear_verification_preview(request)
+            request.session['verify_result'] = 'error'
+            request.session['verify_filename_hint'] = 'encrypted'
+            request.session['verify_debug_log'] = []
+            log_activity(request, 'verification', note='Encrypted package sent to PDF verification; directed to encrypted documents')
+            return redirect('public_verify')
 
         _clear_verification_preview(request)
         preview_dir = os.path.join(settings.MEDIA_ROOT, 'verification_previews')
@@ -2094,11 +2164,14 @@ def preview_contract(request, contract_id):
         'pdf_view', 'current_pdf_response_started', contract=contract, request=request,
         version=version_number, lookup_ms=round((time.perf_counter() - started_at) * 1000),
     )
-    return FileResponse(
+    response = FileResponse(
         contract.file.open('rb'),
         content_type='application/pdf',
         filename=_contract_pdf_filename(contract, version_number),
     )
+    if is_admin(request.user):
+        response['X-SealGuard-PDF-Download'] = reverse('download_contract', args=[contract.pk]) + '?format=pdf'
+    return response
 
 
 @never_cache
@@ -2118,15 +2191,20 @@ def preview_contract_version(request, version_id):
         version=version.version_number, version_id=version.id,
         lookup_ms=round((time.perf_counter() - started_at) * 1000),
     )
-    return FileResponse(
+    response = FileResponse(
         version.file.open('rb'),
         content_type='application/pdf',
         filename=_contract_pdf_filename(version.contract, version.version_number),
     )
+    if is_admin(request.user):
+        response['X-SealGuard-PDF-Download'] = reverse('download_contract_version', args=[version.pk]) + '?format=pdf'
+    return response
 
 
 @never_cache
 def download_contract(request, contract_id):
+    if request.GET.get('format') == 'pdf' and not is_admin(request.user):
+        raise Http404
     if not request.user.is_authenticated:
         contract = Contract.objects.filter(pk=contract_id, is_trashed=False).first()
         if not contract or not contract.is_public:
@@ -2143,7 +2221,7 @@ def download_contract(request, contract_id):
         note='Downloaded current contract PDF',
         version_number=latest_version.version_number if latest_version else None,
     )
-    if contract.is_public and (not request.user.is_authenticated or request.GET.get('public') == '1'):
+    if request.GET.get('format') == 'pdf' or (contract.is_public and (not request.user.is_authenticated or request.GET.get('public') == '1')):
         document = pdf_storage.open(contract.file.name, 'rb')
         response = FileResponse(
             document,
@@ -2171,6 +2249,8 @@ def download_contract(request, contract_id):
 
 @never_cache
 def download_contract_version(request, version_id):
+    if request.GET.get('format') == 'pdf' and not is_admin(request.user):
+        raise Http404
     version = get_object_or_404(
         ContractVersion.objects.select_related('contract'),
         pk=version_id,
@@ -2185,6 +2265,10 @@ def download_contract_version(request, version_id):
         note=f'Downloaded version {version.version_number} PDF',
         version_number=version.version_number,
     )
+    if request.GET.get('format') == 'pdf':
+        return FileResponse(version.file.open('rb'), content_type='application/pdf',
+                            as_attachment=True,
+                            filename=_contract_pdf_filename(version.contract, version.version_number))
     from .encrypted_documents import package_response
     return package_response(
         version.contract, version.file,

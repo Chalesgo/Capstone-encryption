@@ -4,17 +4,19 @@ from django.contrib.auth.models import User
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 import secrets
+import logging
 from datetime import timedelta
 from django.utils import timezone
 from .models import Contract, Tutorial, PasswordResetRequest, StaffInvitation
-from .models import EmailMessageLog
-from .emailing import send_sealguard_mail
+from .models import EmailMessageLog, SMSMessageLog, AccountSecurity
+from .messaging import send_message, code_digest
 from .signals import sync_sealguard_role_group
 
 
 admin.site.site_header = 'SealGuard Administration'
 admin.site.site_title = 'SealGuard Admin'
 admin.site.index_title = 'System administration'
+logger = logging.getLogger(__name__)
 
 
 def _superuser_only_admin(request):
@@ -27,10 +29,19 @@ admin.site.has_permission = _superuser_only_admin
 admin.site.unregister(User)
 
 
+class AccountSecurityInline(admin.StackedInline):
+    model = AccountSecurity
+    can_delete = False
+    extra = 0
+    fields = ('phone_number', 'phone_verified', 'email_verified', 'preferred_channel')
+    readonly_fields = fields
+
+
 @admin.register(User)
 class SealGuardUserAdmin(UserAdmin):
     """Keep Django's account controls, but make SealGuard's roles explicit."""
 
+    inlines = (AccountSecurityInline,)
     readonly_fields = ('sealguard_role', 'sealguard_access')
     fieldsets = UserAdmin.fieldsets + (
         ('SealGuard access', {
@@ -48,6 +59,10 @@ class SealGuardUserAdmin(UserAdmin):
 
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
+        if change and 'email' in form.changed_data:
+            security, _ = AccountSecurity.objects.get_or_create(user=form.instance)
+            security.email_verified = False
+            security.save(update_fields=['email_verified'])
         # The role flags are authoritative; restore the matching role group
         # after Django saves any manually edited group selections.
         sync_sealguard_role_group(form.instance)
@@ -111,10 +126,10 @@ class TutorialAdmin(admin.ModelAdmin):
 
 @admin.register(PasswordResetRequest)
 class PasswordResetRequestAdmin(admin.ModelAdmin):
-    list_display = ('user', 'email', 'status', 'created_at', 'approved_at', 'expires_at')
+    list_display = ('user', 'email', 'phone_number', 'channel', 'status', 'created_at', 'approved_at', 'expires_at')
     list_filter = ('status', 'created_at')
     search_fields = ('user__username', 'email')
-    readonly_fields = ('user', 'email', 'created_at', 'approved_at', 'expires_at', 'otp')
+    readonly_fields = ('user', 'email', 'phone_number', 'channel', 'attempts', 'created_at', 'approved_at', 'expires_at', 'otp')
     actions = ('approve_reset_requests', 'reject_reset_requests')
 
     @admin.action(description='Issue or resend selected password reset codes')
@@ -127,16 +142,31 @@ class PasswordResetRequestAdmin(admin.ModelAdmin):
                 (not reset.expires_at or reset.expires_at < now)
             )
             if not can_issue:
+                logger.info('password reset approval skipped; reset_id=%s status=%s', reset.pk, reset.status)
+                continue
+            from .messaging import reset_contact_valid
+            if not reset_contact_valid(reset):
+                logger.warning('password reset approval blocked by invalid contact; reset_id=%s user_id=%s channel=%s',
+                               reset.pk, reset.user_id, reset.channel)
                 continue
             code = f'{secrets.randbelow(1000000):06d}'
             reset.status = 'approved'
-            reset.otp = code
+            reset.otp = code_digest(code)
+            reset.attempts = 0
             reset.approved_at = now
             reset.expires_at = now + timedelta(minutes=10)
-            reset.save(update_fields=['status', 'otp', 'approved_at', 'expires_at'])
-            send_sealguard_mail('SealGuard password reset verification code', f'Your SealGuard password reset verification code is {code}. It expires in 10 minutes.', [reset.email], fail_silently=True)
+            reset.save(update_fields=['status', 'otp', 'attempts', 'approved_at', 'expires_at'])
+            recipient = reset.phone_number if reset.channel == 'sms' else reset.email
+            delivered = send_message(reset.channel, recipient, 'SealGuard password reset verification code', f'Your SealGuard password reset verification code is {code}. It expires in 10 minutes.')
+            logger.info('password reset code delivery attempted; reset_id=%s user_id=%s channel=%s delivered=%s',
+                        reset.pk, reset.user_id, reset.channel, delivered)
+            if not delivered:
+                reset.status = 'pending'
+                reset.otp = ''
+                reset.save(update_fields=['status', 'otp'])
+                continue
             count += 1
-        self.message_user(request, f'{count} password reset request(s) approved and emailed.')
+        self.message_user(request, f'{count} password reset request(s) approved; delivery requested through the selected channel.')
 
     @admin.action(description='Reject selected password reset requests')
     def reject_reset_requests(self, request, queryset):
@@ -159,3 +189,15 @@ class EmailMessageLogAdmin(admin.ModelAdmin):
     search_fields = ('recipient', 'subject', 'body')
     readonly_fields = ('recipient', 'subject', 'body', 'delivered', 'sent_at')
     date_hierarchy = 'sent_at'
+
+
+@admin.register(SMSMessageLog)
+class SMSMessageLogAdmin(admin.ModelAdmin):
+    list_display = ('subject', 'recipient', 'status', 'sent_at')
+    list_filter = ('status', 'sent_at')
+    search_fields = ('recipient', 'subject', 'body')
+    readonly_fields = ('recipient', 'subject', 'body', 'status', 'sent_at')
+    date_hierarchy = 'sent_at'
+
+    def has_add_permission(self, request):
+        return False

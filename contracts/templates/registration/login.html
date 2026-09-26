@@ -159,6 +159,15 @@
         gap: 8px;
         align-items: flex-start;
     }
+    .auth-success {
+        margin: 0 0 1.25rem;
+        padding: .8rem .95rem;
+        border: 1px solid #86efac;
+        border-radius: 10px;
+        background: #f0fdf4;
+        color: #166534;
+        font-size: .9rem;
+    }
 
     .auth-error svg {
         width: 15px;
@@ -245,6 +254,10 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
             <span><strong>Staff members only.</strong> Public visitors do not need to sign in. <a href="/verify/">Verify a document</a> instead.</span>
         </div>
+
+        {% if request.GET.registered == '1' %}
+            <div class="auth-success" role="status">Your account was created. Sign in with the temporary password from your email, then choose a new password.</div>
+        {% endif %}
 
         <form method="post" novalidate class="auth-form">
             {% csrf_token %}

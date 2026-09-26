@@ -11,8 +11,9 @@ from django.urls import reverse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods
 
+from .utils import log_activity
 from .access import can_view
-from .models import Contract, ContractVersion, DocumentAccessRequest
+from .models import Contract, ContractVersion, DocumentAccessRequest, DocumentAccessLink
 from .pdf_storage import MAGIC, decrypt_pdf_bytes, PDFDecryptionError
 
 PACKAGE_MAGIC = b'SEALGUARD-PACKAGE-1\n'
@@ -60,6 +61,8 @@ def open_encrypted_document(request):
             file = version.file if version else contract.file
             if file.name != metadata['file']:
                 raise ValueError('This document version is no longer available.')
+            if hashlib.sha256(Path(file.path).read_bytes()).hexdigest() != metadata['sha256']:
+                raise ValueError('This document version has changed.')
             target = None
             if can_view(request.user, contract):
                 target = reverse('preview_contract_version', args=[version.pk]) if version else reverse('preview_contract', args=[contract.pk])
@@ -71,17 +74,35 @@ def open_encrypted_document(request):
                         target = reverse('approved_document_pdf', args=[entry.link.token])
                         break
             if not target:
-                raise ValueError('You do not have access. Sign in with an authorized account or complete staff approval in this browser.')
+                log_activity(request, 'verification', contract=contract,
+                             version_number=version.version_number if version else None,
+                             verification_result='Unauthorized decryption',
+                             note='Unauthorized SGPDF decryption attempt; access denied')
+                link = DocumentAccessLink.objects.create(
+                    contract=contract, category='sgpdf', requested_version=version,
+                    requested_file=file.name, ciphertext_sha256=metadata['sha256'],
+                    upload_name=Path(upload.name).name[:255])
+                log_activity(request, 'edited', contract=contract,
+                             note=f'SGPDF access request offered; link={link.pk}')
+                return render(request, 'access/open_encrypted.html', {
+                    'error': 'Unable to open this file. You do not have permission to decrypt this document. Request PDF access below; no account is required.',
+                    'request_url': reverse('request_document_access', args=[link.token]),
+                })
             # Check the exact archived ciphertext; a replaced version cannot be
             # substituted for the uploaded package. Only decrypt after authorization.
             if hashlib.sha256(Path(file.path).read_bytes()).hexdigest() != metadata['sha256']:
                 raise ValueError('This document version has changed. Contact staff for a new download.')
             decrypt_pdf_bytes(ciphertext)
+            log_activity(request, 'viewed', contract=contract,
+                         version_number=version.version_number if version else None,
+                         note='Authorized SGPDF decryption; opened document viewer')
             return render(request, 'access/open_encrypted.html', {
                 'viewer_url': target,
                 'viewer_title': contract.title,
             })
         except (ValueError, KeyError, UnicodeError, signing.BadSignature, OSError,
                 Contract.DoesNotExist, ContractVersion.DoesNotExist):
+            log_activity(request, 'verification', verification_result='Invalid encrypted document',
+                         note='SGPDF decryption failed; invalid or unavailable package')
             error = 'Unable to open this file. It must be an unchanged SealGuard download, and you must currently have permission to view its document version.'
     return render(request, 'access/open_encrypted.html', {'error': error})

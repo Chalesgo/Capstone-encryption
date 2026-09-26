@@ -1,0 +1,108 @@
+{
+  "name": "SealGuard Email Delivery",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sealguard/email-delivery",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "5bdf7e8d-0a3a-4c0e-8d04-ea1e7b5c9101",
+      "name": "SealGuard Email Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.body.channel }}",
+              "rightValue": "email",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "db8b90a6-f3b9-4cb1-a5f0-8e3d2a719102",
+      "name": "Accept Email Only",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "fromEmail": "REPLACE_WITH_APPROVED_SENDER_EMAIL",
+        "toEmail": "={{ $json.body.recipient }}",
+        "subject": "={{ $json.body.subject }}",
+        "emailFormat": "text",
+        "text": "={{ $json.body.body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "8f4a2c63-6d18-4f3f-b4bb-3c9d5a210103",
+      "name": "Send SealGuard Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [520, -80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ok: true, channel: 'email', provider_message_id: $json.id || ''}) }}"
+      },
+      "id": "a1f0b6d5-ec70-40d4-8b27-9e4c31220104",
+      "name": "Email Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [760, -80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 400,
+        "responseBody": "={\"ok\":false,\"error\":\"This endpoint accepts email delivery only.\"}"
+      },
+      "id": "f6d1c2e3-b4a5-4678-9c01-2d3e4f510105",
+      "name": "Reject Non Email",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [520, 100]
+    }
+  ],
+  "connections": {
+    "SealGuard Email Webhook": {
+      "main": [[{"node": "Accept Email Only", "type": "main", "index": 0}]]
+    },
+    "Accept Email Only": {
+      "main": [
+        [{"node": "Send SealGuard Email", "type": "main", "index": 0}],
+        [{"node": "Reject Non Email", "type": "main", "index": 0}]
+      ]
+    },
+    "Send SealGuard Email": {
+      "main": [[{"node": "Email Accepted", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

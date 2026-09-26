@@ -320,6 +320,7 @@ class EncryptedPDFApprovalTests(TestCase):
             opened = upload(self.client)
             self.assertEqual(opened.status_code, 200)
             self.assertContains(opened, 'encrypted-viewer-frame')
+            self.assertContains(opened, 'hide_sidebar')
             reader = Client()
             reader.force_login(self.other)
             self.assertContains(upload(reader), 'Unable to open this file')
@@ -378,3 +379,66 @@ class EncryptedPDFApprovalTests(TestCase):
     def test_encrypted_upload_requires_csrf(self):
         strict = Client(enforce_csrf_checks=True)
         self.assertEqual(strict.post(reverse('open_encrypted_document')).status_code, 403)
+
+
+    def sgpdf_request(self):
+        from .encrypted_documents import package_bytes
+        self.package = package_bytes(self.contract, self.version.file, self.version)
+        response = self.client.post(reverse('open_encrypted_document'), {
+            'document': SimpleUploadedFile('agreement.sgpdf', self.package)}, REMOTE_ADDR='203.0.113.9')
+        self.assertContains(response, 'Request PDF access')
+        link = DocumentAccessLink.objects.get(category='sgpdf')
+        url = reverse('request_document_access', args=[link.token])
+        self.assertEqual(self.client.post(url, {'action': 'request', 'name': 'Public requester',
+            'email': 'public@example.com', 'reason': 'Please review'}, REMOTE_ADDR='203.0.113.9').status_code, 302)
+        return DocumentAccessRequest.objects.get(link=link)
+
+    def test_sgpdf_public_request_exact_version_preview_and_audit(self):
+        from .models import AuditLog
+        entry = self.sgpdf_request()
+        self.assertEqual(entry.ip_address, '203.0.113.9')
+        self.assertTrue(AuditLog.objects.filter(verification_result='Unauthorized decryption').exists())
+        preview = reverse('review_request_pdf', args=[entry.pk])
+        self.assertEqual(self.client.get(preview).status_code, 302)
+        reviewer = Client()
+        reviewer.force_login(self.staff)
+        response = reviewer.get(preview)
+        self.assertEqual(b''.join(response.streaming_content), self.pdf)
+        self.assertContains(reviewer.get(reverse('document_approval_queue')), 'SGPDF decryption request')
+        self.assertContains(reviewer.get(reverse('document_approval_queue')), '203.0.113.9')
+        # A later revision must not replace the version the guest requested.
+        self.contract.file.save('later.pdf', ContentFile(self.pdf))
+        ContractVersion.objects.create(contract=self.contract, version_number=2, file=self.contract.file.name)
+        reviewer.post(reverse('review_document_request', args=[entry.pk]), {'action': 'approve', 'hours': '1'})
+        entry.refresh_from_db()
+        self.assertEqual(entry.approved_version_id, self.version.pk)
+        view = reverse('approved_document_pdf', args=[entry.link.token])
+        self.assertEqual(self.client.get(view).status_code, 200)
+        self.assertEqual(Client().get(view).status_code, 404)
+        self.assertTrue(AuditLog.objects.filter(action='approved', note__contains=str(entry.pk)).exists())
+        self.assertTrue(AuditLog.objects.filter(action='viewed', note__contains=str(entry.pk)).count() >= 2)
+        reviewer.post(reverse('review_document_request', args=[entry.pk]), {'action': 'revoke'})
+        self.assertEqual(self.client.get(view).status_code, 404)
+
+    def test_sgpdf_rejection_and_modified_ciphertext_block_access(self):
+        from .models import AuditLog
+        entry = self.sgpdf_request()
+        reviewer = Client()
+        reviewer.force_login(self.staff)
+        preview = reverse('review_request_pdf', args=[entry.pk])
+        Path(self.version.file.path).write_bytes(b'damaged ciphertext')
+        self.assertEqual(reviewer.get(preview).status_code, 404)
+        review = reverse('review_document_request', args=[entry.pk])
+        self.assertEqual(reviewer.post(review, {'action': 'approve'}).status_code, 404)
+        self.assertEqual(reviewer.post(review, {'action': 'reject'}).status_code, 302)
+        self.assertTrue(AuditLog.objects.filter(action='rejected', note__contains=str(entry.pk)).exists())
+        self.assertEqual(self.client.get(reverse('approved_document_pdf', args=[entry.link.token])).status_code, 404)
+
+    def test_verify_redirects_encrypted_extension_and_magic(self):
+        from .encrypted_documents import package_bytes
+        for name in ('agreement.sgpdf', 'renamed.pdf'):
+            response = self.client.post(reverse('public_verify'), {'pdf_file': SimpleUploadedFile(
+                name, package_bytes(self.contract, self.version.file, self.version))}, follow=True)
+            self.assertContains(response, 'Encrypted documents')
+            self.assertEqual(response.context['filename_hint'], 'encrypted')
+            self.assertNotIn('verify_preview_token', self.client.session)

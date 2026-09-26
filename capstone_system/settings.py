@@ -234,3 +234,12 @@ RSA_PUBLIC_KEY_PATH = config(
 MAX_UPLOAD_SIZE = 15 * 1024 * 1024
 
 # Set to the stable HTTPS origin used in printed QR access sheets.
+
+# Optional callable adapter; empty keeps SMS in the Admin outbox for demos.
+SMS_DELIVERY_BACKEND = config('SMS_DELIVERY_BACKEND', default='')
+# Optional authenticated n8n email delivery. Leave blank to keep Django's
+# configured email backend (including local console/SMTP demos).
+N8N_EMAIL_WEBHOOK_URL = config('N8N_EMAIL_WEBHOOK_URL', default='').strip()
+N8N_EMAIL_WEBHOOK_HEADER = config('N8N_EMAIL_WEBHOOK_HEADER', default='X-SealGuard-Webhook').strip()
+N8N_EMAIL_WEBHOOK_SECRET = config('N8N_EMAIL_WEBHOOK_SECRET', default='')
+N8N_EMAIL_WEBHOOK_TIMEOUT = config('N8N_EMAIL_WEBHOOK_TIMEOUT', default=10, cast=int)

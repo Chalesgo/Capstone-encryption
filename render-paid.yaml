@@ -52,3 +52,13 @@ services:
         sync: false
       - key: DEFAULT_FROM_EMAIL
         sync: false
+      # Email delivery is routed through the active production n8n webhook.
+      # Keep the URL and header name configurable; never commit the secret.
+      - key: N8N_EMAIL_WEBHOOK_URL
+        sync: false
+      - key: N8N_EMAIL_WEBHOOK_HEADER
+        value: X-SealGuard-Webhook
+      - key: N8N_EMAIL_WEBHOOK_SECRET
+        sync: false
+      - key: N8N_EMAIL_WEBHOOK_TIMEOUT
+        value: "10"

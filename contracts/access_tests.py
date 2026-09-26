@@ -33,6 +33,43 @@ class DocumentAccessTests(TestCase):
     def login(self, user):
         self.client.force_login(user)
 
+    def test_admin_pdf_download_option_for_current_and_historical_versions(self):
+        from .encrypted_documents import PACKAGE_MAGIC
+        routes = [('preview_contract', 'download_contract', self.contract.pk, b'%PDF-1.4 private content'),
+                  ('preview_contract_version', 'download_contract_version', self.version.pk, b'%PDF-1.4 previous content')]
+        for user in (None, self.owner, self.editor, self.other, self.admin):
+            self.client.logout()
+            if user:
+                self.login(user)
+            for preview, download, pk, expected in routes:
+                with self.subTest(user=user, route=download):
+                    url = reverse(download, args=[pk]) + '?format=pdf'
+                    response = self.client.get(url)
+                    if user == self.admin:
+                        self.assertEqual(response.status_code, 200)
+                        self.assertEqual(response['Content-Type'], 'application/pdf')
+                        self.assertEqual(b''.join(response.streaming_content), expected)
+                        self.assertIn('attachment', response['Content-Disposition'])
+                        default = self.client.get(reverse(download, args=[pk]))
+                        self.assertTrue(b''.join(default.streaming_content).startswith(PACKAGE_MAGIC))
+                    else:
+                        self.assertEqual(response.status_code, 404)
+                    metadata = self.client.get(reverse(preview, args=[pk]))
+                    if user == self.admin:
+                        self.assertEqual(metadata['X-SealGuard-PDF-Download'], url)
+                    else:
+                        self.assertNotIn('X-SealGuard-PDF-Download', metadata)
+                    metadata.close()
+
+    def test_list_uses_shared_viewer_with_admin_download_metadata(self):
+        self.login(self.admin)
+        response = self.client.get(reverse('contract_list'))
+        self.assertContains(response, 'id="pdf-frame"')
+        self.assertContains(response, 'mobile-pdf.html')
+        self.client.logout()
+        response = self.client.get(reverse('contract_list'))
+        self.assertNotEqual(response.status_code, 200)
+
     def test_public_viewer_metadata_is_available_without_login(self):
         self.contract.is_public = True
         self.contract.save()

@@ -1,15 +1,17 @@
 from django.urls import path
-from . import views, approval_views, encrypted_documents
+from . import views, approval_views, encrypted_documents, contact_views
 from .notifications import notification_list
 from .comparison import compare_revisions
 
 urlpatterns = [
+    path('accounts/verification-contacts/', contact_views.verification_contacts, name='verification_contacts'),
     path('contract/<int:contract_id>/compare/', compare_revisions, name='compare_revisions'),
     path('open-encrypted/', encrypted_documents.open_encrypted_document, name='open_encrypted_document'),
     path('notifications/', notification_list, name='notification_list'),
     path('document-access/<uuid:token>/', approval_views.request_access, name='request_document_access'),
     path('document-access/<uuid:token>/view/', approval_views.approved_pdf, name='approved_document_pdf'),
     path('contract/<int:contract_id>/access-sheet/', approval_views.access_sheet, name='document_access_sheet'),
+    path('access-requests/<uuid:request_id>/preview/', approval_views.review_pdf, name='review_request_pdf'),
     path('access-requests/', approval_views.approval_queue, name='document_approval_queue'),
     path('access-requests/<uuid:request_id>/review/', approval_views.review_request, name='review_document_request'),
     path('contract/<int:contract_id>/access/', views.contract_access, name='contract_access'),

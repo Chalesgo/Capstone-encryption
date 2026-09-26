@@ -89,14 +89,27 @@
     body.sidebar-pinned #details-toggle, body.sidebar-pinned #close-details,
     body.sidebar-pinned #versions-toggle, body.sidebar-pinned #details-backdrop { display:none; }
     body.sidebar-pinned .pdf-sidebar-title { padding-right:17px; }
+    body.sidebar-hidden #details-toggle,
+    body.sidebar-hidden #pdf-sidebar,
+    body.sidebar-hidden #details-backdrop { display:none !important; }
     @media(prefers-reduced-motion:reduce) { #version-sheet, #version-backdrop, #pdf-sidebar, #details-backdrop { transition:none; } }
+    .download-actions { position:relative; display:flex; gap:0; }
+    .download-actions.has-options #download { border-radius:8px 0 0 8px; }
+    .corner-actions #download-options { border-radius:0 8px 8px 0; min-width:25px; width:25px; padding:0; border-left:0; }
+    #download-options svg { width:14px; height:14px; }
+    #download-menu { position:absolute; top:calc(100% + 7px); right:0; min-width:170px; padding:5px; border:1px solid #e5ebf0; border-radius:9px; background:white; box-shadow:0 6px 20px #24344326; }
+    .corner-actions #download-pdf { width:100%; border:0; border-radius:6px; box-shadow:none; text-align:left; padding:8px 12px; white-space:nowrap; font-size:13px; }
   </style>
 </head>
 <body>
   <main id="pages" aria-label="Scrollable PDF pages" tabindex="0"><div id="page-stack"></div></main>
   <div class="corner-actions" aria-label="Document actions">
     <button id="details-toggle" title="Document details" aria-label="Document details" aria-controls="pdf-sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></svg></button>
-    <button id="download" title="Download encrypted document (.sgpdf)" aria-label="Download encrypted document" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg></button>
+    <div class="download-actions" id="download-actions">
+      <button id="download" title="Download encrypted document (.sgpdf)" aria-label="Download encrypted document" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg></button>
+      <button id="download-options" title="Download options" aria-label="Download options" aria-expanded="false" aria-controls="download-menu" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <div id="download-menu" hidden><button id="download-pdf" type="button">Download as PDF</button></div>
+    </div>
     <button id="close" title="Close PDF" aria-label="Close PDF viewer">✕</button>
   </div>
   <p id="status" role="status">Opening document…</p>
@@ -133,6 +146,6 @@
     <p class="sidebar-section-label">Version History</p>
     <div id="details-versions"></div>
   </aside>
-  <script type="module" src="mobile-pdf.mjs?v=pinned-sidebar-1"></script>
+  <script type="module" src="mobile-pdf.mjs?v=ctrl-wheel-1"></script>
 </body>
 </html>

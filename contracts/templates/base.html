@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="{% static 'contracts/display-size.css' %}">
     <script src="{% static 'contracts/display-size.js' %}"></script>
-    <script src="{% static 'contracts/mobile-pdf-host.js' %}?v=desktop-panel-1" data-viewer="{% static 'contracts/mobile-pdf.html' %}?v=desktop-panel-1"></script>
+    <script src="{% static 'contracts/mobile-pdf-host.js' %}?v=ctrl-wheel-1" data-viewer="{% static 'contracts/mobile-pdf.html' %}?v=ctrl-wheel-1"></script>
     <title>{% block title %}SealGuard{% endblock %} — Barangay Sto. Niño</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -319,8 +319,7 @@
             color: #999;
         }
 
-        .mobile-nav,
-        .public-mobile-topbar {
+        .mobile-nav {
             display: none;
         }
 
@@ -390,7 +389,6 @@
             .mobile-topbar-extra { display: flex; }
             .topbar-user { flex: 0 0 auto; }
             .topbar-user .avatar { width: 30px; height: 30px; }
-            .public-mobile-topbar { display: flex; }
             #profile-modal.modal-overlay { padding: 64px 8px 8px; }
             #profile-modal .profile-modal-card {
                 width: min(360px, calc(100vw - 16px));
@@ -786,6 +784,17 @@
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>
             </svg>
         </a>
+        <a href="{% url 'verify_physical' %}" class="mobile-nav-link{% if request.resolver_match.url_name == 'verify_physical' %} active{% endif %}" title="Physical Verification" aria-label="Physical Verification">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2"/>
+                <rect x="8" y="8" width="8" height="8" rx="1"/><path d="M10 10h1v1h-1zM13 10h1v1h-1zM10 13h1v1h-1zM13 13h1v1h-1z"/>
+            </svg>
+        </a>
+        <a href="{% url 'open_encrypted_document' %}" class="mobile-nav-link{% if request.resolver_match.url_name == 'open_encrypted_document' %} active{% endif %}" title="Open encrypted document" aria-label="Open encrypted document">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M14 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><rect x="8" y="13" width="8" height="6" rx="1"/><path d="M10 13v-2a2 2 0 0 1 4 0v2"/>
+            </svg>
+        </a>
         <a href="/contracts/" class="mobile-nav-link{% if request.path == '/contracts/' %} active{% endif %}" title="Contracts" aria-label="Contracts">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/>
@@ -866,6 +875,17 @@
         <a href="/verify/" class="mobile-nav-link{% if request.path == '/verify/' %} active{% endif %}" title="Verify Document" aria-label="Verify Document">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>
+            </svg>
+        </a>
+        <a href="{% url 'verify_physical' %}" class="mobile-nav-link{% if request.resolver_match.url_name == 'verify_physical' %} active{% endif %}" title="Physical Verification" aria-label="Physical Verification">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2"/>
+                <rect x="8" y="8" width="8" height="8" rx="1"/><path d="M10 10h1v1h-1zM13 10h1v1h-1zM10 13h1v1h-1zM13 13h1v1h-1z"/>
+            </svg>
+        </a>
+        <a href="{% url 'open_encrypted_document' %}" class="mobile-nav-link{% if request.resolver_match.url_name == 'open_encrypted_document' %} active{% endif %}" title="Open encrypted document" aria-label="Open encrypted document">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M14 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><rect x="8" y="13" width="8" height="6" rx="1"/><path d="M10 13v-2a2 2 0 0 1 4 0v2"/>
             </svg>
         </a>
         <a href="/accounts/login/" class="mobile-nav-link" title="Staff Login" aria-label="Staff Login">
