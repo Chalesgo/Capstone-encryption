@@ -317,6 +317,8 @@ scroller.addEventListener('touchend', endPinch);
 scroller.addEventListener('touchcancel', endPinch);
 let resizeTimer;
 window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { layout(); goPage(pageNumber); schedulePaint(); },150); });
+// Embedded previews that own their own exit (e.g. verification) pass hide_close=1.
+get('close').hidden = params.get('hide_close') === '1';
 get('close').onclick = () => { if (parent === window) location.assign('/open-encrypted/'); else parent.postMessage({type:'sealguard-pdf-close'}, location.origin); };
 let encryptedDownloadUrl = null;
 let adminPdfDownloadUrl = null;

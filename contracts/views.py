@@ -2112,12 +2112,14 @@ def public_verify(request):
         request.session['verify_result'] = result
         request.session['verify_debug_log'] = debug_log
         request.session['verify_filename_hint'] = filename_hint
+        request.session['verify_filename'] = os.path.basename(uploaded_file.name or '')
         return redirect(reverse('public_verify'))
 
     # ── GET: read from session and clear ──
     result = request.session.pop('verify_result', None)
     debug_log = request.session.pop('verify_debug_log', [])
     filename_hint = request.session.pop('verify_filename_hint', None)
+    verify_filename = request.session.pop('verify_filename', None)
     verification_timestamp = request.session.pop('verify_timestamp', None)
     preview_token = request.session.get('verify_preview_token')
     preview_url = reverse('verification_preview', args=[preview_token]) if result and preview_token else None
@@ -2139,6 +2141,7 @@ def public_verify(request):
         'public_contracts': public_contracts,
         'public_page_obj': public_page_obj,
         'verify_preview_url': preview_url,
+        'verify_filename': verify_filename,
         'verification_timestamp': verification_timestamp,
     })
 

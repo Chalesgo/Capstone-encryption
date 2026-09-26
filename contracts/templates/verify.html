@@ -530,43 +530,35 @@
         align-items: center;
         gap: 8px;
         padding: 10px 14px;
-        font-size: 12px;
-        color: #889aab;
+        font-size: 12.5px;
+        font-weight: 600;
+        color: #445566;
         background: #fff;
         border-bottom: 1px solid #eef0f4;
+        min-width: 0;
     }
+    .doc-preview-header svg { flex-shrink: 0; color: #889aab; }
+    .doc-preview-header span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    /* The viewer's own page canvas (#e9edf2) fills the panel edge to edge. */
     .doc-preview-body {
         flex: 1;
-        background: #f2f1ee;
+        background: #e9edf2;
         display: flex;
-        align-items: stretch;
-        justify-content: center;
-        padding: 14px;
         min-height: 0;
     }
-    /* The embedded viewer renders fit-to-width, so a page-shaped frame is what
-       makes a whole page visible instead of just the top of it. */
     .doc-preview-body iframe {
-        flex: 0 0 auto;
-        width: auto;
-        max-width: 100%;
+        flex: 1 1 auto;
+        width: 100%;
         height: 100%;
-        aspect-ratio: 0.78;
         border: none;
-        background: white;
         outline: none;
-        border-radius: 8px;
-        box-shadow: 0 2px 12px rgba(26, 26, 46, .1);
+        background: #e9edf2;
         display: block;
-    }
-    @media (max-width: 900px) {
-        .doc-preview-body { padding: 0; background: #fff; }
-        .doc-preview-body iframe {
-            width: 100%;
-            aspect-ratio: auto;
-            border-radius: 0 0 12px 12px;
-            box-shadow: none;
-        }
     }
     .doc-preview-mobile-link {
         display: none;
@@ -595,6 +587,7 @@
         }
     }
     .status-panel {
+        position: relative;
         flex: 1;
         background: white;
         border-radius: 14px;
@@ -607,6 +600,26 @@
         overflow: hidden;
         justify-content: center;
     }
+    .status-panel-close {
+        display: none;
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        width: 34px;
+        height: 34px;
+        padding: 0;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #e8e6e2;
+        border-radius: 8px;
+        background: #fff;
+        color: #889aab;
+        cursor: pointer;
+        transition: background .15s, color .15s, border-color .15s;
+    }
+    .status-panel-close:hover { background: #eef0f4; color: #2d3a47; }
+    .status-panel-close:focus-visible { outline: 3px solid rgba(59, 91, 219, .35); outline-offset: 2px; }
+    .status-panel.result-state .status-panel-close { display: inline-flex; }
     .status-panel-header {
         display: inline-flex;
         align-self: flex-start;
@@ -1096,7 +1109,7 @@
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14,2 14,8 20,8"/>
                     </svg>
-                    <span id="doc-page-count">Loading document…</span>
+                    <span id="doc-page-count">{{ verify_filename|default:"Loading document…" }}</span>
                 </div>
                 <div class="doc-preview-body">
                     <iframe id="doc-preview-frame" title="Uploaded document preview"></iframe>
@@ -1106,6 +1119,14 @@
 
             <!-- Verification status -->
             <div class="status-panel">
+                <button type="button" class="status-panel-close" onclick="openCloseResultModal()"
+                        title="Close result" aria-label="Close verification result">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
                 <div class="status-panel-header">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
                          stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1179,6 +1200,18 @@
                 </button>
             </div>
 
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="close-result-modal" role="dialog" aria-modal="true"
+         aria-labelledby="close-result-title" onclick="closeCloseResultModal(event)">
+        <div class="modal" onclick="event.stopPropagation()">
+            <h3 id="close-result-title">Close this result?</h3>
+            <p>This will clear the current verification result and the document preview. You'll need to upload the file again to see it. Continue?</p>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" onclick="closeCloseResultModal()">Stay</button>
+                <a href="{% url 'public_verify' %}" class="btn btn-primary" style="text-decoration:none;">Continue</a>
+            </div>
         </div>
     </div>
 
@@ -1580,10 +1613,12 @@ document.getElementById('verify-form').addEventListener('submit', function(e) {
         const previewFrameUrl = verificationObjectUrl + '#toolbar=0&navpanes=0&scrollbar=1&view=FitH';
         const previewViewerUrl = new URL(sealGuardPdfFrameUrl(previewFrameUrl), location.href);
         previewViewerUrl.searchParams.set('hide_sidebar', '1');
+        previewViewerUrl.searchParams.set('hide_close', '1');
+        previewViewerUrl.searchParams.set('title', file.name.replace(/\.pdf$/i, ''));
         document.getElementById('doc-preview-frame').src = previewViewerUrl.href;
         document.getElementById('doc-preview-open-link').href = verificationObjectUrl;
-        document.getElementById('doc-page-count').textContent =
-            estimatedPages + (estimatedPages === 1 ? ' Page' : ' Pages');
+        document.getElementById('doc-page-count').textContent = file.name;
+        document.getElementById('doc-page-count').title = file.name;
 
         const totalTime = 12000 + ((estimatedPages - 1) * 2000);
 
@@ -1680,6 +1715,21 @@ document.getElementById('verify-form').addEventListener('submit', function(e) {
     }
 });
 
+function openCloseResultModal() {
+    const modal = document.getElementById('close-result-modal');
+    modal.classList.add('active');
+    modal.querySelector('.btn-outline').focus();
+}
+
+function closeCloseResultModal(event) {
+    if (event && event.target !== event.currentTarget) return;
+    document.getElementById('close-result-modal').classList.remove('active');
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeCloseResultModal();
+});
+
 if (hasResult) {
     document.getElementById('upload-card').style.display = 'none';
     document.getElementById('verify-page-header').style.display = 'none';
@@ -1702,11 +1752,15 @@ if (hasResult) {
     statusPanel.appendChild(resultSection);
     resultSection.style.display = 'flex';
 
-    document.getElementById('doc-page-count').textContent = 'Uploaded document';
+    const resultFilename = "{{ verify_filename|default:''|escapejs }}";
+    document.getElementById('doc-page-count').textContent = resultFilename || 'Uploaded document';
+    document.getElementById('doc-page-count').title = resultFilename;
     const resultPreviewUrl = "{{ verify_preview_url|default:''|escapejs }}";
     if (resultPreviewUrl) {
         const resultViewerUrl = new URL(sealGuardPdfFrameUrl(resultPreviewUrl + '#toolbar=0&navpanes=0&scrollbar=1&view=FitH'), location.href);
         resultViewerUrl.searchParams.set('hide_sidebar', '1');
+        resultViewerUrl.searchParams.set('hide_close', '1');
+        if (resultFilename) resultViewerUrl.searchParams.set('title', resultFilename.replace(/\.pdf$/i, ''));
         document.getElementById('doc-preview-frame').src = resultViewerUrl.href;
         document.getElementById('doc-preview-open-link').href = resultPreviewUrl;
     }

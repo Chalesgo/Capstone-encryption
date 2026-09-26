@@ -227,6 +227,7 @@ def approval_queue(request):
         entry = get_object_or_404(DocumentAccessRequest, pk=entry_id)
         status = entry.status
         entries = DocumentAccessRequest.objects.filter(pk=entry.pk).select_related('link__contract', 'reviewed_by', 'approved_version')
+    log_activity(request, 'viewed', note=f'PDF access request queue viewed; status={status}')
     return render(request, 'access/queue.html', {'entries': Paginator(entries, 25).get_page(request.GET.get('page')), 'status': status})
 
 
