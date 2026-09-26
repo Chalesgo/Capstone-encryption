@@ -52,3 +52,13 @@ services:
         value: django.core.mail.backends.console.EmailBackend
       - key: DEFAULT_FROM_EMAIL
         value: test@example.com
+      # Optional authenticated n8n email delivery; configure the URL and secret
+      # in Render, and keep the secret out of source control.
+      - key: N8N_EMAIL_WEBHOOK_URL
+        sync: false
+      - key: N8N_EMAIL_WEBHOOK_HEADER
+        value: X-SealGuard-Webhook
+      - key: N8N_EMAIL_WEBHOOK_SECRET
+        sync: false
+      - key: N8N_EMAIL_WEBHOOK_TIMEOUT
+        value: "10"
