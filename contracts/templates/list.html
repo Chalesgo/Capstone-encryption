@@ -842,7 +842,7 @@
   .version-chain-icon.valid { background: #27c485; }
   .version-chain-icon.invalid { background: #e53e3e; }
   .version-chain-icon.pending { background: #889aab; }
-  .version-chain-icon.pending { line-height: 1; padding-bottom: 2px; box-sizing: border-box; }
+  .version-chain-icon svg { display: block; width: 10px; height: auto; }
   .version-item-title { font-size: 12.5px; font-weight: 500; color: #2d3a47; }
   .version-item-date { font-size: 11px; color: #889aab; margin-top: 1px; }
   .version-item-account { font-size: 11px; color: #60758a; margin-top: 2px; }
@@ -1976,8 +1976,8 @@ function openPdfPreview(contractId, url, title, forceDetails = false, downloadUr
           viewPdfVersion(v.preview_url, item, downloadName, v.file_url);
         };
         item.innerHTML = `
-          <span class="version-chain-icon ${v.valid === true ? 'valid' : v.valid === false ? 'invalid' : 'pending'}" title="${v.valid === true ? 'Chain verified' : v.valid === false ? 'Chain broken — this version does not match the expected fingerprint' : 'Integrity not checked yet, please wait for the integrity scan to finish'}">
-            ${v.valid === true ? '✓' : v.valid === false ? '✕' : '…'}
+          <span class="version-chain-icon ${v.valid === true ? 'valid' : v.valid === false ? 'invalid' : 'pending'}" title="${v.valid === true ? 'Chain verified' : v.valid === false ? 'Chain broken — this version does not match the expected fingerprint' : 'Integrity not checked yet, please wait for the integrity scan to finish'}&#10;Last checked: ${v.integrity_checked_at || 'Never'}">
+            ${v.valid === true ? '✓' : v.valid === false ? '✕' : '<svg viewBox="0 0 12 4" aria-hidden="true"><circle cx="2" cy="2" r="1.4" fill="currentColor"/><circle cx="6" cy="2" r="1.4" fill="currentColor"/><circle cx="10" cy="2" r="1.4" fill="currentColor"/></svg>'}
           </span>
           <div>
             <div class="version-item-title">v${v.version_number} — ${v.source}${v.is_current ? ' (Current)' : ''}</div>

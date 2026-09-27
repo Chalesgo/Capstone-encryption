@@ -6,7 +6,7 @@ from django.core.cache import cache
 from django.db import close_old_connections
 from django.utils import timezone
 
-from contracts.models import AuditLog, Contract
+from contracts.models import AuditLog, Contract, ContractVersion
 from contracts.utils import verify_version_chain
 from contracts.integrity import (
     INTEGRITY_CACHE_SECONDS, INTEGRITY_RESULT_CACHE_PREFIX,
@@ -92,6 +92,20 @@ class Command(BaseCommand):
             if result_cache_keys:
                 cache.delete_many(result_cache_keys)
 
+        def record_results(versions, chain_by_version, pointer_ok):
+            """Persist each version's outcome for the revision-history icons."""
+            checked_at = timezone.now()
+            latest = versions[-1] if versions else None
+            for version in versions:
+                result = chain_by_version.get(version.version_number)
+                passed = bool(result and result.get('valid'))
+                if version is latest and not pointer_ok:
+                    passed = False
+                ContractVersion.objects.filter(pk=version.pk).update(
+                    integrity_status='valid' if passed else 'invalid',
+                    integrity_checked_at=checked_at,
+                )
+
         def register_failure(contract, version, reason):
             failure_key = (contract.id, version, reason)
             if failure_key in failure_keys:
@@ -173,7 +187,9 @@ class Command(BaseCommand):
                     )
 
             latest = versions[-1] if versions else None
-            if contract.file and latest and contract.file.name != latest.file.name:
+            pointer_ok = not (contract.file and latest and contract.file.name != latest.file.name)
+            record_results(versions, chain_by_version, pointer_ok)
+            if not pointer_ok:
                 debug_lines.append(
                     f'Document "{title}": validating the current document file '
                     f'pointer against latest version v{latest.version_number}.'
@@ -234,7 +250,9 @@ class Command(BaseCommand):
                         'Version fingerprint or previous-version link failed',
                     )
             latest = versions[-1] if versions else None
-            if contract.file and latest and contract.file.name != latest.file.name:
+            pointer_ok = not (contract.file and latest and contract.file.name != latest.file.name)
+            record_results(versions, chain_by_version, pointer_ok)
+            if not pointer_ok:
                 register_failure(
                     contract, latest.version_number,
                     'Current contract file does not point to its latest version',

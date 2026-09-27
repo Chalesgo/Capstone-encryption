@@ -1383,10 +1383,9 @@ def contract_version_history(request, contract_id):
     versions_qs = contract.versions.select_related('created_by').order_by('-version_number')
     versions = list(versions_qs)
     versions_loaded_ms = round((time.perf_counter() - started_at) * 1000)
-    # Integrity verification is performed by the startup/daily scanner. Keep
-    # PDF viewing limited to metadata so opening a document never waits for a
-    # full revision-chain recomputation.
-    chain = []
+    # Integrity verification is performed by the startup/daily scanner, which
+    # stores each version's last result. Viewing only reads that result, so
+    # opening a document never waits for a full revision-chain recomputation.
     chain_ms = 0
     _process_log(
         'pdf_view', 'version_history_data_loaded', contract=contract, request=request,
@@ -1394,11 +1393,8 @@ def contract_version_history(request, contract_id):
         contract_loaded_ms=contract_loaded_ms, versions_loaded_ms=versions_loaded_ms,
         integrity_chain_ms=chain_ms, integrity_check_deferred=True,
     )
-    chain_by_version = {c['version_number']: c for c in chain}
-
     versions_data = []
     for v in versions:
-        chain_info = chain_by_version.get(v.version_number, {})
         versions_data.append({
             'version_number': v.version_number,
             'source': v.get_source_display(),
@@ -1406,7 +1402,12 @@ def contract_version_history(request, contract_id):
             'created_by': v.created_by.username if v.created_by else 'Unknown account',
             'file_url': reverse('download_contract_version', args=[v.id]) if v.file else '',
             'preview_url': reverse('preview_contract_version', args=[v.id]) if v.file else '',
-            'valid': chain_info.get('valid'),
+            # True/False once scanned; None means not checked yet.
+            'valid': {'valid': True, 'invalid': False}.get(v.integrity_status),
+            'integrity_checked_at': (
+                timezone.localtime(v.integrity_checked_at).strftime('%b %d, %Y %I:%M %p')
+                if v.integrity_checked_at else None
+            ),
             'is_current': bool(contract.file) and v.file.name == contract.file.name,
         })
 

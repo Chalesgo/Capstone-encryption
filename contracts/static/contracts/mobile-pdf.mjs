@@ -10,18 +10,22 @@ let pdf, bytes, loadingTask, filename = 'document.pdf';
 let pageNumber = 1, zoom = 1, painting = false, scheduled = false, paintPending = false, pinch = null;
 let versionsLoading = false, versionsLoaded = false;
 const integrityIcons = new Map();
+// Drawn dots stay centred in the badge; a text ellipsis sits on the baseline.
+const PENDING_DOTS = '<svg viewBox="0 0 12 4" aria-hidden="true"><circle cx="2" cy="2" r="1.4" fill="currentColor"/><circle cx="6" cy="2" r="1.4" fill="currentColor"/><circle cx="10" cy="2" r="1.4" fill="currentColor"/></svg>';
 const viewerStartedAt = performance.now();
 const pdfDebug = (stage, details = {}) => console.info('[SealGuard PDF]', stage, {
   ...details, elapsed_ms: Math.round(performance.now() - viewerStartedAt),
 });
 
-function setIntegrityIcon(icon, valid, pending = false) {
+function setIntegrityIcon(icon, valid, checkedAt = null) {
   const state = valid === true ? 'valid' : valid === false ? 'invalid' : 'pending';
-  const description = valid === true ? 'Integrity check passed' : valid === false
+  const status = valid === true ? 'Integrity check passed' : valid === false
     ? 'Integrity check failed: fingerprint or previous-version link mismatch, or file unreadable'
-    : pending ? 'Checking version integrity' : 'Integrity not checked';
+    : 'Integrity not checked yet. Run an integrity scan from the dashboard.';
+  const description = status + '\nLast checked: ' + (checkedAt || 'Never');
   icon.className = 'version-integrity-icon ' + state;
-  icon.textContent = valid === true ? '✓' : valid === false ? '✕' : '…';
+  if (valid === null) icon.innerHTML = PENDING_DOTS;
+  else icon.textContent = valid ? '✓' : '✕';
   icon.title = description;
   icon.setAttribute('aria-label', description);
 }
@@ -139,7 +143,7 @@ async function loadVersions() {
       button.setAttribute('aria-current', String(selected));
       const icon = document.createElement('span');
       icon.setAttribute('role', 'img');
-      setIntegrityIcon(icon, null);
+      setIntegrityIcon(icon, version.valid ?? null, version.integrity_checked_at);
       integrityIcons.set(version.version_number, icon);
       const details = document.createElement('div');
       details.className = 'version-option-details';

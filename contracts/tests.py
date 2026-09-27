@@ -92,6 +92,27 @@ class AuditLogTests(TestCase):
         ).exists())
         verify_chain.assert_called_once_with(self.contract)
 
+    @patch('contracts.management.commands.verify_integrity.verify_version_chain')
+    def test_integrity_scan_saves_result_for_revision_history(self, verify_chain):
+        passed = ContractVersion.objects.create(
+            contract=self.contract, version_number=1, file=self.contract.file.name,
+        )
+        failed = ContractVersion.objects.create(
+            contract=self.contract, version_number=2, file=self.contract.file.name,
+        )
+        verify_chain.return_value = [
+            {'version_number': 1, 'valid': True},
+            {'version_number': 2, 'valid': False},
+        ]
+
+        call_command('verify_integrity', stdout=StringIO(), stderr=StringIO())
+
+        passed.refresh_from_db()
+        failed.refresh_from_db()
+        self.assertEqual(passed.integrity_status, 'valid')
+        self.assertEqual(failed.integrity_status, 'invalid')
+        self.assertIsNotNone(passed.integrity_checked_at)
+
     def test_document_title_survives_permanent_deletion(self):
         request = RequestFactory().post('/')
         request.user = self.user

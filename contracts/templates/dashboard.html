@@ -470,7 +470,7 @@
   .audit-version-icon { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #27c485; color: #fff; font-size: 11px; font-weight: 700; flex-shrink: 0; }
   .audit-version-item.invalid .audit-version-icon { background: #e53e3e; }
   .audit-version-item.pending .audit-version-icon { background: #889aab; }
-  .audit-version-item.pending .audit-version-icon { line-height: 1; padding-bottom: 2px; box-sizing: border-box; }
+  .audit-version-icon svg { display: block; width: 11px; height: auto; }
   .audit-version-meta { min-width: 0; }
   .audit-version-label { display: block; font-size: 12.5px; font-weight: 600; }
   .audit-version-date { display: block; margin-top: 1px; color: #889aab; font-size: 11px; }
@@ -1286,7 +1286,8 @@ function loadAuditVersions(contractId, selectedVersion) {
         item.type = 'button';
         item.className = 'audit-version-item' + (version.valid === false ? ' invalid' : version.valid === null ? ' pending' : '') + (version.version_number === activeVersion ? ' active' : '');
         const integrityTitle = version.valid === true ? 'Integrity check passed' : version.valid === false ? 'Integrity check failed' : 'Integrity not checked yet, please wait for the integrity scan to finish';
-        item.innerHTML = '<span class="audit-version-icon" title="' + integrityTitle + '">' + (version.valid === true ? '✓' : version.valid === false ? '!' : '…') + '</span><span class="audit-version-meta"><span class="audit-version-label">Version ' + version.version_number + (version.is_current ? ' · Current' : '') + '</span><span class="audit-version-date">' + version.created_at + '</span><span class="audit-version-account">Added by ' + escapeAuditVersionHistoryText(version.created_by) + '</span></span>';
+        const integrityTooltip = integrityTitle + '&#10;Last checked: ' + (version.integrity_checked_at || 'Never');
+        item.innerHTML = '<span class="audit-version-icon" title="' + integrityTooltip + '">' + (version.valid === true ? '✓' : version.valid === false ? '!' : '<svg viewBox="0 0 12 4" aria-hidden="true"><circle cx="2" cy="2" r="1.4" fill="currentColor"/><circle cx="6" cy="2" r="1.4" fill="currentColor"/><circle cx="10" cy="2" r="1.4" fill="currentColor"/></svg>') + '</span><span class="audit-version-meta"><span class="audit-version-label">Version ' + version.version_number + (version.is_current ? ' · Current' : '') + '</span><span class="audit-version-date">' + version.created_at + '</span><span class="audit-version-account">Added by ' + escapeAuditVersionHistoryText(version.created_by) + '</span></span>';
         item.addEventListener('click', function() {
           document.getElementById('audit-pdf-activity-uploader').textContent = version.created_by || 'Unknown account';
           const versionUrl = version.preview_url || version.file_url;
