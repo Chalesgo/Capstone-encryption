@@ -2,6 +2,7 @@
   position: fixed; top: 8px; right: 18px; z-index: 20000;
   color: #334455; font: 13px/1.5 'DM Sans', system-ui, sans-serif;
 }
+#sg-display-size[hidden] { display: none !important; }
 #sg-display-size summary {
   display: grid; place-items: center; list-style: none; cursor: pointer;
   width: 42px; height: 42px; border: 1px solid #dfe3e8; border-radius: 12px;

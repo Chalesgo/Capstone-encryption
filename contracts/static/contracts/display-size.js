@@ -24,6 +24,8 @@
     if (event.key === key || event.key === null) apply(event.newValue);
   });
   document.addEventListener('DOMContentLoaded', () => {
+    // The standalone PDF viewer keeps its own corner actions where this button sits.
+    if (document.documentElement.hasAttribute('data-sg-pdf-viewer')) return;
     const slot = document.querySelector('[data-display-size-slot]');
     const adminTools = document.getElementById('user-tools');
     const control = document.createElement(slot ? 'section' : 'details');
@@ -58,6 +60,33 @@
           control.querySelector('summary').focus();
         }
       });
+      // Step aside while a PDF viewer is on screen so its close/download
+      // buttons in the same corner stay reachable.
+      const viewerOnScreen = frame => {
+        if (!/mobile-pdf\.html/.test(frame.getAttribute('src') || '')) return false;
+        const box = frame.getBoundingClientRect();
+        return box.width > 0 && box.height > 0 && box.left < innerWidth && box.right > 0
+          && box.top < innerHeight && box.bottom > 0;
+      };
+      let pending = false;
+      const sync = () => {
+        if (pending) return;
+        pending = true;
+        requestAnimationFrame(() => {
+          pending = false;
+          const viewerOpen = [...document.querySelectorAll('iframe')].some(viewerOnScreen);
+          if (viewerOpen === control.hidden) return;
+          if (viewerOpen) control.open = false;
+          control.hidden = viewerOpen;
+        });
+      };
+      new MutationObserver(sync).observe(document.body, {
+        subtree: true, childList: true,
+        attributes: true, attributeFilter: ['src', 'class', 'style', 'hidden', 'aria-hidden'],
+      });
+      ['transitionend', 'animationend'].forEach(type => document.addEventListener(type, sync, true));
+      window.addEventListener('resize', sync);
+      sync();
     }
   });
 })();

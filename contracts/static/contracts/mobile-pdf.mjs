@@ -207,8 +207,13 @@ function controls() {
   get('next').disabled = !pdf || pageNumber >= records.length;
   get('page-label').textContent = pdf ? 'Page ' + pageNumber + ' of ' + pdf.numPages : 'Loading pages…';
 }
+// Space kept clear above (corner actions) and below (floating page controls)
+// so a whole page fits on screen at zoom 1.
+const PAGE_TOP_GAP = 64, PAGE_BOTTOM_GAP = 84;
 function layout() {
-  const width = Math.max(160, scroller.clientWidth - 24) * zoom;
+  const tallest = Math.max(...records.map(record => record.ratio), 1);
+  const fitHeight = (scroller.clientHeight - PAGE_TOP_GAP - PAGE_BOTTOM_GAP) / tallest;
+  const width = Math.max(160, Math.min(scroller.clientWidth - 24, fitHeight)) * zoom;
   stack.style.width = width + 'px';
   for (const record of records) {
     record.box.style.width = width + 'px';
@@ -270,7 +275,7 @@ async function paint() {
 scroller.addEventListener('scroll', schedulePaint, {passive:true});
 function goPage(number) {
   const record = records[number - 1];
-  if (record) scroller.scrollTo({top:record.box.offsetTop + stack.offsetTop - 12, behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'});
+  if (record) scroller.scrollTo({top:record.box.offsetTop + stack.offsetTop - PAGE_TOP_GAP, behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'});
 }
 get('previous').onclick = () => goPage(Math.max(1, pageNumber - 1));
 get('next').onclick = () => goPage(Math.min(records.length, pageNumber + 1));
