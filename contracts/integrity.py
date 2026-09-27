@@ -3,8 +3,10 @@
 from .process_memory import process_memory_mb
 
 
-# Keep at least 212 MiB of headroom below Render's 512 MiB service limit.
-INTEGRITY_SCAN_MEMORY_LIMIT_MB = 300
+# Keep about 112 MiB below Render's 512 MiB service limit. Container overhead
+# is higher than the Gunicorn worker RSS, so both readings have separate caps.
+INTEGRITY_SCAN_PROCESS_LIMIT_MB = 250
+INTEGRITY_SCAN_CONTAINER_LIMIT_MB = 400
 
 
 class IntegrityMemoryLimitExceeded(Exception):
@@ -13,13 +15,19 @@ class IntegrityMemoryLimitExceeded(Exception):
 
 def guard_integrity_scan_memory():
     memory = process_memory_mb()
-    observed = max(memory.get('vmrss', 0), memory.get('cgroup_current_mb', 0))
-    if observed and observed >= INTEGRITY_SCAN_MEMORY_LIMIT_MB:
+    process_rss = memory.get('vmrss', 0)
+    container_memory = memory.get('cgroup_current_mb', 0)
+    if process_rss >= INTEGRITY_SCAN_PROCESS_LIMIT_MB:
         raise IntegrityMemoryLimitExceeded(
-            f'Integrity check paused at {observed:.1f} MiB; '
-            f'configured ceiling is {INTEGRITY_SCAN_MEMORY_LIMIT_MB} MiB.'
+            f'Integrity check paused: app process is using {process_rss:.1f} MiB '
+            f'(limit {INTEGRITY_SCAN_PROCESS_LIMIT_MB} MiB).'
         )
-    return observed
+    if container_memory >= INTEGRITY_SCAN_CONTAINER_LIMIT_MB:
+        raise IntegrityMemoryLimitExceeded(
+            f'Integrity check paused: service container is using {container_memory:.1f} MiB '
+            f'(limit {INTEGRITY_SCAN_CONTAINER_LIMIT_MB} MiB).'
+        )
+    return memory
 
 INTEGRITY_SCAN_CACHE_KEY = 'sealguard:integrity-scan:control'
 INTEGRITY_SCAN_LOCK_KEY = 'sealguard:integrity-scan:lock'

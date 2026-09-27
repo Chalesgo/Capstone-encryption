@@ -1,5 +1,6 @@
 from .pdf_storage import open_pdf, read_pdf, write_pdf, pdf_storage
 from .integrity import IntegrityMemoryLimitExceeded, guard_integrity_scan_memory
+from .process_memory import process_memory_mb, release_process_memory
 #views.py 
 from django.shortcuts import render, redirect, get_object_or_404
 from .access import (can_view, can_download, can_share, can_manage, is_admin, is_read_only_user,
@@ -1441,29 +1442,59 @@ def check_contract_version_integrity(request, contract_id):
     previous = contract.versions.filter(version_number__lt=version_number).order_by('-version_number').first()
     expected_previous = previous.fingerprint if previous else ''
     valid = False
+    check_started_at = time.perf_counter()
+    phase = 'initial_memory_guard'
+    logger.info(
+        'integrity_version_check_started contract_id=%s version=%s memory_mb=%s',
+        contract_id, version_number, process_memory_mb(),
+    )
     try:
         guard_integrity_scan_memory()
         link_valid = version.previous_fingerprint == expected_previous
+        phase = 'canonical_fingerprint'
+        canonical_started_at = time.perf_counter()
         recomputed = generate_canonical_fingerprint(
             version.file.path, previous_cf=expected_previous or None,
             memory_guard=guard_integrity_scan_memory,
         )
+        logger.info(
+            'integrity_version_check_stage_completed contract_id=%s version=%s stage=%s '
+            'elapsed_ms=%s memory_mb=%s',
+            contract_id, version_number, phase,
+            round((time.perf_counter() - canonical_started_at) * 1000), process_memory_mb(),
+        )
+        phase = 'vector_fingerprint'
+        vector_started_at = time.perf_counter()
         vector_valid = not version.vector_fingerprint or compare_digest(
             generate_vector_fingerprint(version.file.path, memory_guard=guard_integrity_scan_memory),
             version.vector_fingerprint,
         )
         valid = link_valid and compare_digest(recomputed, version.fingerprint) and vector_valid
+        logger.info(
+            'integrity_version_check_stage_completed contract_id=%s version=%s stage=%s '
+            'elapsed_ms=%s memory_mb=%s',
+            contract_id, version_number, phase,
+            round((time.perf_counter() - vector_started_at) * 1000), process_memory_mb(),
+        )
     except IntegrityMemoryLimitExceeded as exc:
         logger.warning(
-            'Per-document integrity check paused for memory headroom; contract_id=%s version=%s detail=%s',
-            contract_id, version_number, exc,
+            'integrity_version_check_paused contract_id=%s version=%s phase=%s elapsed_ms=%s '
+            'memory_mb=%s detail=%s',
+            contract_id, version_number, phase,
+            round((time.perf_counter() - check_started_at) * 1000), process_memory_mb(), exc,
         )
         return JsonResponse({
             'success': False, 'paused': True,
-            'error': 'Integrity check paused to protect server memory. Reopen the PDF and retry when memory is lower.',
+            'error': str(exc) + ' No integrity result was recorded; retry after service memory drops.',
         }, status=503)
     except Exception:
-        logger.exception('Per-document integrity check failed for contract_id=%s version=%s', contract_id, version_number)
+        logger.exception(
+            'integrity_version_check_failed contract_id=%s version=%s phase=%s elapsed_ms=%s memory_mb=%s',
+            contract_id, version_number, phase,
+            round((time.perf_counter() - check_started_at) * 1000), process_memory_mb(),
+        )
+    finally:
+        release_process_memory()
 
     if version.version_number == contract.versions.order_by('-version_number').values_list('version_number', flat=True).first():
         if contract.file and contract.file.name != version.file.name:
@@ -1471,6 +1502,11 @@ def check_contract_version_integrity(request, contract_id):
     version.integrity_status = 'valid' if valid else 'invalid'
     version.integrity_checked_at = timezone.now()
     version.save(update_fields=['integrity_status', 'integrity_checked_at'])
+    logger.info(
+        'integrity_version_check_completed contract_id=%s version=%s valid=%s elapsed_ms=%s memory_mb=%s',
+        contract_id, version_number, valid,
+        round((time.perf_counter() - check_started_at) * 1000), process_memory_mb(),
+    )
     return JsonResponse({
         'success': True, 'version_number': version_number, 'valid': valid,
         'integrity_checked_at': timezone.localtime(version.integrity_checked_at).strftime('%b %d, %Y %I:%M %p'),
@@ -1485,8 +1521,12 @@ def reset_contract_integrity(request, contract_id):
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'POST required'}, status=405)
     contract = get_object_or_404(Contract, pk=contract_id)
-    contract.versions.update(integrity_status='', integrity_checked_at=None)
-    return JsonResponse({'success': True})
+    reset_count = contract.versions.update(integrity_status='', integrity_checked_at=None)
+    logger.info(
+        'integrity_version_checks_reset contract_id=%s user_id=%s version_count=%s memory_mb=%s',
+        contract_id, request.user.pk, reset_count, process_memory_mb(),
+    )
+    return JsonResponse({'success': True, 'reset_count': reset_count})
 
 def _verification_preview_path(token):
     if not token or not re.fullmatch(r'[0-9a-f]{32}', token):

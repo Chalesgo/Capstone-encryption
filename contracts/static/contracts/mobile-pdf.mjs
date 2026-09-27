@@ -89,8 +89,8 @@ get('run-integrity-scan').onclick = async () => {
   try {
     if (window.parent === window || typeof window.parent.runDocumentIntegrityScan !== 'function') throw new Error();
     await window.parent.runDocumentIntegrityScan(contractId, true);
-  } catch (_) {
-    get('version-message').textContent = 'Integrity scan could not be completed. Please try again.';
+  } catch (error) {
+    get('version-message').textContent = error.message || 'Integrity scan could not be completed. Please try again.';
   } finally { button.disabled = false; }
 };
 document.addEventListener('keydown', event => {
@@ -191,8 +191,8 @@ async function loadVersions() {
     versionsLoaded = true;
     get('version-message').textContent = data.versions.length ? '' : 'No saved versions available.';
     if (window.parent !== window && typeof window.parent.runDocumentIntegrityScan === 'function') {
-      window.parent.runDocumentIntegrityScan(contractId).catch(() => {
-        get('version-message').textContent = 'Integrity scan stopped. Revisions checked so far remain saved.';
+      window.parent.runDocumentIntegrityScan(contractId).catch(error => {
+        get('version-message').textContent = error.message || 'Integrity scan stopped. Revisions checked so far remain saved.';
       });
       window.parent.addEventListener('sealguard-integrity-updated', event => {
         const result = event.detail;
