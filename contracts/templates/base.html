@@ -1044,7 +1044,12 @@ window.runDocumentIntegrityScan = async function(contractId, reset = false) {
       method: 'POST', credentials: 'same-origin', headers,
       body: JSON.stringify({version_number: version.version_number})
     });
-    if (!response.ok) throw new Error('Integrity check stopped at revision ' + version.version_number);
+    if (!response.ok) {
+      let failure = {};
+      try { failure = await response.json(); } catch (_) {}
+      if (failure.paused) window.dispatchEvent(new CustomEvent('sealguard-integrity-paused', {detail: {contractId: id, message: failure.error}}));
+      throw new Error(failure.error || 'Integrity check stopped at revision ' + version.version_number);
+    }
     const result = await response.json();
     window.dispatchEvent(new CustomEvent('sealguard-integrity-updated', {detail: {contractId: id, ...result}}));
     const progress = Math.round(((index + 1) / Math.max(versions.length, 1)) * 100);

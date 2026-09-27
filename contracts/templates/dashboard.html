@@ -1257,6 +1257,12 @@ window.addEventListener('sealguard-integrity-progress', function(event) {
   progress.style.display = event.detail.completed >= event.detail.total ? 'none' : 'block';
   progress.textContent = 'Checking revisions ' + event.detail.completed + ' of ' + event.detail.total + '…';
 });
+window.addEventListener('sealguard-integrity-paused', function(event) {
+  const progress = document.getElementById('audit-pdf-integrity-progress');
+  if (!progress || String(event.detail.contractId) !== String(window.dashboardActiveIntegrityContractId)) return;
+  progress.style.display = 'block';
+  progress.textContent = event.detail.message;
+});
 
 function escapeAuditVersionHistoryText(value) {
   return String(value == null ? '' : value).replace(/[&<>"']/g, function(character) {

@@ -1,4 +1,5 @@
 from .pdf_storage import open_pdf, read_pdf, write_pdf, pdf_storage
+from .integrity import IntegrityMemoryLimitExceeded, guard_integrity_scan_memory
 #views.py 
 from django.shortcuts import render, redirect, get_object_or_404
 from .access import (can_view, can_download, can_share, can_manage, is_admin, is_read_only_user,
@@ -1441,14 +1442,26 @@ def check_contract_version_integrity(request, contract_id):
     expected_previous = previous.fingerprint if previous else ''
     valid = False
     try:
+        guard_integrity_scan_memory()
         link_valid = version.previous_fingerprint == expected_previous
         recomputed = generate_canonical_fingerprint(
             version.file.path, previous_cf=expected_previous or None,
+            memory_guard=guard_integrity_scan_memory,
         )
         vector_valid = not version.vector_fingerprint or compare_digest(
-            generate_vector_fingerprint(version.file.path), version.vector_fingerprint,
+            generate_vector_fingerprint(version.file.path, memory_guard=guard_integrity_scan_memory),
+            version.vector_fingerprint,
         )
         valid = link_valid and compare_digest(recomputed, version.fingerprint) and vector_valid
+    except IntegrityMemoryLimitExceeded as exc:
+        logger.warning(
+            'Per-document integrity check paused for memory headroom; contract_id=%s version=%s detail=%s',
+            contract_id, version_number, exc,
+        )
+        return JsonResponse({
+            'success': False, 'paused': True,
+            'error': 'Integrity check paused to protect server memory. Reopen the PDF and retry when memory is lower.',
+        }, status=503)
     except Exception:
         logger.exception('Per-document integrity check failed for contract_id=%s version=%s', contract_id, version_number)
 

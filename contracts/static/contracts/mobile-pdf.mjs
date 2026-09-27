@@ -205,6 +205,10 @@ async function loadVersions() {
         get('version-message').textContent = event.detail.completed >= event.detail.total
           ? '' : 'Checking revisions ' + event.detail.completed + ' of ' + event.detail.total + '…';
       });
+      window.parent.addEventListener('sealguard-integrity-paused', event => {
+        if (String(event.detail.contractId) !== String(contractId)) return;
+        get('version-message').textContent = event.detail.message;
+      });
     }
   } catch (_) {
     pdfDebug('version_metadata_failed', {contract_id: contractId, duration_ms: Math.round(performance.now() - startedAt)});

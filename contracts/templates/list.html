@@ -2012,6 +2012,12 @@ window.addEventListener('sealguard-integrity-progress', function(event) {
   progress.style.display = event.detail.completed >= event.detail.total ? 'none' : 'block';
   progress.textContent = 'Checking revisions ' + event.detail.completed + ' of ' + event.detail.total + '…';
 });
+window.addEventListener('sealguard-integrity-paused', function(event) {
+  const progress = document.getElementById('pdf-integrity-progress');
+  if (!progress || String(event.detail.contractId) !== String(activePdfContractId)) return;
+  progress.style.display = 'block';
+  progress.textContent = event.detail.message;
+});
 
 function handleDocumentCellClick(event, contractId) {
   if (event.defaultPrevented) return;

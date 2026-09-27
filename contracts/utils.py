@@ -1,4 +1,5 @@
 from .pdf_storage import open_pdf, read_pdf, write_pdf
+from .integrity import guard_integrity_scan_memory
 import hashlib
 import hmac as hmac_lib
 import fitz
@@ -20,7 +21,7 @@ def generate_file_hash(file):
     return sha256.hexdigest()
 
 # ─── Canonical Fingerprint ─────────────────────────────────
-def generate_canonical_fingerprint(pdf_path, previous_cf=None):
+def generate_canonical_fingerprint(pdf_path, previous_cf=None, memory_guard=None):
     """
     Generates CF by hashing extracted text, embedded images, and metadata.
 
@@ -33,29 +34,32 @@ def generate_canonical_fingerprint(pdf_path, previous_cf=None):
     (hash-chained version history — tampering with an earlier version
     breaks the chain for every version after it).
     """
+    guard = memory_guard or (lambda: None)
+    guard()
     doc = open_pdf(pdf_path)
-    combined = ""
+    combined_hash = hashlib.sha256()
+    try:
+        for page in doc:
+            guard()
+            text = page.get_text().strip().lower()
+            guard()
+            combined_hash.update(hashlib.sha256(text.encode()).hexdigest().encode())
 
-    for page in doc:
-        # h_text
-        text = page.get_text().strip().lower()
-        combined += hashlib.sha256(text.encode()).hexdigest()
+            for img in page.get_images(full=True):
+                guard()
+                base_image = doc.extract_image(img[0])
+                guard()
+                combined_hash.update(hashlib.sha256(base_image["image"]).hexdigest().encode())
 
-        # h_images
-        for img in page.get_images(full=True):
-            xref = img[0]
-            base_image = doc.extract_image(xref)
-            combined += hashlib.sha256(base_image["image"]).hexdigest()
-
-    # h_metadata
-    combined += hashlib.sha256(str(doc.metadata).encode()).hexdigest()
-    doc.close()
+        guard()
+        combined_hash.update(hashlib.sha256(str(doc.metadata).encode()).hexdigest().encode())
+    finally:
+        doc.close()
 
     if previous_cf:
-        combined += previous_cf
-
-    cf = hashlib.sha256(combined.encode()).hexdigest()
-    return cf
+        combined_hash.update(previous_cf.encode())
+    guard()
+    return combined_hash.hexdigest()
 
 
 def _normalize_vector_value(value):
@@ -80,16 +84,34 @@ def _normalize_vector_value(value):
     return str(value)
 
 
-def generate_vector_fingerprint(pdf_path):
+def generate_vector_fingerprint(pdf_path, memory_guard=None):
     """Hash normalized vector drawing commands for strict editor/tamper detection."""
+    guard = memory_guard or (lambda: None)
+    guard()
     document = open_pdf(pdf_path)
     try:
-        pages = []
+        digest = hashlib.sha256()
+        digest.update(b'[')
         for page_number, page in enumerate(document):
-            drawings = [_normalize_vector_value(drawing) for drawing in page.get_drawings()]
-            pages.append({'page': page_number, 'drawings': drawings})
-        serialized = json.dumps(pages, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
-        return hashlib.sha256(serialized.encode('utf-8')).hexdigest()
+            guard()
+            drawings = page.get_drawings()
+            guard()
+            normalized = []
+            for drawing_index, drawing in enumerate(drawings):
+                if drawing_index % 64 == 0:
+                    guard()
+                normalized.append(_normalize_vector_value(drawing))
+            if page_number:
+                digest.update(b',')
+            serialized_page = json.dumps(
+                {'page': page_number, 'drawings': normalized},
+                sort_keys=True, separators=(',', ':'), ensure_ascii=False,
+            )
+            digest.update(serialized_page.encode('utf-8'))
+            del drawings, normalized, serialized_page
+        digest.update(b']')
+        guard()
+        return digest.hexdigest()
     finally:
         document.close()
 

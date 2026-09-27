@@ -1,5 +1,6 @@
-"""Small, dependency-free current/high-water process memory readings."""
+"""Small, dependency-free current/high-water process and cgroup memory readings."""
 import ctypes
+import gc
 import os
 
 
@@ -13,6 +14,7 @@ def process_memory_mb():
                     key, value, *_ = line.split()
                     values[key[:-1].lower()] = round(int(value) / 1024, 1)
         if values:
+            values.update(_cgroup_memory_mb())
             return values
     except (OSError, ValueError):
         pass
@@ -44,10 +46,37 @@ def process_memory_mb():
             )
             get_memory_info.restype = ctypes.c_int
             if get_memory_info(process, ctypes.byref(counters), counters.cb):
-                return {
+                values = {
                     'vmrss': round(counters.WorkingSetSize / (1024 * 1024), 1),
                     'vmhwm': round(counters.PeakWorkingSetSize / (1024 * 1024), 1),
                 }
+                values.update(_cgroup_memory_mb())
+                return values
         except (AttributeError, OSError, TypeError, ValueError):
             pass
     return {}
+
+
+def _cgroup_memory_mb():
+    """Read the container-wide memory counter when running under cgroups."""
+    for path in ('/sys/fs/cgroup/memory.current', '/sys/fs/cgroup/memory/memory.usage_in_bytes'):
+        try:
+            with open(path, encoding='ascii') as memory_file:
+                value = int(memory_file.read().strip())
+            return {'cgroup_current_mb': round(value / (1024 * 1024), 1)}
+        except (OSError, ValueError):
+            continue
+    return {}
+
+
+def release_process_memory():
+    """Collect freed scan objects and return free glibc heap pages when possible."""
+    gc.collect()
+    if os.name == 'posix':
+        try:
+            trim_heap = ctypes.CDLL(None).malloc_trim
+            trim_heap.argtypes = (ctypes.c_size_t,)
+            trim_heap.restype = ctypes.c_int
+            trim_heap(0)
+        except (AttributeError, OSError, TypeError):
+            pass
