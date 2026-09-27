@@ -1,19 +1,18 @@
-# Temporary smoke-test Blueprint for Render's Free web-service plan.
-#
-# This is intentionally separate from render-paid.yaml. Free services cannot use
-# persistent disks, so do not upload documents that must survive a restart or
-# redeploy. Use render-paid.yaml for the real disk-backed deployment.
 services:
   - type: web
-    name: sealguard-free-test
+    name: sealguard
     runtime: python
     region: singapore
-    plan: free
+    plan: 0.5c-512mb
     branch: main
     buildCommand: bash build.sh
     startCommand: bash start-render.sh
     healthCheckPath: /health/
     autoDeployTrigger: off
+    disk:
+      name: sealguard-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 25
     envVars:
       - key: SECRET_KEY
         generateValue: true
@@ -31,12 +30,6 @@ services:
         value: "True"
       - key: SESSION_COOKIE_SECURE
         value: "True"
-      # Temporary Free-tier test account. Add the values in Render's
-      # Environment page; never commit the password to this repository.
-      - key: SEALGUARD_BOOTSTRAP_USERNAME
-        sync: false
-      - key: SEALGUARD_BOOTSTRAP_PASSWORD
-        sync: false
       - key: CSRF_COOKIE_SECURE
         value: "True"
       - key: SECURE_HSTS_SECONDS
@@ -45,15 +38,22 @@ services:
         value: "True"
       - key: SECURE_HSTS_PRELOAD
         value: "True"
-      # Free Render services cannot send SMTP traffic. The console backend
-      # records the message in the app's outgoing-email log and writes it to
-      # the service log, which is sufficient for this temporary test service.
       - key: EMAIL_BACKEND
-        value: django.core.mail.backends.console.EmailBackend
+        value: django.core.mail.backends.smtp.EmailBackend
+      - key: EMAIL_HOST
+        value: smtp.gmail.com
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_USE_TLS
+        value: "True"
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
       - key: DEFAULT_FROM_EMAIL
-        value: test@example.com
-      # Optional authenticated n8n email delivery; configure the URL and secret
-      # in Render, and keep the secret out of source control.
+        sync: false
+      # Email delivery is routed through the active production n8n webhook.
+      # Keep the URL and header name configurable; never commit the secret.
       - key: N8N_EMAIL_WEBHOOK_URL
         sync: false
       - key: N8N_EMAIL_WEBHOOK_HEADER
