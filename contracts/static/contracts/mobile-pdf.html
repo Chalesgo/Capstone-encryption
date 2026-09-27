@@ -42,24 +42,13 @@
     .version-option { display:flex; align-items:center; gap:9px; width:100%; border-radius:7px; padding:10px 8px; text-align:left; border:0; margin:3px 0; }
     .version-option[aria-current="true"] { background:#edf1fd; border-color:#cbd5fa; }
     .version-option-details { min-width:0; }
+    .version-number { display:inline-flex; align-items:center; justify-content:center; width:30px; min-width:30px; height:24px; border-radius:6px; background:#e8edf5; color:#526578; font-size:10px; font-weight:700; }
     .version-option-details strong { display:block; font-size:12.5px; font-weight:500; overflow-wrap:anywhere; }
     .version-option-details span { display:block; font-size:11px; overflow-wrap:anywhere; margin-top:2px; }
     .version-option-date { color:#889aab; }
     .version-option-account { color:#60758a; }
-    .version-integrity-icon { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; flex-shrink:0; color:white; font-size:11px; font-weight:700; }
-    .version-integrity-icon.valid { background:#27c485; }
-    .version-integrity-icon.invalid { background:#e53e3e; }
-    .version-integrity-icon.pending { background:#889aab; }
-    .version-integrity-icon svg { display:block; width:10px; height:auto; }
     #version-message { margin:8px 0; color:var(--muted); }
     #retry-versions { border-radius:8px; color:var(--accent); }
-    .integrity-help { display:flex; justify-content:flex-end; margin:2px 14px 8px; }
-    #run-integrity-scan { width:28px; height:28px; min-width:28px; min-height:28px; margin-right:6px; padding:5px; border:1px solid #dfe3e8; background:#fff; color:#7d8e9e; }
-    #run-integrity-scan svg { width:16px; height:16px; display:block; }
-    #run-integrity-scan:disabled { opacity:.5; cursor:wait; }
-    #integrity-help-toggle { min-width:28px; min-height:28px; border:1px solid #dfe3e8; background:#fff; color:#7d8e9e; font-weight:700; }
-    #integrity-help-panel { margin:0 14px 8px; padding:8px 10px; border:1px solid #e3e9ef; border-radius:8px; background:#fff; color:#889aab; font-size:11px; line-height:1.5; }
-    #integrity-help-panel[hidden] { display:none; }
     #version-content { display:flex; flex-direction:column; min-height:0; }
     #sheet-versions { display:flex; flex-direction:column; min-height:0; }
     #details-backdrop { position:fixed; inset:0; z-index:4; background:#14202d66; visibility:hidden; opacity:0; transition:opacity .22s,visibility .22s; }
@@ -80,7 +69,6 @@
     #details-versions .version-option[aria-current="true"] { background:#eef2ff; }
     #details-versions .version-option-details strong { color:#2d3a47; }
     #details-versions .version-option-date { margin-top:1px; }
-    #details-versions .integrity-key { margin:0 14px 8px; }
     #details-versions #version-message { margin:0 14px 8px; font-size:12.5px; }
     #details-versions #version-message:empty { display:none; }
     #details-versions #retry-versions { margin:0 10px 8px; }
@@ -128,8 +116,6 @@
     <div class="sheet-handle" aria-hidden="true"></div>
     <div class="sheet-heading"><h2 id="version-heading">Document versions</h2><button id="close-versions" aria-label="Close versions">✕</button></div>
     <div id="sheet-versions"><div id="version-content">
-      <div class="integrity-help"><button id="run-integrity-scan" type="button" title="run integrity scan for this pdf" aria-label="run integrity scan for this pdf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 11a8 8 0 1 1-2.34-5.66L20 7"/><path d="M20 3v4h-4"/></svg></button><button id="integrity-help-toggle" type="button" aria-label="Explain integrity icons" aria-expanded="false">…</button></div>
-      <div id="integrity-help-panel" hidden>✓ Integrity passed · ✕ Check failed or file unreadable · … Not checked yet</div>
       <p id="version-message" role="status"></p>
       <button id="retry-versions" hidden>Retry</button>
       <a id="compare-revisions" hidden style="margin:12px;padding:12px;background:#edf2f8;color:#21466c;border-radius:8px;text-decoration:none;font-weight:600">Compare revisions side by side</a>
@@ -150,6 +136,6 @@
     <p class="sidebar-section-label">Version History</p>
     <div id="details-versions"></div>
   </aside>
-  <script type="module" src="mobile-pdf.mjs?v=integrity-3"></script>
+  <script type="module" src="mobile-pdf.mjs?v=revision-list-1"></script>
 </body>
 </html>

@@ -9,26 +9,10 @@ const records = [];
 let pdf, bytes, loadingTask, filename = 'document.pdf';
 let pageNumber = 1, zoom = 1, painting = false, scheduled = false, paintPending = false, pinch = null;
 let versionsLoading = false, versionsLoaded = false;
-const integrityIcons = new Map();
-// Drawn dots stay centred in the badge; a text ellipsis sits on the baseline.
-const PENDING_DOTS = '<svg viewBox="0 0 12 4" aria-hidden="true"><circle cx="2" cy="2" r="1.4" fill="currentColor"/><circle cx="6" cy="2" r="1.4" fill="currentColor"/><circle cx="10" cy="2" r="1.4" fill="currentColor"/></svg>';
 const viewerStartedAt = performance.now();
 const pdfDebug = (stage, details = {}) => console.info('[SealGuard PDF]', stage, {
   ...details, elapsed_ms: Math.round(performance.now() - viewerStartedAt),
 });
-
-function setIntegrityIcon(icon, valid, checkedAt = null) {
-  const state = valid === true ? 'valid' : valid === false ? 'invalid' : 'pending';
-  const status = valid === true ? 'Integrity check passed' : valid === false
-    ? 'Integrity check failed: fingerprint or previous-version link mismatch, or file unreadable'
-    : 'Integrity not checked yet. Run an integrity scan from the dashboard.';
-  const description = status + '\nLast checked: ' + (checkedAt || 'Never');
-  icon.className = 'version-integrity-icon ' + state;
-  if (valid === null) icon.innerHTML = PENDING_DOTS;
-  else icon.textContent = valid ? '✓' : '✕';
-  icon.title = description;
-  icon.setAttribute('aria-label', description);
-}
 
 
 function setTitle(title) {
@@ -75,24 +59,7 @@ get('details-backdrop').onclick = () => panel(null);
 get('versions-toggle').onclick = () => sheet(true);
 get('close-versions').onclick = () => sheet(false);
 get('version-backdrop').onclick = () => sheet(false);
-get('integrity-help-toggle').onclick = () => {
-  const help = get('integrity-help-panel');
-  const open = help.hidden;
-  help.hidden = !open;
-  get('integrity-help-toggle').setAttribute('aria-expanded', String(open));
-};
 get('retry-versions').onclick = () => loadVersions();
-get('run-integrity-scan').onclick = async () => {
-  const contractId = params.get('contract');
-  const button = get('run-integrity-scan');
-  button.disabled = true;
-  try {
-    if (window.parent === window || typeof window.parent.runDocumentIntegrityScan !== 'function') throw new Error();
-    await window.parent.runDocumentIntegrityScan(contractId, true);
-  } catch (error) {
-    get('version-message').textContent = error.message || 'Integrity scan could not be completed. Please try again.';
-  } finally { button.disabled = false; }
-};
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape') {
     if (document.body.classList.contains('versions-open') || document.body.classList.contains('details-open')) panel(null);
@@ -144,7 +111,6 @@ async function loadVersions() {
     const source = new URL(params.get('file'), location.origin);
     source.hash = '';
     const fragment = document.createDocumentFragment();
-    integrityIcons.clear();
     for (const version of data.versions) {
       if (!version.preview_url) continue;
       const selected = [version.preview_url, version.file_url].some(url => url && new URL(url, location.origin).href === source.href)
@@ -153,9 +119,8 @@ async function loadVersions() {
       button.className = 'version-option';
       button.setAttribute('aria-current', String(selected));
       const icon = document.createElement('span');
-      icon.setAttribute('role', 'img');
-      setIntegrityIcon(icon, version.valid ?? null, version.integrity_checked_at);
-      integrityIcons.set(version.version_number, icon);
+      icon.className = 'version-number';
+      icon.textContent = 'v' + version.version_number;
       const details = document.createElement('div');
       details.className = 'version-option-details';
       const label = document.createElement('strong');
@@ -190,26 +155,7 @@ async function loadVersions() {
     get('version-list').replaceChildren(fragment);
     versionsLoaded = true;
     get('version-message').textContent = data.versions.length ? '' : 'No saved versions available.';
-    if (window.parent !== window && typeof window.parent.runDocumentIntegrityScan === 'function') {
-      window.parent.runDocumentIntegrityScan(contractId).catch(error => {
-        get('version-message').textContent = error.message || 'Integrity scan stopped. Revisions checked so far remain saved.';
-      });
-      window.parent.addEventListener('sealguard-integrity-updated', event => {
-        const result = event.detail;
-        if (String(result.contractId) !== String(contractId)) return;
-        const icon = integrityIcons.get(result.version_number);
-        if (icon) setIntegrityIcon(icon, result.valid, result.integrity_checked_at);
-      });
-      window.parent.addEventListener('sealguard-integrity-progress', event => {
-        if (String(event.detail.contractId) !== String(contractId)) return;
-        get('version-message').textContent = event.detail.completed >= event.detail.total
-          ? '' : 'Checking revisions ' + event.detail.completed + ' of ' + event.detail.total + '…';
-      });
-      window.parent.addEventListener('sealguard-integrity-paused', event => {
-        if (String(event.detail.contractId) !== String(contractId)) return;
-        get('version-message').textContent = event.detail.message;
-      });
-    }
+
   } catch (_) {
     pdfDebug('version_metadata_failed', {contract_id: contractId, duration_ms: Math.round(performance.now() - startedAt)});
     get('version-message').textContent = 'Version history could not be loaded. Please try again.';

@@ -7,7 +7,6 @@ import io
 import os
 import tempfile
 import zipfile
-from io import StringIO
 from pathlib import Path
 from unittest import expectedFailure
 from unittest.mock import patch
@@ -18,7 +17,6 @@ from django.contrib.auth.models import Permission, User
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.cache import cache
-from django.core.management import call_command
 from django.http import HttpResponse
 from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
@@ -46,7 +44,6 @@ from .utils import (
     log_activity,
     stamp_seal_on_pdf,
     verify_hmac,
-    verify_version_chain,
 )
 
 
@@ -68,50 +65,6 @@ class AuditLogTests(TestCase):
         self.assertContains(response, 'Administration Portal')
         self.assertContains(response, 'contracts/sealguard-admin.css')
         self.assertContains(response, 'Back to SealGuard')
-
-    @patch('contracts.management.commands.verify_integrity.verify_version_chain', return_value=[])
-    def test_integrity_scan_reports_failed_version(self, verify_chain):
-        ContractVersion.objects.create(
-            contract=self.contract,
-            version_number=1,
-            file=self.contract.file.name,
-            fingerprint='stored-fingerprint',
-            previous_fingerprint='',
-        )
-
-        output = StringIO()
-        call_command('verify_integrity', stdout=output, stderr=output)
-
-        self.assertIn('1 version(s)', output.getvalue())
-        self.assertIn('1 failure(s)', output.getvalue())
-        self.assertTrue(AuditLog.objects.filter(
-            contract=self.contract,
-            action='reported_tampering',
-            verification_source='Scheduled Integrity Scan',
-            integrity_check='Failed',
-        ).exists())
-        verify_chain.assert_called_once_with(self.contract)
-
-    @patch('contracts.management.commands.verify_integrity.verify_version_chain')
-    def test_integrity_scan_saves_result_for_revision_history(self, verify_chain):
-        passed = ContractVersion.objects.create(
-            contract=self.contract, version_number=1, file=self.contract.file.name,
-        )
-        failed = ContractVersion.objects.create(
-            contract=self.contract, version_number=2, file=self.contract.file.name,
-        )
-        verify_chain.return_value = [
-            {'version_number': 1, 'valid': True},
-            {'version_number': 2, 'valid': False},
-        ]
-
-        call_command('verify_integrity', stdout=StringIO(), stderr=StringIO())
-
-        passed.refresh_from_db()
-        failed.refresh_from_db()
-        self.assertEqual(passed.integrity_status, 'valid')
-        self.assertEqual(failed.integrity_status, 'invalid')
-        self.assertIsNotNone(passed.integrity_checked_at)
 
     def test_document_title_survives_permanent_deletion(self):
         request = RequestFactory().post('/')
@@ -206,8 +159,7 @@ class AuditLogTests(TestCase):
         self.assertContains(self.client.get(reverse('contract_list')), 'Added by')
         self.assertContains(self.client.get(reverse('dashboard')), 'Added by')
 
-    @patch('contracts.views.verify_version_chain')
-    def test_mobile_version_metadata_avoids_pdf_chain_work_and_requires_login(self, verify_chain):
+    def test_mobile_version_metadata_requires_login_and_omits_scan_results(self):
         ContractVersion.objects.create(
             contract=self.contract, version_number=1, source='upload',
             file=self.contract.file.name, created_by=self.user,
@@ -220,10 +172,9 @@ class AuditLogTests(TestCase):
         data = response.json()
         self.assertEqual(data['title'], self.contract.title)
         self.assertEqual(data['versions'][0]['created_by'], self.user.username)
-        self.assertIsNone(data['versions'][0]['valid'])
-        verify_chain.assert_not_called()
+        self.assertNotIn('valid', data['versions'][0])
+        self.assertNotIn('integrity_checked_at', data['versions'][0])
         self.client.get(url)
-        verify_chain.assert_not_called()
 
     def test_dashboard_filters_activity_and_sorts_oldest_first(self):
         added = AuditLog.objects.create(action='added', document_title='First')
@@ -280,25 +231,6 @@ class AuditLogTests(TestCase):
 
         for activity in ('viewed', 'encrypted', 'approved', 'rejected'):
             self.assertContains(response, f'<option value="{activity}"')
-
-    def test_dashboard_shows_integrity_scan_activity_with_debug_log(self):
-        scan = AuditLog.objects.create(
-            action='integrity_scan',
-            document_title='Integrity Scan',
-            note='Integrity scan completed.',
-            verification_source='Scheduled Integrity Scan',
-            verification_result='Completed',
-            integrity_check='Complete',
-            verification_debug_log='Checked 12 version(s).\nDuration: 450 ms.',
-        )
-
-        self.client.force_login(self.user)
-        response = self.client.get(reverse('dashboard'), {'activity': 'integrity_scan'})
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(list(response.context['page_obj'].object_list), [scan])
-        self.assertContains(response, 'Integrity Scan')
-        self.assertContains(response, 'Checked 12 version(s).')
 
     def test_dashboard_marks_deleted_pdf_as_unavailable_with_reason(self):
         self.contract.is_trashed = True
@@ -475,31 +407,6 @@ class AuditLogTests(TestCase):
             dashboard = self.client.get(reverse('dashboard'))
             self.assertContains(dashboard, 'data-result="Unable to Verify"')
             self.assertContains(dashboard, 'Removed after verification')
-
-    @patch('contracts.utils.generate_canonical_fingerprint')
-    def test_version_chain_rejects_mismatched_previous_link(self, fingerprint):
-        ContractVersion.objects.create(
-            contract=self.contract,
-            version_number=1,
-            source='upload',
-            file='contract_versions/v1.pdf',
-            fingerprint='version-one',
-            previous_fingerprint='',
-        )
-        ContractVersion.objects.create(
-            contract=self.contract,
-            version_number=2,
-            source='revision',
-            file='contract_versions/v2.pdf',
-            fingerprint='version-two',
-            previous_fingerprint='wrong-link',
-        )
-        fingerprint.side_effect = ['version-one', 'version-two']
-
-        results = verify_version_chain(self.contract)
-
-        self.assertTrue(results[0]['valid'])
-        self.assertFalse(results[1]['valid'])
 
     def test_folder_reorder_is_persisted_for_current_user(self):
         first = Folder.objects.create(name='First', owner=self.user, sort_order=0)
@@ -1324,32 +1231,6 @@ class DocumentManagementTests(TestCase):
                 [1, 2, 3],
             )
 
-    def test_doc08_version_chain_tampering_matrix(self):
-        for number in range(10):
-            contract = self.make_contract(number, self.staff)
-            first = ContractVersion.objects.create(
-                contract=contract,
-                version_number=1,
-                source='upload',
-                file=SimpleUploadedFile(f'chain-{number}-v1.pdf', b'%PDF-chain-test'),
-                fingerprint='fingerprint-one',
-                previous_fingerprint='',
-            )
-            second = ContractVersion.objects.create(
-                contract=contract,
-                version_number=2,
-                source='revision',
-                file=SimpleUploadedFile(f'chain-{number}-v2.pdf', b'%PDF-chain-test'),
-                fingerprint='fingerprint-two',
-                previous_fingerprint='fingerprint-one',
-            )
-            second.previous_fingerprint = 'tampered-previous-link'
-            second.save(update_fields=['previous_fingerprint'])
-            with patch('contracts.utils.generate_canonical_fingerprint', return_value='fingerprint-one'):
-                result = verify_version_chain(contract)
-            with self.subTest(contract=contract.id):
-                self.assertFalse(result[1]['valid'])
-
     def test_doc09_search_matrix(self):
         titles = [
             'Barangay Alpha Agreement', 'Barangay Beta Agreement',
@@ -2039,7 +1920,6 @@ class PublicVerificationCryptoTests(TestCase):
         self.assertEqual(result, 'authentic', debug_log)
         self.assertIn('[PASS] Metadata marker belongs to the matched contract', debug_log)
         self.assertIn('[PASS] Original fingerprint decrypted with AES-256-CBC and HMAC-SHA256 verified', debug_log)
-        self.assertIn('[PASS] Version history chain validated', debug_log)
         self.assertEqual(AuditLog.objects.get(action='viewed').contract, self.contract)
 
     def test_issued_pdf_upload_offers_existing_copy_without_creating_revision(self):
@@ -2216,13 +2096,13 @@ class PublicVerificationCryptoTests(TestCase):
         self.assertEqual(result, 'not_found')
         self.assertEqual(self.client.session['verify_filename_hint'], 'unknown')
 
-    def test_broken_version_chain_is_rejected(self):
+    def test_revision_chain_metadata_does_not_override_pdf_authenticity(self):
         self.version.previous_fingerprint = 'broken-link'
         self.version.save(update_fields=['previous_fingerprint'])
 
         result, _debug_log = self.verify()
 
-        self.assertEqual(result, 'tampered')
+        self.assertEqual(result, 'authentic')
 
     def test_e_accuracy_controlled_100_file_matrix_and_audit_events(self):
         """Run the 100-file accuracy dataset through real enrollment/verification."""

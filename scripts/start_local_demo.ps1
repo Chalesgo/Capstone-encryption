@@ -44,7 +44,6 @@ $previousEnvironment = @{
     ALLOWED_HOSTS = $env:ALLOWED_HOSTS
     CSRF_TRUSTED_ORIGINS = $env:CSRF_TRUSTED_ORIGINS
     PUBLIC_BASE_URL = $env:PUBLIC_BASE_URL
-    SEALGUARD_RUN_STARTUP_INTEGRITY = $env:SEALGUARD_RUN_STARTUP_INTEGRITY
 }
 
 try {
@@ -53,7 +52,6 @@ try {
     $localUrl = "https://{0}:{1}" -f $lanAddress, $Port
     $env:CSRF_TRUSTED_ORIGINS = $localUrl
     $env:PUBLIC_BASE_URL = $localUrl
-    $env:SEALGUARD_RUN_STARTUP_INTEGRITY = '0'
 
     $existingListener = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($existingListener) {

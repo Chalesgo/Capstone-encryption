@@ -64,10 +64,8 @@ def can_view(user, contract):
 def visible_logs(user):
     if is_admin(user):
         return AuditLog.objects.all()
-    system_integrity_logs = Q(action='integrity_scan') if is_staff_user(user) else Q()
     return AuditLog.objects.filter(
-        system_integrity_logs
-        | Q(contract__in=viewable_contracts(user))
+        Q(contract__in=viewable_contracts(user))
         | Q(contract__isnull=True, user=user)
     )
 

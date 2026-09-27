@@ -80,7 +80,7 @@ class SealGuardUserAdmin(UserAdmin):
         if obj.is_superuser:
             capabilities = (
                 'Open the Admin Portal', 'Manage users, groups, tutorials, and contracts',
-                'Manage all documents and access', 'Run and cancel integrity scans',
+                'Manage all documents and access',
             )
         elif obj.is_staff:
             capabilities = (

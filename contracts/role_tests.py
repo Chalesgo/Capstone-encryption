@@ -84,18 +84,6 @@ class SealGuardRoleTests(TestCase):
         ).status_code, 404)
         self.assertEqual(self.client.get('/admin/').status_code, 302)
 
-    def test_staff_sees_integrity_scan_status_without_admin_controls(self):
-        AuditLog.objects.create(
-            action='integrity_scan', document_title='Integrity Scan',
-            verification_source='Scheduled Integrity Scan',
-            verification_result='Running', integrity_check='In Progress',
-        )
-        self.client.force_login(self.staff)
-        response = self.client.get(reverse('dashboard'))
-        self.assertContains(response, 'Integrity scan in progress')
-        self.assertNotContains(response, 'Run integrity scan')
-        self.assertNotContains(response, 'Cancel scan')
-
     def test_superuser_has_full_access_and_admin(self):
         self.client.force_login(self.admin)
         self.assertEqual(self.client.get('/admin/').status_code, 200)

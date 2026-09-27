@@ -87,7 +87,7 @@
     width: 100%;
     display: none;
   }
-  
+
   .context-menu {
     display: none;
     position: fixed;
@@ -827,7 +827,6 @@
   }
   .version-item:hover { background: #f0f2f5; }
   .version-item.active { background: #eef2ff; }
-  .version-chain-icon {
     width: 18px;
     height: 18px;
     border-radius: 50%;
@@ -839,10 +838,6 @@
     flex-shrink: 0;
     color: #fff;
   }
-  .version-chain-icon.valid { background: #27c485; }
-  .version-chain-icon.invalid { background: #e53e3e; }
-  .version-chain-icon.pending { background: #889aab; }
-  .version-chain-icon svg { display: block; width: 10px; height: auto; }
   .version-item-title { font-size: 12.5px; font-weight: 500; color: #2d3a47; }
   .version-item-date { font-size: 11px; color: #889aab; margin-top: 1px; }
   .version-item-account { font-size: 11px; color: #60758a; margin-top: 2px; }
@@ -1500,8 +1495,7 @@
         <div class="meta-row"><span class="meta-row-label">Last Verified</span><span class="meta-row-value" id="pdf-meta-verified">—</span></div>
         <div class="meta-row"><span class="meta-row-label">Version</span><span class="meta-row-value" id="pdf-meta-version">—</span></div>
       </div>
-      <div class="sidebar-section-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span>Version History</span><button type="button" id="pdf-integrity-rerun" class="icon-btn" title="run integrity scan for this pdf" aria-label="run integrity scan for this pdf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 11a8 8 0 1 1-2.34-5.66L20 7"/><path d="M20 3v4h-4"/></svg></button></div>
-      <div id="pdf-integrity-progress" role="status" style="display:none;font-size:11px;color:#667788;margin:0 10px 6px"></div>
+      <p class="sidebar-section-label">Version History</p>
       <div class="version-list" id="pdf-version-list"></div>
     </div>
   </div>
@@ -1977,9 +1971,6 @@ function openPdfPreview(contractId, url, title, forceDetails = false, downloadUr
           viewPdfVersion(v.preview_url, item, downloadName, v.file_url);
         };
         item.innerHTML = `
-          <span data-integrity-version="${v.version_number}" class="version-chain-icon ${v.valid === true ? 'valid' : v.valid === false ? 'invalid' : 'pending'}" title="${v.valid === true ? 'Chain verified' : v.valid === false ? 'Chain broken — this version does not match the expected fingerprint' : 'Integrity not checked yet, please wait for the integrity scan to finish'}&#10;Last checked: ${v.integrity_checked_at || 'Never'}">
-            ${v.valid === true ? '✓' : v.valid === false ? '✕' : '<svg viewBox="0 0 12 4" aria-hidden="true"><circle cx="2" cy="2" r="1.4" fill="currentColor"/><circle cx="6" cy="2" r="1.4" fill="currentColor"/><circle cx="10" cy="2" r="1.4" fill="currentColor"/></svg>'}
-          </span>
           <div>
             <div class="version-item-title">v${v.version_number} — ${v.source}${v.is_current ? ' (Current)' : ''}</div>
             <div class="version-item-date">${v.created_at}</div>
@@ -1988,36 +1979,10 @@ function openPdfPreview(contractId, url, title, forceDetails = false, downloadUr
         `;
         listEl.appendChild(item);
       });
-      window.runDocumentIntegrityScan(contractId).catch(error => console.warn('Document integrity scan stopped:', error));
+
     });
 }
 
-document.getElementById('pdf-integrity-rerun').addEventListener('click', function() {
-  const button = this;
-  button.disabled = true;
-  window.runDocumentIntegrityScan(activePdfContractId, true).catch(error => window.alert(error.message)).finally(() => { button.disabled = false; });
-});
-window.addEventListener('sealguard-integrity-updated', function(event) {
-  const result = event.detail;
-  if (String(result.contractId) !== String(activePdfContractId)) return;
-  const icon = document.querySelector('[data-integrity-version="' + result.version_number + '"]');
-  if (!icon) return;
-  icon.className = 'version-chain-icon ' + (result.valid ? 'valid' : 'invalid');
-  icon.textContent = result.valid ? '✓' : '✕';
-  icon.title = (result.valid ? 'Chain verified' : 'Chain broken') + '\nLast checked: ' + result.integrity_checked_at;
-});
-window.addEventListener('sealguard-integrity-progress', function(event) {
-  const progress = document.getElementById('pdf-integrity-progress');
-  if (!progress || String(event.detail.contractId) !== String(activePdfContractId)) return;
-  progress.style.display = event.detail.completed >= event.detail.total ? 'none' : 'block';
-  progress.textContent = 'Checking revisions ' + event.detail.completed + ' of ' + event.detail.total + '…';
-});
-window.addEventListener('sealguard-integrity-paused', function(event) {
-  const progress = document.getElementById('pdf-integrity-progress');
-  if (!progress || String(event.detail.contractId) !== String(activePdfContractId)) return;
-  progress.style.display = 'block';
-  progress.textContent = event.detail.message;
-});
 
 function handleDocumentCellClick(event, contractId) {
   if (event.defaultPrevented) return;

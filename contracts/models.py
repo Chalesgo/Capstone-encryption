@@ -165,15 +165,6 @@ class ContractVersion(models.Model):
     aes_iv = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
-    # Written by an integrity scan or on-demand revision-history check so
-    # viewers can show the last result without repeating a completed check.
-    # Blank means this version has not been checked yet.
-    integrity_status = models.CharField(
-        max_length=20, blank=True,
-        choices=[('valid', 'Passed'), ('invalid', 'Failed')],
-    )
-    integrity_checked_at = models.DateTimeField(null=True, blank=True)
-
     class Meta:
         ordering = ['-version_number']
         unique_together = ['contract', 'version_number']
@@ -257,7 +248,6 @@ class AuditLog(models.Model):
         ('rejected', 'Rejected Document'),
         ('deleted', 'Deleted Document'),
         ('reported_tampering', 'Reported Tampering'),
-        ('integrity_scan', 'Integrity Scan'),
         ('verification', 'Verification Attempt'),
         ('failed_login', 'Failed Login Attempt'),
         ('login', 'Successful Login'),

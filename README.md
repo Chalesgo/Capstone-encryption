@@ -92,40 +92,6 @@ The application will be available at:
 
 http://127.0.0.1:8000
 
-### Integrity Monitoring
-
-SealGuard integrity scans are run manually or from a scheduled task so a
-write-heavy scan cannot block account creation or other SQLite writes. Run one
-with:
-
-```powershell
-$env:DEBUG='False'
-python manage.py verify_integrity
-```
-
-The local Django `runserver` starts an integrity scan automatically in its serving
-process (including after an autoreload), then triggers another every 24 hours while
-the server remains running. Automatic scans run in the background. Daily triggers
-are skipped when another scan is active; cancelling a scan does not queue a retry.
-Administrators can also use **Run integrity scan** for an extra check and the
-**x** control (tooltip: **Cancel scan**) to request cancellation. Staff see progress
-without these controls. Set `SEALGUARD_RUN_STARTUP_INTEGRITY=0` to disable this
-local automatic scheduler. It does not run during tests, migrations, or shell commands.
-
-For deployments without `runserver`, use an external scheduler instead.
-For daily Windows monitoring, create a Task Scheduler task that runs
-`scripts/run_integrity_scan.ps1` once per day. Failed checks are written to
-the terminal log and dashboard audit log; repeated identical failures are
-limited to one audit entry per 24 hours.
-An administrator can also start another scan from the Dashboard with the
-refresh icon. If a scan is already running, a scheduled or manual trigger is
-skipped so two scans cannot overlap.
-Each completed run also appears as a compact `Integrity Scan` activity. Select
-that activity in the dashboard to open its stored debug log. An administrator
-can cancel an active scan from the dashboard. A cancelled scan keeps results
-already checked, leaves unreached PDFs unchecked, and never labels an
-unreached PDF as tampered.
-
 ---
 
 ## Features
@@ -222,7 +188,6 @@ password changes.
 | Publish or unpublish a document | Yes | Authorized uploader only | No | No |
 | View activity for authorized documents | All activity | Authorized-document activity | Authorized-document activity, read-only | No private activity |
 | Export dashboard reports | Yes | Yes | No | No |
-| Start or cancel an integrity scan | Yes | No | No | No |
 | Enter `/admin/` | Yes | No | No | No |
 
 The User role can preview assigned PDFs but cannot download them. Direct media
@@ -231,10 +196,9 @@ be viewed and downloaded without an account, by design.
 
 The Django Admin Groups page mirrors these roles through the `SealGuard Admin`,
 `SealGuard Staff`, and `SealGuard User` groups. Their permissions cover workspace,
-PDF, revision, folder, tutorial, verification, reporting, invitation, and integrity
-scan capabilities. These are role-level permissions; document ownership and
-collaboration checks in `contracts/access.py` still decide which individual PDF a
-user may view or change.
+PDF, revision, folder, tutorial, verification, reporting, and invitation
+capabilities. Document ownership and collaboration checks in `contracts/access.py`
+still decide which individual PDF a user may view or change.
 
 ---
 

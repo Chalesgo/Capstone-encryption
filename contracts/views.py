@@ -1,7 +1,5 @@
 from .pdf_storage import open_pdf, read_pdf, write_pdf, pdf_storage
-from .integrity import IntegrityMemoryLimitExceeded, guard_integrity_scan_memory
-from .process_memory import process_memory_mb, release_process_memory
-#views.py 
+#views.py
 from django.shortcuts import render, redirect, get_object_or_404
 from .access import (can_view, can_download, can_share, can_manage, is_admin, is_read_only_user,
                      managed_contracts, viewable_contracts,
@@ -26,7 +24,6 @@ from .utils import (
     extract_cf_from_metadata,
     stamp_seal_on_pdf,
     generate_qr_code,
-    verify_version_chain,
 )
 import os
 import logging
@@ -1336,20 +1333,16 @@ def has_barangay_footer(pdf_path: str):
 
 from django.shortcuts import render, redirect
 
-def get_contract_meta(contract, include_chain=True):
+def get_contract_meta(contract):
     verified_log = AuditLog.objects.filter(
         contract=contract, action='viewed'
     ).order_by('-timestamp').first()
     latest_version = contract.versions.order_by('-version_number').first()
-    chain = verify_version_chain(contract) if include_chain else []
-
     return {
         'created': contract.uploaded_at,
         'encrypted': latest_version.created_at if latest_version else None,
         'verified': verified_log.timestamp if verified_log else None,
         'version': latest_version.version_number if latest_version else 1,
-        'chain': chain,
-        'chain_valid': all(v['valid'] for v in chain) if chain else None,
     }
 
 
@@ -1387,7 +1380,6 @@ def contract_version_history(request, contract_id):
         'pdf_view', 'version_history_data_loaded', contract=contract, request=request,
         metadata_only=metadata_only, version_count=len(versions),
         contract_loaded_ms=contract_loaded_ms, versions_loaded_ms=versions_loaded_ms,
-        integrity_chain_ms=0, integrity_check_performed=False,
     )
     versions_data = []
     for v in versions:
@@ -1398,12 +1390,6 @@ def contract_version_history(request, contract_id):
             'created_by': v.created_by.username if v.created_by else 'Unknown account',
             'file_url': reverse('download_contract_version', args=[v.id]) if v.file else '',
             'preview_url': reverse('preview_contract_version', args=[v.id]) if v.file else '',
-            # True/False once scanned; None means not checked yet.
-            'valid': {'valid': True, 'invalid': False}.get(v.integrity_status),
-            'integrity_checked_at': (
-                timezone.localtime(v.integrity_checked_at).strftime('%b %d, %Y %I:%M %p')
-                if v.integrity_checked_at else None
-            ),
             'is_current': bool(contract.file) and v.file.name == contract.file.name,
         })
 
@@ -1423,110 +1409,6 @@ def contract_version_history(request, contract_id):
     )
     return JsonResponse(response_data)
 
-
-@login_required
-@view_document_access
-@never_cache
-def check_contract_version_integrity(request, contract_id):
-    """Check one revision so a long history never becomes one large request."""
-    if request.method != 'POST':
-        return JsonResponse({'success': False, 'error': 'POST required'}, status=405)
-    try:
-        payload = json.loads(request.body or b'{}')
-        version_number = int(payload.get('version_number'))
-    except (ValueError, TypeError, json.JSONDecodeError):
-        return JsonResponse({'success': False, 'error': 'Invalid version number'}, status=400)
-
-    contract = get_object_or_404(Contract, pk=contract_id)
-    version = get_object_or_404(ContractVersion, contract=contract, version_number=version_number)
-    previous = contract.versions.filter(version_number__lt=version_number).order_by('-version_number').first()
-    expected_previous = previous.fingerprint if previous else ''
-    valid = False
-    check_started_at = time.perf_counter()
-    phase = 'initial_memory_guard'
-    logger.info(
-        'integrity_version_check_started contract_id=%s version=%s memory_mb=%s',
-        contract_id, version_number, process_memory_mb(),
-    )
-    try:
-        guard_integrity_scan_memory()
-        link_valid = version.previous_fingerprint == expected_previous
-        phase = 'canonical_fingerprint'
-        canonical_started_at = time.perf_counter()
-        recomputed = generate_canonical_fingerprint(
-            version.file.path, previous_cf=expected_previous or None,
-            memory_guard=guard_integrity_scan_memory,
-        )
-        logger.info(
-            'integrity_version_check_stage_completed contract_id=%s version=%s stage=%s '
-            'elapsed_ms=%s memory_mb=%s',
-            contract_id, version_number, phase,
-            round((time.perf_counter() - canonical_started_at) * 1000), process_memory_mb(),
-        )
-        phase = 'vector_fingerprint'
-        vector_started_at = time.perf_counter()
-        vector_valid = not version.vector_fingerprint or compare_digest(
-            generate_vector_fingerprint(version.file.path, memory_guard=guard_integrity_scan_memory),
-            version.vector_fingerprint,
-        )
-        valid = link_valid and compare_digest(recomputed, version.fingerprint) and vector_valid
-        logger.info(
-            'integrity_version_check_stage_completed contract_id=%s version=%s stage=%s '
-            'elapsed_ms=%s memory_mb=%s',
-            contract_id, version_number, phase,
-            round((time.perf_counter() - vector_started_at) * 1000), process_memory_mb(),
-        )
-    except IntegrityMemoryLimitExceeded as exc:
-        logger.warning(
-            'integrity_version_check_paused contract_id=%s version=%s phase=%s elapsed_ms=%s '
-            'memory_mb=%s detail=%s',
-            contract_id, version_number, phase,
-            round((time.perf_counter() - check_started_at) * 1000), process_memory_mb(), exc,
-        )
-        return JsonResponse({
-            'success': False, 'paused': True,
-            'error': str(exc) + ' No integrity result was recorded; retry after service memory drops.',
-        }, status=503)
-    except Exception:
-        logger.exception(
-            'integrity_version_check_failed contract_id=%s version=%s phase=%s elapsed_ms=%s memory_mb=%s',
-            contract_id, version_number, phase,
-            round((time.perf_counter() - check_started_at) * 1000), process_memory_mb(),
-        )
-    finally:
-        release_process_memory()
-
-    if version.version_number == contract.versions.order_by('-version_number').values_list('version_number', flat=True).first():
-        if contract.file and contract.file.name != version.file.name:
-            valid = False
-    version.integrity_status = 'valid' if valid else 'invalid'
-    version.integrity_checked_at = timezone.now()
-    version.save(update_fields=['integrity_status', 'integrity_checked_at'])
-    logger.info(
-        'integrity_version_check_completed contract_id=%s version=%s valid=%s elapsed_ms=%s memory_mb=%s',
-        contract_id, version_number, valid,
-        round((time.perf_counter() - check_started_at) * 1000), process_memory_mb(),
-    )
-    return JsonResponse({
-        'success': True, 'version_number': version_number, 'valid': valid,
-        'integrity_checked_at': timezone.localtime(version.integrity_checked_at).strftime('%b %d, %Y %I:%M %p'),
-    })
-
-
-@login_required
-@view_document_access
-@never_cache
-def reset_contract_integrity(request, contract_id):
-    """Clear one document's recorded revision checks before rerunning them."""
-    if request.method != 'POST':
-        return JsonResponse({'success': False, 'error': 'POST required'}, status=405)
-    contract = get_object_or_404(Contract, pk=contract_id)
-    reset_count = contract.versions.update(integrity_status='', integrity_checked_at=None)
-    logger.info(
-        'integrity_version_checks_reset contract_id=%s user_id=%s version_count=%s memory_mb=%s',
-        contract_id, request.user.pk, reset_count, process_memory_mb(),
-    )
-    return JsonResponse({'success': True, 'reset_count': reset_count})
 
 def _verification_preview_path(token):
     if not token or not re.fullmatch(r'[0-9a-f]{32}', token):
@@ -2157,16 +2039,7 @@ def public_verify(request):
                         result = 'tampered'
                     else:
                         debug_log.append("[PASS] Decrypted fingerprint matches the source PDF fingerprint")
-                        debug_log.append("[INFO] Recomputing the matched contract's version chain")
-                        matched_chain = verify_version_chain(matched_contract)
-                        chain_valid = bool(matched_chain) and all(link['valid'] for link in matched_chain)
-                        if chain_valid:
-                            debug_log.append("[PASS] Version history chain validated")
-                            result = 'authentic'
-                        else:
-                            debug_log.append("[FAIL] Version history chain validation failed")
-                            failure_reason = 'version chain validation failed'
-                            result = 'tampered'
+                        result = 'authentic'
 
         except Exception as e:
             debug_log.append(f"[ERROR] Verification stopped safely: {type(e).__name__}")
@@ -2229,10 +2102,9 @@ def public_verify(request):
     public_contract_queryset = Contract.objects.filter(is_public=True, is_trashed=False).order_by('-uploaded_at', '-id')
     public_page_obj = Paginator(public_contract_queryset, 20).get_page(request.GET.get('page'))
     public_contracts = [
-        # The public browser only needs display metadata. Full chain
-        # verification is deferred until a document is actually verified or
-        # its version history is requested.
-        {'contract': c, 'meta': get_contract_meta(c, include_chain=False)}
+        # The public browser only needs display metadata; file verification
+        # runs only after a PDF is submitted to the verification portal.
+        {'contract': c, 'meta': get_contract_meta(c)}
         for c in public_page_obj.object_list
     ]
 
@@ -2581,7 +2453,7 @@ def dashboard(request):
     verified_documents = viewable_contracts(request.user).filter(is_trashed=False, encrypted_cf__gt='').count()
     flagged_documents = visible_logs(request.user).filter(action='reported_tampering').count()
 
-    valid_activity_filters = ['viewed', 'downloaded', 'added', 'encrypted', 'edited', 'approved', 'rejected', 'deleted', 'reported_tampering', 'integrity_scan', 'verification', 'failed_login', 'login', 'logout', 'locked_out']
+    valid_activity_filters = ['viewed', 'downloaded', 'added', 'encrypted', 'edited', 'approved', 'rejected', 'deleted', 'reported_tampering', 'verification', 'failed_login', 'login', 'logout', 'locked_out']
     requested_activity_filters = [
         value.strip()
         for raw_value in request.GET.getlist('activity')
@@ -2717,7 +2589,7 @@ def export_dashboard_report(request):
     for log in logs:
         writer.writerow([
             log.display_document_title,
-            'System' if log.action == 'integrity_scan' else (log.user.username if log.user else 'N/A'),
+            log.user.username if log.user else 'N/A',
             log.get_action_display(),
             log.timestamp.isoformat(),
             log.ip_address or '',

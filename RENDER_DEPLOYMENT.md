@@ -96,8 +96,8 @@ Keep maintenance mode enabled until all checks pass:
 3. Old PDFs from several users and dates decrypt and render.
 4. Ownership, collaborator access, revocation, and audit logs are intact.
 5. A new upload still opens after a service restart.
-6. The integrity scan completes without exhausting memory.
+6. Public document verification returns the expected authenticity result.
 7. Email delivery and a physical phone QR scan work over the Render HTTPS URL.
 
-If the service is killed for exceeding memory during PDF work or integrity
-scanning, move from the 512 MB plan to the 2 GB plan before releasing it.
+If the service is killed for exceeding memory during PDF work, review its
+memory use before releasing it.

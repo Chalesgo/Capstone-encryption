@@ -643,9 +643,6 @@
         .duplicate-modal.open,
         .pdf-overlay.open,
         .audit-pdf-overlay.open,
-        .integrity-log-overlay.open {
-            animation: sealguard-modal-backdrop-in .16s ease-out both;
-        }
         .modal-overlay.active > .modal,
         #profile-modal.active .profile-modal-card,
         .tutorial-modal.open .editor-dialog,
@@ -658,7 +655,6 @@
             .tutorial-modal.open, .tutorial-modal.open .editor-dialog,
             .duplicate-modal.open, .duplicate-modal.open .duplicate-modal-card,
             .pdf-overlay.open, .audit-pdf-overlay.open,
-            .integrity-log-overlay.open { animation: none !important; }
         }
 
         /* ── Progress bar ── */
@@ -1022,42 +1018,5 @@ document.addEventListener('keydown', function(event) {
 {% if user.is_authenticated and user.is_active %}{% if user.is_superuser or user.is_staff %}
 {% include 'includes/notifications.html' %}
 {% endif %}{% endif %}
-<script>
-window.runDocumentIntegrityScan = async function(contractId, reset = false) {
-  const id = String(contractId || '');
-  if (!/^\d+$/.test(id)) return;
-  const cookie = document.cookie.split('; ').find(row => row.startsWith('csrftoken='));
-  const csrf = cookie ? decodeURIComponent(cookie.split('=').slice(1).join('=')) : '';
-  const headers = {'Content-Type': 'application/json', 'X-CSRFToken': csrf};
-  if (reset) {
-    const response = await fetch('/contract/' + id + '/integrity/reset/', {method: 'POST', credentials: 'same-origin', headers, body: '{}'});
-    if (!response.ok) throw new Error('Could not reset document integrity status');
-  }
-  const metadataResponse = await fetch('/contract/' + id + '/version-history/?metadata_only=1', {credentials: 'same-origin'});
-  if (!metadataResponse.ok) throw new Error('Could not load document revisions');
-  const data = await metadataResponse.json();
-  const versions = (data.versions || []).slice().sort((a, b) => a.version_number - b.version_number);
-  for (let index = 0; index < versions.length; index++) {
-    const version = versions[index];
-    if (version.valid !== null && !reset) continue;
-    const response = await fetch('/contract/' + id + '/integrity/check-version/', {
-      method: 'POST', credentials: 'same-origin', headers,
-      body: JSON.stringify({version_number: version.version_number})
-    });
-    if (!response.ok) {
-      let failure = {};
-      try { failure = await response.json(); } catch (_) {}
-      const error = new Error(failure.error || 'Integrity check stopped at revision ' + version.version_number);
-      error.paused = Boolean(failure.paused);
-      if (error.paused) window.dispatchEvent(new CustomEvent('sealguard-integrity-paused', {detail: {contractId: id, message: error.message}}));
-      throw error;
-    }
-    const result = await response.json();
-    window.dispatchEvent(new CustomEvent('sealguard-integrity-updated', {detail: {contractId: id, ...result}}));
-    const progress = Math.round(((index + 1) / Math.max(versions.length, 1)) * 100);
-    window.dispatchEvent(new CustomEvent('sealguard-integrity-progress', {detail: {contractId: id, completed: index + 1, total: versions.length, percent: progress}}));
-  }
-};
-</script>
 </body>
 </html>

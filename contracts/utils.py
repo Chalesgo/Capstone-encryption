@@ -1,5 +1,4 @@
 from .pdf_storage import open_pdf, read_pdf, write_pdf
-from .integrity import guard_integrity_scan_memory
 import hashlib
 import hmac as hmac_lib
 import fitz
@@ -21,7 +20,7 @@ def generate_file_hash(file):
     return sha256.hexdigest()
 
 # ─── Canonical Fingerprint ─────────────────────────────────
-def generate_canonical_fingerprint(pdf_path, previous_cf=None, memory_guard=None):
+def generate_canonical_fingerprint(pdf_path, previous_cf=None):
     """
     Generates CF by hashing extracted text, embedded images, and metadata.
 
@@ -34,31 +33,22 @@ def generate_canonical_fingerprint(pdf_path, previous_cf=None, memory_guard=None
     (hash-chained version history — tampering with an earlier version
     breaks the chain for every version after it).
     """
-    guard = memory_guard or (lambda: None)
-    guard()
     doc = open_pdf(pdf_path)
     combined_hash = hashlib.sha256()
     try:
         for page in doc:
-            guard()
             text = page.get_text().strip().lower()
-            guard()
             combined_hash.update(hashlib.sha256(text.encode()).hexdigest().encode())
 
             for img in page.get_images(full=True):
-                guard()
                 base_image = doc.extract_image(img[0])
-                guard()
                 combined_hash.update(hashlib.sha256(base_image["image"]).hexdigest().encode())
-
-        guard()
         combined_hash.update(hashlib.sha256(str(doc.metadata).encode()).hexdigest().encode())
     finally:
         doc.close()
 
     if previous_cf:
         combined_hash.update(previous_cf.encode())
-    guard()
     return combined_hash.hexdigest()
 
 
@@ -84,22 +74,16 @@ def _normalize_vector_value(value):
     return str(value)
 
 
-def generate_vector_fingerprint(pdf_path, memory_guard=None):
+def generate_vector_fingerprint(pdf_path):
     """Hash normalized vector drawing commands for strict editor/tamper detection."""
-    guard = memory_guard or (lambda: None)
-    guard()
     document = open_pdf(pdf_path)
     try:
         digest = hashlib.sha256()
         digest.update(b'[')
         for page_number, page in enumerate(document):
-            guard()
             drawings = page.get_drawings()
-            guard()
             normalized = []
-            for drawing_index, drawing in enumerate(drawings):
-                if drawing_index % 64 == 0:
-                    guard()
+            for drawing in drawings:
                 normalized.append(_normalize_vector_value(drawing))
             if page_number:
                 digest.update(b',')
@@ -110,52 +94,9 @@ def generate_vector_fingerprint(pdf_path, memory_guard=None):
             digest.update(serialized_page.encode('utf-8'))
             del drawings, normalized, serialized_page
         digest.update(b']')
-        guard()
         return digest.hexdigest()
     finally:
         document.close()
-
-def verify_version_chain(contract):
-    """
-    Walks a contract's full version history and recomputes each version's
-    fingerprint using its own file content plus the recorded previous
-    fingerprint, confirming the entire chain is internally consistent.
-
-    Returns a list of dicts, one per version, each noting whether that
-    link in the chain checked out.
-    """
-    versions = contract.versions.order_by('version_number')
-    results = []
-    running_prev = ''
-
-    for version in versions:
-        expected_previous = running_prev
-        link_valid = version.previous_fingerprint == expected_previous
-        try:
-            recomputed = generate_canonical_fingerprint(
-                version.file.path,
-                previous_cf=expected_previous or None,
-            )
-            vector_valid = True
-            if version.vector_fingerprint:
-                vector_valid = hmac_lib.compare_digest(
-                    generate_vector_fingerprint(version.file.path),
-                    version.vector_fingerprint,
-                )
-            valid = link_valid and recomputed == version.fingerprint and vector_valid
-        except Exception:
-            valid = False
-
-        results.append({
-            'version_number': version.version_number,
-            'source': version.get_source_display(),
-            'valid': valid,
-            'created_at': version.created_at,
-        })
-
-        running_prev = version.fingerprint
-
-    return results
 
 # ─── HMAC ──────────────────────────────────────────────────
 def generate_hmac(cf: str, key: bytes):
@@ -502,7 +443,7 @@ def stamp_seal_on_pdf(input_pdf, output_pdf, seal_path, qr_path=None, encrypted_
         dst.save(output_pdf)
     dst.close()
     src.close()
-    
+
 def generate_qr_code(data: str, output_path: str):
     """
     Generates a QR code containing the encrypted CF.

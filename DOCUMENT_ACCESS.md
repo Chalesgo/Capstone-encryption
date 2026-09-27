@@ -10,8 +10,6 @@ The `/media/` route now checks the owning document before serving current PDFs, 
 
 Deployment must route `/media/` through Django's protected endpoint. Do not configure nginx, IIS, a CDN, or object storage to expose `MEDIA_ROOT` directly. This repository's runserver route already uses the protected endpoint.
 
-For advisor demonstrations, an integrity scan keeps a short-lived cache entry containing its active control state and per-document progress. Administrators can cancel a running scan from the dashboard. Cancellation stops at the next document boundary, preserves results already checked, removes the temporary cache, and leaves unreached PDFs unchecked. If the administrator does not cancel it, the scan completes normally, records real failures, and then removes the temporary cache. A cancellation or an incomplete scan never marks an unreached PDF as tampered.
-
 ## Whole-PDF encryption
 
 PDF uploads, sealed outputs, revisions, audit evidence, and retained verification previews use authenticated AES-256-GCM encryption. Every file has a fresh key and nonce; the AES key is wrapped using RSA-OAEP/SHA-256 with the configured RSA public key. Permission-checked responses decrypt into memory, verify the authentication tag, and disable caching. The PDF content and existing authenticity fingerprints are preserved exactly. Public documents are encrypted in storage too, then decrypted for public viewing.
