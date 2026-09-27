@@ -82,6 +82,17 @@ get('integrity-help-toggle').onclick = () => {
   get('integrity-help-toggle').setAttribute('aria-expanded', String(open));
 };
 get('retry-versions').onclick = () => loadVersions();
+get('run-integrity-scan').onclick = async () => {
+  const contractId = params.get('contract');
+  const button = get('run-integrity-scan');
+  button.disabled = true;
+  try {
+    if (window.parent === window || typeof window.parent.runDocumentIntegrityScan !== 'function') throw new Error();
+    await window.parent.runDocumentIntegrityScan(contractId, true);
+  } catch (_) {
+    get('version-message').textContent = 'Integrity scan could not be completed. Please try again.';
+  } finally { button.disabled = false; }
+};
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape') {
     if (document.body.classList.contains('versions-open') || document.body.classList.contains('details-open')) panel(null);
@@ -179,6 +190,22 @@ async function loadVersions() {
     get('version-list').replaceChildren(fragment);
     versionsLoaded = true;
     get('version-message').textContent = data.versions.length ? '' : 'No saved versions available.';
+    if (window.parent !== window && typeof window.parent.runDocumentIntegrityScan === 'function') {
+      window.parent.runDocumentIntegrityScan(contractId).catch(() => {
+        get('version-message').textContent = 'Integrity scan stopped. Revisions checked so far remain saved.';
+      });
+      window.parent.addEventListener('sealguard-integrity-updated', event => {
+        const result = event.detail;
+        if (String(result.contractId) !== String(contractId)) return;
+        const icon = integrityIcons.get(result.version_number);
+        if (icon) setIntegrityIcon(icon, result.valid, result.integrity_checked_at);
+      });
+      window.parent.addEventListener('sealguard-integrity-progress', event => {
+        if (String(event.detail.contractId) !== String(contractId)) return;
+        get('version-message').textContent = event.detail.completed >= event.detail.total
+          ? '' : 'Checking revisions ' + event.detail.completed + ' of ' + event.detail.total + '…';
+      });
+    }
   } catch (_) {
     pdfDebug('version_metadata_failed', {contract_id: contractId, duration_ms: Math.round(performance.now() - startedAt)});
     get('version-message').textContent = 'Version history could not be loaded. Please try again.';

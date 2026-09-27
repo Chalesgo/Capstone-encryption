@@ -45,7 +45,8 @@
         <div class="meta-row"><span class="meta-row-label">Uploaded by</span><span class="meta-row-value" id="{{ viewer_prefix }}-meta-uploader">—</span></div>
       </div>
       {% endif %}
-      <p class="sidebar-section-label">Version History</p>
+      <div class="sidebar-section-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span>Version History</span><button type="button" class="icon-btn" id="{{ viewer_prefix }}-integrity-rerun" title="run integrity scan for this pdf" aria-label="run integrity scan for this pdf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 11a8 8 0 1 1-2.34-5.66L20 7"/><path d="M20 3v4h-4"/></svg></button></div>
+      <div id="{{ viewer_prefix }}-integrity-progress" role="status" style="display:none;font-size:11px;color:#667788;margin:0 10px 6px"></div>
       <div class="version-list audit-version-list" id="{{ viewer_prefix }}-version-list"><div class="audit-version-loading">No version history available.</div></div>
       {% if viewer_show_verification %}
       <p class="sidebar-section-label">Activity Note</p>

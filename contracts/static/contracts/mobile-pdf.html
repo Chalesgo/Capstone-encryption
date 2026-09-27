@@ -54,6 +54,9 @@
     #version-message { margin:8px 0; color:var(--muted); }
     #retry-versions { border-radius:8px; color:var(--accent); }
     .integrity-help { display:flex; justify-content:flex-end; margin:2px 14px 8px; }
+    #run-integrity-scan { width:28px; height:28px; min-width:28px; min-height:28px; margin-right:6px; padding:5px; border:1px solid #dfe3e8; background:#fff; color:#7d8e9e; }
+    #run-integrity-scan svg { width:16px; height:16px; display:block; }
+    #run-integrity-scan:disabled { opacity:.5; cursor:wait; }
     #integrity-help-toggle { min-width:28px; min-height:28px; border:1px solid #dfe3e8; background:#fff; color:#7d8e9e; font-weight:700; }
     #integrity-help-panel { margin:0 14px 8px; padding:8px 10px; border:1px solid #e3e9ef; border-radius:8px; background:#fff; color:#889aab; font-size:11px; line-height:1.5; }
     #integrity-help-panel[hidden] { display:none; }
@@ -125,7 +128,7 @@
     <div class="sheet-handle" aria-hidden="true"></div>
     <div class="sheet-heading"><h2 id="version-heading">Document versions</h2><button id="close-versions" aria-label="Close versions">✕</button></div>
     <div id="sheet-versions"><div id="version-content">
-      <div class="integrity-help"><button id="integrity-help-toggle" type="button" aria-label="Explain integrity icons" aria-expanded="false">…</button></div>
+      <div class="integrity-help"><button id="run-integrity-scan" type="button" title="run integrity scan for this pdf" aria-label="run integrity scan for this pdf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 11a8 8 0 1 1-2.34-5.66L20 7"/><path d="M20 3v4h-4"/></svg></button><button id="integrity-help-toggle" type="button" aria-label="Explain integrity icons" aria-expanded="false">…</button></div>
       <div id="integrity-help-panel" hidden>✓ Integrity passed · ✕ Check failed or file unreadable · … Not checked yet</div>
       <p id="version-message" role="status"></p>
       <button id="retry-versions" hidden>Retry</button>

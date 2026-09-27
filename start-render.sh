@@ -16,8 +16,7 @@ python manage.py migrate --noinput
 python manage.py bootstrap_account
 
 # The attached disk limits this service to one instance. Keep one Gunicorn
-# worker as well so SQLite and the daily integrity scheduler have one owner.
-export SEALGUARD_RUN_INTEGRITY_SCHEDULER=1
+# worker for SQLite. Revision integrity checks run on demand for the viewed document.
 exec python -m gunicorn capstone_system.wsgi:application \
   --bind "0.0.0.0:${PORT:-10000}" \
   --workers 1 \

@@ -72,6 +72,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'contracts.middleware.InternalPDFViewerMiddleware',
+    'contracts.middleware.MemoryDiagnosticsMiddleware',
     'contracts.middleware.PDFStorageFailureMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',

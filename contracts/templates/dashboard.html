@@ -723,16 +723,6 @@
     <div class="stat-card-sub">Requires review</div>
   </div>
 </div>
-{% if request.user.is_superuser %}<div style="display:flex;justify-content:flex-end;"><button type="button" class="integrity-run-button" id="start-integrity-scan" {% if latest_integrity_scan and latest_integrity_scan.verification_result == 'Running' or latest_integrity_scan and latest_integrity_scan.verification_result == 'Cancel requested' %}disabled{% endif %} onclick="startIntegrityScan(event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 11a8 8 0 1 1-2.34-5.66L20 7"/><path d="M20 3v4h-4"/></svg><span>{% if latest_integrity_scan and latest_integrity_scan.verification_result == 'Running' %}Scan in progress{% else %}Run integrity scan{% endif %}</span></button></div>{% endif %}
-{% if latest_integrity_scan and latest_integrity_scan.verification_result == 'Running' or latest_integrity_scan and latest_integrity_scan.verification_result == 'Cancel requested' %}
-{% if request.user.is_superuser %}<div class="integrity-status-banner" role="status" aria-live="polite" data-integrity-started="{{ latest_integrity_scan.timestamp|date:'c' }}" data-log-id="{{ latest_integrity_scan.id }}" data-log-url="{% url 'audit_verification_log_detail' latest_integrity_scan.id %}" data-action="Integrity Scan" onclick="openIntegrityScanLog(this)">{% else %}<div class="integrity-status-banner" role="status" aria-live="polite">{% endif %}
-  <span class="integrity-status-dot" aria-hidden="true"></span>
-  <span>{% if latest_integrity_scan.verification_result == 'Cancel requested' %}Integrity scan cancellation requested{% else %}Integrity scan in progress{% endif %}</span>
-  {% if request.user.is_superuser %}<span class="integrity-status-timer" data-integrity-timer>00:00</span>{% endif %}
-  {% if request.user.is_superuser and latest_integrity_scan.verification_result == 'Running' %}<button type="button" class="integrity-cancel-button" data-integrity-cancel onclick="cancelIntegrityScan(event, {{ latest_integrity_scan.id }})" title="Cancel scan" aria-label="Cancel scan"><span aria-hidden="true">&times;</span></button>{% endif %}
-</div>
-{% endif %}
-
 <div class="audit-panel">
   <div class="audit-panel-header">
     <div class="audit-panel-heading" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
@@ -1052,65 +1042,6 @@
 </div>
 {% endcomment %}
 <script>
- (function() {
-  window.renderIntegrityTimer = function(elapsedMs) {
-    const timer = document.querySelector('[data-integrity-timer]');
-    if (!timer) return;
-    const elapsed = Math.max(0, Math.floor(Number(elapsedMs || 0) / 1000));
-    const minutes = String(Math.floor(elapsed / 60)).padStart(2, '0');
-    const seconds = String(elapsed % 60).padStart(2, '0');
-    timer.textContent = minutes + ':' + seconds;
-  };
-  window.startIntegrityTimer = function(startedAt) {
-    const started = Date.parse(startedAt || '');
-    if (!Number.isFinite(started)) return;
-    if (window.integrityTimerInterval) window.clearInterval(window.integrityTimerInterval);
-    const update = function() { window.renderIntegrityTimer(Date.now() - started); };
-    update();
-    window.integrityTimerInterval = window.setInterval(update, 1000);
-  };
-  window.startIntegrityScan = function(event) {
-    event.preventDefault();
-    event.stopPropagation();
-    const button = event.currentTarget;
-    button.disabled = true;
-    fetch('{% url 'start_integrity_scan' %}', {
-      method: 'POST',
-      headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json'},
-      body: '{}'
-    }).then(function(response) {
-      return response.json().then(function(data) {
-        if (!response.ok) throw new Error(data.error || 'Unable to start the scan.');
-        window.location.reload();
-      });
-    }).catch(function(error) {
-      button.disabled = false;
-      window.alert(error.message);
-    });
-  };
-  window.cancelIntegrityScan = function(event, logId) {
-    event.preventDefault();
-    event.stopPropagation();
-    const button = event.currentTarget;
-    if (!window.confirm('Cancel the integrity scan? PDFs not reached yet will remain unchecked, not tampered.')) return;
-    button.disabled = true;
-    fetch('{% url 'cancel_integrity_scan' %}', {
-      method: 'POST',
-      headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json'},
-      body: JSON.stringify({scan_log_id: logId})
-    }).then(function(response) {
-      if (!response.ok) throw new Error('Unable to cancel the scan.');
-      window.location.reload();
-    }).catch(function(error) {
-      button.disabled = false;
-      window.alert(error.message);
-    });
-  };
-  const banner = document.querySelector('[data-integrity-started][data-log-url]');
-  if (banner) {
-    window.startIntegrityTimer(banner.dataset.integrityStarted);
-  }
- })();
 function styleDashboardStatusFilter(select) {
   if (!select) return;
   select.classList.remove('status-pending', 'status-sent', 'status-approved');
@@ -1261,12 +1192,13 @@ function auditMobileDownloadPdf(event) {
 }
 function loadAuditVersions(contractId, selectedVersion) {
   document.getElementById('audit-pdf-activity-uploader').textContent = '—';
-  const list = document.getElementById('audit-version-list');
+  const list = document.getElementById('audit-pdf-version-list');
   if (!list) return;
   if (!contractId) {
     list.innerHTML = '<div class="audit-version-loading">No contract is linked to this activity.</div>';
     return;
   }
+  window.dashboardActiveIntegrityContractId = String(contractId);
   list.innerHTML = '<div class="audit-version-loading">Loading versions...</div>';
   fetch('/contract/' + encodeURIComponent(contractId) + '/version-history/')
     .then(function(response) { if (!response.ok) throw new Error('Unable to load versions'); return response.json(); })
@@ -1288,6 +1220,7 @@ function loadAuditVersions(contractId, selectedVersion) {
         const integrityTitle = version.valid === true ? 'Integrity check passed' : version.valid === false ? 'Integrity check failed' : 'Integrity not checked yet, please wait for the integrity scan to finish';
         const integrityTooltip = integrityTitle + '&#10;Last checked: ' + (version.integrity_checked_at || 'Never');
         item.innerHTML = '<span class="audit-version-icon" title="' + integrityTooltip + '">' + (version.valid === true ? '✓' : version.valid === false ? '!' : '<svg viewBox="0 0 12 4" aria-hidden="true"><circle cx="2" cy="2" r="1.4" fill="currentColor"/><circle cx="6" cy="2" r="1.4" fill="currentColor"/><circle cx="10" cy="2" r="1.4" fill="currentColor"/></svg>') + '</span><span class="audit-version-meta"><span class="audit-version-label">Version ' + version.version_number + (version.is_current ? ' · Current' : '') + '</span><span class="audit-version-date">' + version.created_at + '</span><span class="audit-version-account">Added by ' + escapeAuditVersionHistoryText(version.created_by) + '</span></span>';
+        item.querySelector('.audit-version-icon').dataset.integrityVersion = version.version_number;
         item.addEventListener('click', function() {
           document.getElementById('audit-pdf-activity-uploader').textContent = version.created_by || 'Unknown account';
           const versionUrl = version.preview_url || version.file_url;
@@ -1300,9 +1233,30 @@ function loadAuditVersions(contractId, selectedVersion) {
         });
         list.appendChild(item);
       });
+      window.runDocumentIntegrityScan(contractId).catch(error => console.warn('Document integrity scan stopped:', error));
     })
     .catch(function() { list.innerHTML = '<div class="audit-version-loading">Version history could not be loaded.</div>'; });
 }
+
+document.getElementById('audit-pdf-integrity-rerun').addEventListener('click', function() {
+  const button = this;
+  button.disabled = true;
+  window.runDocumentIntegrityScan(window.dashboardActiveIntegrityContractId, true).catch(error => window.alert(error.message)).finally(() => { button.disabled = false; });
+});
+window.addEventListener('sealguard-integrity-updated', function(event) {
+  const result = event.detail;
+  if (String(result.contractId) !== String(window.dashboardActiveIntegrityContractId)) return;
+  const icon = document.querySelector('#audit-pdf-version-list [data-integrity-version="' + result.version_number + '"]');
+  if (!icon) return;
+  icon.textContent = result.valid ? '✓' : '!';
+  icon.title = (result.valid ? 'Integrity check passed' : 'Integrity check failed') + '\nLast checked: ' + result.integrity_checked_at;
+});
+window.addEventListener('sealguard-integrity-progress', function(event) {
+  const progress = document.getElementById('audit-pdf-integrity-progress');
+  if (!progress || String(event.detail.contractId) !== String(window.dashboardActiveIntegrityContractId)) return;
+  progress.style.display = event.detail.completed >= event.detail.total ? 'none' : 'block';
+  progress.textContent = 'Checking revisions ' + event.detail.completed + ' of ' + event.detail.total + '…';
+});
 
 function escapeAuditVersionHistoryText(value) {
   return String(value == null ? '' : value).replace(/[&<>"']/g, function(character) {

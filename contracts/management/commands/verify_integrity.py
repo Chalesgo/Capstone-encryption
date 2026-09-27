@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 
 from django.core.management.base import BaseCommand
@@ -12,6 +13,7 @@ from contracts.integrity import (
     INTEGRITY_CACHE_SECONDS, INTEGRITY_RESULT_CACHE_PREFIX,
     INTEGRITY_SCAN_CACHE_KEY, INTEGRITY_SCAN_LOCK_KEY,
 )
+from contracts.process_memory import process_memory_mb
 
 
 logger = logging.getLogger('contracts.integrity')
@@ -38,6 +40,10 @@ class Command(BaseCommand):
                     verification_result='Interrupted', integrity_check='Incomplete',
                     note='Integrity scan stopped after an error. Review the server log and run a new scan.',
                 )
+            logger.exception(
+                'integrity_scan_crashed scan_log_id=%s source=%s',
+                scan_id, options.get('source'),
+            )
             raise
         finally:
             cache.delete(INTEGRITY_SCAN_CACHE_KEY)
@@ -48,9 +54,15 @@ class Command(BaseCommand):
         started_at = time.perf_counter()
         scan_started_at = timezone.now()
         close_old_connections()
+        logger.info(
+            'integrity_scan_started source=%s pid=%s memory_mb=%s',
+            options['source'], os.getpid(), process_memory_mb(),
+        )
         checked_contracts = 0
         checked_versions = 0
         failures = []
+        failure_count = 0
+        max_failure_details = 100
         failure_keys = set()
         debug_lines = ['Integrity scan started.']
         scan_log = AuditLog.objects.create(
@@ -107,17 +119,19 @@ class Command(BaseCommand):
                 )
 
         def register_failure(contract, version, reason):
+            nonlocal failure_count
             failure_key = (contract.id, version, reason)
             if failure_key in failure_keys:
                 return None
             failure_keys.add(failure_key)
-            failure = {'contract': contract, 'version': version, 'reason': reason}
-            failures.append(failure)
+            failure_count += 1
             title = contract.title or 'Untitled document'
-            debug_lines.append(
-                f'FAILURE: "{title}" — version '
-                f"v{version if version is not None else 'unknown'}: {reason}"
-            )
+            if len(failures) < max_failure_details:
+                failures.append({'title': title, 'version': version, 'reason': reason})
+                debug_lines.append(
+                    f'FAILURE: "{title}" — version '
+                    f"v{version if version is not None else 'unknown'}: {reason}"
+                )
             logger.warning(
                 'integrity_scan_failure contract_id=%s version=%s reason=%s',
                 contract.id, version, reason,
@@ -136,32 +150,18 @@ class Command(BaseCommand):
                 )
             scan_log.verification_debug_log = '\n'.join(debug_lines)
             scan_log.save(update_fields=['verification_debug_log'])
-            return failure
+            return True
 
-        for contract in Contract.objects.prefetch_related('versions').order_by('id'):
+        # Stream contracts in bounded batches. Iterating a prefetched QuerySet
+        # directly caches every contract and its versions for the full scan.
+        contracts = Contract.objects.order_by('id').iterator(chunk_size=50)
+        for contract in contracts:
             if cancel_requested():
                 finish_cancelled()
                 return
             checked_contracts += 1
             versions = list(contract.versions.order_by('version_number'))
             checked_versions += len(versions)
-            title = contract.title or 'Untitled document'
-            if versions:
-                version_numbers = [version.version_number for version in versions]
-                if len(version_numbers) == 1:
-                    version_history = f'v{version_numbers[0]}'
-                else:
-                    version_history = (
-                        f'v{version_numbers[0]}–v{version_numbers[-1]} '
-                        f'({len(version_numbers)} stored versions)'
-                    )
-            else:
-                version_history = 'no stored versions'
-            debug_lines.append(
-                f'Document "{title}": checking {version_history} by recomputing '
-                'canonical PDF fingerprints, validating previous-fingerprint links, '
-                'and validating recorded vector fingerprints.'
-            )
             try:
                 chain = verify_version_chain(contract)
             except Exception as error:
@@ -190,31 +190,30 @@ class Command(BaseCommand):
             pointer_ok = not (contract.file and latest and contract.file.name != latest.file.name)
             record_results(versions, chain_by_version, pointer_ok)
             if not pointer_ok:
-                debug_lines.append(
-                    f'Document "{title}": validating the current document file '
-                    f'pointer against latest version v{latest.version_number}.'
-                )
                 register_failure(
                     contract, latest.version_number,
                     'Current contract file does not point to its latest version',
                 )
-            elif latest:
-                debug_lines.append(
-                    f'Document "{title}": current document file pointer matches '
-                    f'latest version v{latest.version_number}.'
+            if checked_contracts % 100 == 0:
+                scan_log.note = (
+                    f'Integrity scan in progress: checked {checked_versions} version(s) '
+                    f'across {checked_contracts} contract(s).'
                 )
-            scan_log.note = (
-                f'Integrity scan in progress: checked {checked_versions} version(s) '
-                f'across {checked_contracts} contract(s).'
-            )
-            scan_log.verification_debug_log = '\n'.join(debug_lines)
-            scan_log.save(update_fields=['note', 'verification_debug_log'])
+                scan_log.save(update_fields=['note'])
+                logger.info(
+                    'integrity_scan_progress source=%s contracts=%s versions=%s '
+                    'elapsed_ms=%s memory_mb=%s',
+                    options['source'], checked_contracts, checked_versions,
+                    round((time.perf_counter() - started_at) * 1000),
+                    process_memory_mb(),
+                )
 
         catch_up_contracts = Contract.objects.filter(
             versions__created_at__gt=scan_started_at,
-        ).prefetch_related('versions').distinct().order_by('id')
+        ).distinct().order_by('id').iterator(chunk_size=50)
         catch_up_contract_count = 0
         catch_up_version_count = 0
+        max_catch_up_details = 100
         for contract in catch_up_contracts:
             if cancel_requested():
                 finish_cancelled()
@@ -230,10 +229,11 @@ class Command(BaseCommand):
             new_version_numbers = ', '.join(
                 f'v{version.version_number}' for version in new_versions
             ) or 'the newly uploaded version'
-            debug_lines.append(
-                f'Catch-up check: document "{title}" received {new_version_numbers} '
-                'during this scan; rechecking its complete version chain.'
-            )
+            if catch_up_contract_count <= max_catch_up_details:
+                debug_lines.append(
+                    f'Catch-up check: document "{title}" received {new_version_numbers} '
+                    'during this scan; rechecking its complete version chain.'
+                )
             try:
                 chain = verify_version_chain(contract)
             except Exception as error:
@@ -263,6 +263,11 @@ class Command(BaseCommand):
                 f'Catch-up check completed for {catch_up_version_count} version(s) '
                 f'across {catch_up_contract_count} contract(s) uploaded during the scan.'
             )
+            if catch_up_contract_count > max_catch_up_details:
+                debug_lines.append(
+                    f'Additional catch-up entries omitted: '
+                    f'{catch_up_contract_count - max_catch_up_details}.'
+                )
         else:
             debug_lines.append('Catch-up check: no versions were uploaded during the scan.')
 
@@ -271,33 +276,43 @@ class Command(BaseCommand):
             f'Checked {checked_versions} version(s) across {checked_contracts} contract(s).'
         )
         debug_lines.append(f'Duration: {duration_ms} ms.')
-        if failures:
+        if failure_count:
             debug_lines.append('Failures:')
             debug_lines.extend(
-                f"- \"{failure['contract'].title or 'Untitled document'}\", version "
+                f"- \"{failure['title']}\", version "
                 f"v{failure['version'] if failure['version'] is not None else 'unknown'}: "
                 f"{failure['reason']}"
                 for failure in failures
             )
+            if failure_count > len(failures):
+                debug_lines.append(
+                    f'Additional failure details omitted: {failure_count - len(failures)}.'
+                )
         else:
             debug_lines.append('Result: all checked files passed integrity validation.')
         summary = (
             f'Integrity scan checked {checked_versions} version(s) across '
             f'{checked_contracts} contract(s) in {duration_ms} ms; '
-            f'{len(failures)} failure(s).'
+            f'{failure_count} failure(s).'
         )
         scan_log.note = summary
-        scan_log.verification_result = 'Possible Modification' if failures else 'Completed'
-        scan_log.integrity_check = 'Failed' if failures else 'Complete'
+        scan_log.verification_result = 'Possible Modification' if failure_count else 'Completed'
+        scan_log.integrity_check = 'Failed' if failure_count else 'Complete'
         scan_log.verification_debug_log = '\n'.join(debug_lines)
         scan_log.save(update_fields=[
             'note', 'verification_result', 'integrity_check', 'verification_debug_log',
         ])
+        logger.info(
+            'integrity_scan_completed source=%s contracts=%s versions=%s failures=%s '
+            'elapsed_ms=%s memory_mb=%s',
+            options['source'], checked_contracts, checked_versions, failure_count,
+            duration_ms, process_memory_mb(),
+        )
         cache.delete(INTEGRITY_SCAN_CACHE_KEY)
         cache.delete(INTEGRITY_SCAN_LOCK_KEY)
         if result_cache_keys:
             cache.delete_many(result_cache_keys)
-        if failures:
+        if failure_count:
             self.stderr.write(self.style.ERROR(summary))
         else:
             self.stdout.write(summary if options['quiet_success'] else self.style.SUCCESS(summary))

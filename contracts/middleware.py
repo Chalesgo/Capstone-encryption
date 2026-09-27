@@ -1,4 +1,61 @@
+import logging
+import time
+
 from django.shortcuts import redirect
+from django.utils.deprecation import MiddlewareMixin
+from .process_memory import process_memory_mb
+
+
+memory_logger = logging.getLogger('contracts.memory')
+
+
+class MemoryDiagnosticsMiddleware(MiddlewareMixin):
+    """Log memory around requests when memory, latency, or status is abnormal."""
+    WARN_RSS_MB = 300
+    SLOW_REQUEST_SECONDS = 5
+
+    def __init__(self, get_response):
+        super().__init__(get_response)
+
+    def process_view(self, request, view_func, view_args, view_kwargs):
+        route = getattr(getattr(request, 'resolver_match', None), 'url_name', None) or 'unresolved'
+        memory = process_memory_mb()
+        memory_logger.info(
+            'request_memory_start method=%s route=%s memory_mb=%s',
+            request.method, route, memory,
+        )
+
+    def __call__(self, request):
+        started = time.perf_counter()
+        before = process_memory_mb()
+        before_rss = before.get('vmrss', 0)
+        route = 'unresolved'
+        try:
+            response = self.get_response(request)
+        except Exception:
+            route = getattr(getattr(request, 'resolver_match', None), 'url_name', None) or route
+            memory_logger.exception(
+                'request_exception method=%s route=%s elapsed_ms=%s memory_mb=%s',
+                request.method, route,
+                round((time.perf_counter() - started) * 1000),
+                process_memory_mb(),
+            )
+            raise
+
+        elapsed = time.perf_counter() - started
+        route = getattr(getattr(request, 'resolver_match', None), 'url_name', None) or route
+        after = process_memory_mb()
+        after_rss = after.get('vmrss', 0)
+        if (after_rss >= self.WARN_RSS_MB
+                or response.status_code >= 500
+                or elapsed >= self.SLOW_REQUEST_SECONDS):
+            memory_logger.warning(
+                'request_memory_end method=%s route=%s status=%s elapsed_ms=%s '
+                'before_mb=%s after_mb=%s peak_mb=%s',
+                request.method, route, response.status_code, round(elapsed * 1000),
+                before_rss, after_rss, after.get('vmhwm'),
+            )
+        return response
 
 
 class InternalPDFViewerMiddleware:

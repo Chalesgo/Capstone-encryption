@@ -5,7 +5,6 @@ from .access import (can_view, can_download, can_share, can_manage, is_admin, is
                      managed_contracts, viewable_contracts,
                      visible_logs, document_access, view_document_access, bulk_document_access, workspace_access,
                      workspace_mutation)
-from .integrity import INTEGRITY_SCAN_CACHE_KEY, INTEGRITY_SCAN_LOCK_KEY
 from django.core.cache import cache
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.cache import never_cache
@@ -39,7 +38,6 @@ import json
 import csv
 import io
 import zipfile
-import threading
 import secrets
 import hashlib
 from PIL import Image
@@ -1383,15 +1381,11 @@ def contract_version_history(request, contract_id):
     versions_qs = contract.versions.select_related('created_by').order_by('-version_number')
     versions = list(versions_qs)
     versions_loaded_ms = round((time.perf_counter() - started_at) * 1000)
-    # Integrity verification is performed by the startup/daily scanner, which
-    # stores each version's last result. Viewing only reads that result, so
-    # opening a document never waits for a full revision-chain recomputation.
-    chain_ms = 0
     _process_log(
         'pdf_view', 'version_history_data_loaded', contract=contract, request=request,
         metadata_only=metadata_only, version_count=len(versions),
         contract_loaded_ms=contract_loaded_ms, versions_loaded_ms=versions_loaded_ms,
-        integrity_chain_ms=chain_ms, integrity_check_deferred=True,
+        integrity_chain_ms=0, integrity_check_performed=False,
     )
     versions_data = []
     for v in versions:
@@ -1426,6 +1420,60 @@ def contract_version_history(request, contract_id):
         response_build_ms=round((time.perf_counter() - started_at) * 1000),
     )
     return JsonResponse(response_data)
+
+
+@login_required
+@view_document_access
+@never_cache
+def check_contract_version_integrity(request, contract_id):
+    """Check one revision so a long history never becomes one large request."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required'}, status=405)
+    try:
+        payload = json.loads(request.body or b'{}')
+        version_number = int(payload.get('version_number'))
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return JsonResponse({'success': False, 'error': 'Invalid version number'}, status=400)
+
+    contract = get_object_or_404(Contract, pk=contract_id)
+    version = get_object_or_404(ContractVersion, contract=contract, version_number=version_number)
+    previous = contract.versions.filter(version_number__lt=version_number).order_by('-version_number').first()
+    expected_previous = previous.fingerprint if previous else ''
+    valid = False
+    try:
+        link_valid = version.previous_fingerprint == expected_previous
+        recomputed = generate_canonical_fingerprint(
+            version.file.path, previous_cf=expected_previous or None,
+        )
+        vector_valid = not version.vector_fingerprint or compare_digest(
+            generate_vector_fingerprint(version.file.path), version.vector_fingerprint,
+        )
+        valid = link_valid and compare_digest(recomputed, version.fingerprint) and vector_valid
+    except Exception:
+        logger.exception('Per-document integrity check failed for contract_id=%s version=%s', contract_id, version_number)
+
+    if version.version_number == contract.versions.order_by('-version_number').values_list('version_number', flat=True).first():
+        if contract.file and contract.file.name != version.file.name:
+            valid = False
+    version.integrity_status = 'valid' if valid else 'invalid'
+    version.integrity_checked_at = timezone.now()
+    version.save(update_fields=['integrity_status', 'integrity_checked_at'])
+    return JsonResponse({
+        'success': True, 'version_number': version_number, 'valid': valid,
+        'integrity_checked_at': timezone.localtime(version.integrity_checked_at).strftime('%b %d, %Y %I:%M %p'),
+    })
+
+
+@login_required
+@view_document_access
+@never_cache
+def reset_contract_integrity(request, contract_id):
+    """Clear one document's recorded revision checks before rerunning them."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required'}, status=405)
+    contract = get_object_or_404(Contract, pk=contract_id)
+    contract.versions.update(integrity_status='', integrity_checked_at=None)
+    return JsonResponse({'success': True})
 
 def _verification_preview_path(token):
     if not token or not re.fullmatch(r'[0-9a-f]{32}', token):
@@ -2472,46 +2520,13 @@ def publish_contract(request, pk):
     return JsonResponse({'success': False}, status=400)
 from django.db.models import Count, Q
 
-def _reconcile_stale_integrity_scan():
-    """Close scan rows left behind after their worker was interrupted."""
-    active_scans = list(AuditLog.objects.filter(
-        action='integrity_scan', verification_result__in=['Running', 'Cancel requested'],
-    ).order_by('-timestamp', '-id'))
-    if not active_scans:
-        return
-
-    worker_alive = any(
-        thread.name.startswith('sealguard-integrity-') and thread.is_alive()
-        for thread in threading.enumerate()
-    )
-    if worker_alive:
-        return
-
-    # LocMemCache is process-local. After a runserver reload, old Running rows
-    # and cancellation requests remain in SQLite even though their worker is
-    # gone; clear those rows so they cannot hide the next real scan or block it.
-    cache.delete(INTEGRITY_SCAN_CACHE_KEY)
-    cache.delete(INTEGRITY_SCAN_LOCK_KEY)
-    for scan in active_scans:
-        scan.note = (
-            'The integrity scan worker stopped before completion. '
-            'No new integrity results were written.'
-        )
-        scan.verification_result = 'Cancelled'
-        scan.integrity_check = 'Cancelled'
-        scan.save(update_fields=['note', 'verification_result', 'integrity_check'])
-
 
 @login_required
 @workspace_access
 def dashboard(request):
-    _reconcile_stale_integrity_scan()
     total_documents = viewable_contracts(request.user).filter(is_trashed=False).count()
     verified_documents = viewable_contracts(request.user).filter(is_trashed=False, encrypted_cf__gt='').count()
     flagged_documents = visible_logs(request.user).filter(action='reported_tampering').count()
-    latest_integrity_scan = visible_logs(request.user).filter(
-        action='integrity_scan',
-    ).order_by('-timestamp', '-id').first()
 
     valid_activity_filters = ['viewed', 'downloaded', 'added', 'encrypted', 'edited', 'approved', 'rejected', 'deleted', 'reported_tampering', 'integrity_scan', 'verification', 'failed_login', 'login', 'logout', 'locked_out']
     requested_activity_filters = [
@@ -2591,7 +2606,6 @@ def dashboard(request):
         'total_documents': total_documents,
         'verified_documents': verified_documents,
         'flagged_documents': flagged_documents,
-        'latest_integrity_scan': latest_integrity_scan,
         'recent_logs': page_obj,
         'page_obj': page_obj,
         'activity_filter': activity_filter,
@@ -2608,49 +2622,6 @@ def dashboard(request):
         'read_only_user': is_read_only_user(request.user),
         'workspace_role': 'Admin' if is_admin(request.user) else ('Staff' if request.user.is_staff else 'User'),
     })
-
-
-@login_required
-def cancel_integrity_scan(request):
-    if not request.user.is_superuser:
-        return JsonResponse({'success': False, 'error': 'Administrator access required.'}, status=403)
-    if request.method != 'POST':
-        return JsonResponse({'success': False, 'error': 'POST required.'}, status=405)
-    scan = AuditLog.objects.filter(
-        action='integrity_scan', verification_result='Running',
-    ).order_by('-timestamp', '-id').first()
-    if not scan:
-        return JsonResponse({'success': False, 'error': 'No integrity scan is currently running.'}, status=404)
-    control = cache.get(INTEGRITY_SCAN_CACHE_KEY) or {}
-    control.update({'scan_log_id': scan.id, 'cancel_requested': True})
-    cache.set(INTEGRITY_SCAN_CACHE_KEY, control, 6 * 60 * 60)
-    scan.note = 'Cancellation requested by an administrator. The scanner will stop at the next document boundary.'
-    scan.verification_result = 'Cancel requested'
-    scan.save(update_fields=['note', 'verification_result'])
-    return JsonResponse({'success': True, 'message': 'Cancellation requested.'})
-
-
-@login_required
-def start_integrity_scan(request):
-    if not request.user.is_superuser:
-        return JsonResponse({'success': False, 'error': 'Administrator access required.'}, status=403)
-    if request.method != 'POST':
-        return JsonResponse({'success': False, 'error': 'POST required.'}, status=405)
-    _reconcile_stale_integrity_scan()
-    if cache.get(INTEGRITY_SCAN_LOCK_KEY) or AuditLog.objects.filter(
-        action='integrity_scan', verification_result__in=['Running', 'Cancel requested']
-    ).exists():
-        return JsonResponse({'success': False, 'error': 'An integrity scan is already in progress.'}, status=409)
-
-    def run_scan():
-        from django.core.management import call_command
-        try:
-            call_command('verify_integrity', quiet_success=True, source='Admin-triggered Integrity Scan')
-        except Exception:
-            logging.getLogger('contracts.integrity').exception('Admin-triggered integrity scan failed')
-
-    threading.Thread(target=run_scan, name='sealguard-integrity-admin', daemon=True).start()
-    return JsonResponse({'success': True, 'message': 'Integrity scan started.'})
 
 
 @login_required
