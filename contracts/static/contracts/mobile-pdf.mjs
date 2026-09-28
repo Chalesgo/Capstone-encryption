@@ -113,15 +113,17 @@ async function loadVersions() {
     get('details-created').textContent = data.created || '—';
     get('details-encrypted').textContent = data.encrypted || '—';
     get('details-verified').textContent = data.verified || 'Not yet verified';
-    // Fallback when the open file has no version row: the document owner.
-    showAccount(get('details-uploader'), data.uploaded_by, data.uploaded_by_deleted);
-    get('details-version').textContent = 'Opened document';
+    // The contract owner is not necessarily the uploader of a newer untracked current file.
+    showAccount(get('details-uploader'), data.current_file_is_tracked === false ? 'Unknown account' : data.uploaded_by, data.current_file_is_tracked === false ? false : data.uploaded_by_deleted);
+    get('details-version').textContent = data.current_file_is_tracked === false ? 'Untracked current file' : 'Opened document';
+    const requestedVersion = Number(params.get('version')) || null;
     const source = new URL(params.get('file'), location.origin);
     source.hash = '';
     const fragment = document.createDocumentFragment();
     for (const version of data.versions) {
       if (!version.preview_url) continue;
-      const selected = [version.preview_url, version.file_url].some(url => url && new URL(url, location.origin).href === source.href)
+      const selected = version.version_number === requestedVersion
+        || [version.preview_url, version.file_url].some(url => url && new URL(url, location.origin).href === source.href)
         || (version.is_current && /^\/contract\/\d+\/(preview|download)\/$/.test(source.pathname));
       const button = document.createElement('button');
       button.className = 'version-option';

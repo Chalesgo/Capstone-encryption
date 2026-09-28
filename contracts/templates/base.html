@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="{% static 'contracts/display-size.css' %}?v=pdf-aware-1">
     <script src="{% static 'contracts/display-size.js' %}?v=pdf-aware-1"></script>
-    <script src="{% static 'contracts/mobile-pdf-host.js' %}?v=ctrl-wheel-1" data-viewer="{% static 'contracts/mobile-pdf.html' %}?v=uploader-fallback-1"></script>
+    <script src="{% static 'contracts/mobile-pdf-host.js' %}?v=revision-metadata-2" data-viewer="{% static 'contracts/mobile-pdf.html' %}?v=revision-metadata-2"></script>
     <title>{% block title %}SealGuard{% endblock %} — Barangay Sto. Niño</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -951,8 +951,8 @@
 </footer>
 <script>
 // All mobile PDF entry points share the local SealGuard canvas viewer.
-function openPdfInMobileViewer(url, contractId = null, title = '', details = false) {
-    return window.SealGuardPdf.open(url, contractId, title, details);
+function openPdfInMobileViewer(url, contractId = null, title = '', details = false, version = null) {
+    return window.SealGuardPdf.open(url, contractId, title, details, version);
 }
 
 function toggleProfilePopover() {

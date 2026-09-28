@@ -1472,6 +1472,8 @@ def contract_version_history(request, contract_id):
             'is_current': bool(contract.file) and v.file.name == contract.file.name,
         })
 
+    current_file_is_tracked = any(version['is_current'] for version in versions_data)
+
     response_data = {
         'success': True,
         'created': contract.uploaded_at.strftime('%b %d, %Y'),
@@ -1480,6 +1482,7 @@ def contract_version_history(request, contract_id):
         'version_count': len(versions_data),
         'uploaded_by': contract.uploaded_by_display or 'Unknown account',
         'uploaded_by_deleted': contract.uploaded_by_deleted,
+        'current_file_is_tracked': current_file_is_tracked,
         'title': contract.title,
         'versions': versions_data,
     }

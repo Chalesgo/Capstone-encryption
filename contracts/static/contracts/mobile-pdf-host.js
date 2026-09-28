@@ -23,7 +23,7 @@
   }
   window.SealGuardPdf = {
     close,
-    open(url, contractId = null, title = '', details = false) {
+    open(url, contractId = null, title = '', details = false, version = null) {
       // Desktop uses the original SealGuard side-panel layout. The full-screen
       // canvas is reserved for compact/mobile layouts.
       if (!url || !matchMedia('(max-width: 900px)').matches) return false;
@@ -50,6 +50,7 @@
       const inferredContract = sourcePath.match(/^\/contract\/(\d+)\/(?:preview|download)\/$/);
       const selectedContract = contractId || inferredContract?.[1];
       if (selectedContract) fullScreenUrl.searchParams.set('contract', selectedContract);
+      if (version != null && /^\d+$/.test(String(version))) fullScreenUrl.searchParams.set('version', String(version));
       fullScreenUrl.searchParams.delete('embedded');
       if (details) fullScreenUrl.searchParams.set('details', '1');
       frame.src = fullScreenUrl.href;

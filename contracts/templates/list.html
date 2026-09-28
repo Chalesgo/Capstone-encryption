@@ -2243,9 +2243,9 @@ function openPdfPreview(contractId, url, title, forceDetails = false, downloadUr
       document.getElementById('pdf-meta-created').textContent = data.created;
       document.getElementById('pdf-meta-encrypted').textContent = data.encrypted || '—';
       document.getElementById('pdf-meta-verified').textContent = data.verified;
-      document.getElementById('pdf-meta-version').textContent = 'v' + data.version_count;
       const selected = data.versions.find(v => v.is_current);
-      showVersionAccount(document.getElementById('pdf-meta-uploader'), selected || { created_by: data.uploaded_by, created_by_deleted: data.uploaded_by_deleted });
+      document.getElementById('pdf-meta-version').textContent = selected ? 'v' + selected.version_number : (data.current_file_is_tracked === false ? 'Untracked current file' : 'v' + data.version_count);
+      showVersionAccount(document.getElementById('pdf-meta-uploader'), selected || (data.current_file_is_tracked === false ? { created_by: 'Unknown account' } : { created_by: data.uploaded_by, created_by_deleted: data.uploaded_by_deleted }));
 
       const listEl = document.getElementById('pdf-version-list');
       listEl.innerHTML = '';
@@ -2257,7 +2257,7 @@ function openPdfPreview(contractId, url, title, forceDetails = false, downloadUr
         item.onclick = function() {
           showVersionAccount(document.getElementById('pdf-meta-uploader'), v);
           document.getElementById('pdf-meta-version').textContent = 'v' + v.version_number;
-          viewPdfVersion(v.preview_url, item, downloadName, v.file_url);
+          viewPdfVersion(v.preview_url, item, downloadName, v.file_url, v.version_number);
         };
         item.innerHTML = `
           <div>
@@ -2288,8 +2288,8 @@ function handleDocumentCellClick(event, contractId) {
   if (row) openPdfPreview(contractId, row.dataset.fileUrl, row.dataset.contractTitle, false, row.dataset.downloadUrl);
 }
 
-function viewPdfVersion(url, el, versionLabel, downloadUrl = '') {
-  if (openPdfInMobileViewer(url, activePdfContractId, document.getElementById('pdf-panel-title').textContent)) return;
+function viewPdfVersion(url, el, versionLabel, downloadUrl = '', versionNumber = null) {
+  if (openPdfInMobileViewer(url, activePdfContractId, document.getElementById('pdf-panel-title').textContent, false, versionNumber)) return;
   const previewUrl = url + (url.includes('#') ? '&' : '#') + 'toolbar=0&navpanes=0&scrollbar=1&view=FitH';
   document.getElementById('pdf-frame').src = sealGuardPdfFrameUrl(previewUrl, activePdfContractId, document.getElementById('pdf-panel-title').textContent);
   document.querySelectorAll('.version-item').forEach(i => i.classList.remove('active'));

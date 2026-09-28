@@ -1143,7 +1143,7 @@ function loadAuditVersions(contractId, selectedVersion) {
         item.addEventListener('click', function() {
           showAuditVersionAccount(document.getElementById('audit-pdf-activity-uploader'), version);
           const versionUrl = version.preview_url || version.file_url;
-          if (openPdfInMobileViewer(versionUrl, contractId)) return;
+          if (openPdfInMobileViewer(versionUrl, contractId, '', false, version.version_number)) return;
           document.getElementById('audit-pdf-frame').src = sealGuardPdfFrameUrl(versionUrl);
           document.getElementById('audit-pdf-download-btn').href = version.file_url || version.preview_url || '#';
           document.getElementById('audit-pdf-version').textContent = 'v' + version.version_number;
