@@ -308,6 +308,7 @@
       margin-top: 14px;
     }
     .contracts-header .search-wrap,
+    .contracts-header .filter-select-wrap,
     .contracts-header > div:last-child > .btn { width: 100%; }
     .contracts-header > div:last-child > .btn { justify-content: center; }
 
@@ -652,6 +653,73 @@
   }
   .enc-badge.encrypted   { background: #e8f5ef; color: #27c485; }
   .enc-badge.unencrypted { background: #fff8e6; color: #d97706; }
+  .doc-badges { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+  .enc-badge.version { background: #eef2ff; color: #3b5bdb; cursor: default; }
+
+  /* Uploader filter + mobile sort (styled to match the search pill) */
+  .filter-select-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff;
+    border: 1px solid #e0deda;
+    border-radius: 22px;
+    padding: 7px 12px 7px 16px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .filter-select-wrap:hover { border-color: #cbd5e1; }
+  .filter-select-wrap:focus-within { border-color: #3b5bdb; box-shadow: 0 0 0 3px rgba(59, 91, 219, .12); }
+  .filter-select-wrap.is-active { border-color: #b8c6f5; background: #f5f7ff; }
+  .filter-select-wrap svg { width: 14px; height: 14px; color: #aaa; flex-shrink: 0; }
+  .filter-select-wrap.is-active svg { color: #3b5bdb; }
+  .filter-select {
+    border: none;
+    outline: none;
+    background: transparent;
+    font: inherit;
+    font-size: 13px;
+    color: #444;
+    cursor: pointer;
+    max-width: 180px;
+  }
+  .mobile-sort-wrap { display: none; }
+  @media (max-width: 900px) {
+    .mobile-sort-wrap { display: flex; }
+    .filter-select { max-width: none; width: 100%; }
+  }
+
+  /* Sortable column header */
+  .th-sort-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-transform: inherit;
+    letter-spacing: inherit;
+    cursor: pointer;
+  }
+  .th-sort-btn:hover,
+  .th-sort-btn.is-active { color: #2d3a47; }
+  .th-sort-btn:focus-visible { outline: 2px solid #3b5bdb; outline-offset: 3px; border-radius: 3px; }
+  .th-sort-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+  .th-sort-btn:not(.is-active) svg { opacity: .55; }
+  .th-menu-wrap { display: inline-block; }
+  .th-menu-wrap .status-chevron { margin-left: 0; }
+  .th-menu li {
+    justify-content: space-between;
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .th-menu li:focus-visible { outline: 2px solid #3b5bdb; outline-offset: -2px; }
+  .th-menu li.is-selected { color: #3b5bdb; background: #eef2ff; }
+  .th-menu-check { width: 14px; height: 14px; visibility: hidden; }
+  .th-menu li.is-selected .th-menu-check { visibility: visible; }
 
   /* Empty state */
   .empty-state {
@@ -768,6 +836,7 @@
   .pdf-sidebar {
     width: 270px;
     flex-shrink: 0;
+    min-height: 0;
     min-width: 0;
     padding-bottom: 16px;
     background: #f5f7fa;
@@ -775,6 +844,7 @@
     display: flex;
     flex-direction: column;
     overflow-y: auto;
+    overscroll-behavior-y: contain;
   }
   .pdf-sidebar-title {
     position: sticky;
@@ -810,7 +880,7 @@
   .meta-row-label { color: #889aab; }
   .meta-row-value { color: #2d3a47; font-weight: 500; text-align: right; }
 
-  .version-list { flex: 1; margin: 0 10px; overflow-y: auto; border: 1px solid #e3e9ef; border-radius: 10px; background: #fff; }
+  .version-list { flex: 1; min-height: 0; margin: 0 10px; overflow-y: auto; overscroll-behavior-y: contain; border: 1px solid #e3e9ef; border-radius: 10px; background: #fff; }
   .version-list-loading {
     padding: 12px 16px;
     font-size: 12.5px;
@@ -1145,6 +1215,43 @@
       </svg>
       <input type="search" id="doc-search" class="search-input" value="{{ search_query }}" placeholder="Search title or uploader..." aria-label="Search documents" onkeydown="if(event.key==='Enter' && !event.isComposing) { event.preventDefault(); submitSearchFilter(); }">
     </div>
+    {% if uploaders|length > 1 or uploader_filter %}
+    <label class="filter-select-wrap{% if uploader_filter %} is-active{% endif %}" title="Filter by uploader">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 16 0v1"/>
+      </svg>
+      <select id="uploader-filter" class="filter-select" aria-label="Filter by uploader" onchange="setListParam('uploader', this.value)">
+        <option value="">All uploaders</option>
+        {% for uploader in uploaders %}
+        <option value="{{ uploader.id }}" {% if uploader_filter == uploader.id|stringformat:"d" %}selected{% endif %}>{{ uploader.username }}{% if uploader.id == user.id %} (you){% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endif %}
+    <label class="filter-select-wrap mobile-sort-wrap{% if scope %} is-active{% endif %}" title="Show all documents, your uploads, or documents shared with you">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <circle cx="9" cy="7" r="4"/><path d="M2 21v-2a7 7 0 0 1 12-4.9M16 11l2 2 4-4"/>
+      </svg>
+      <select class="filter-select" aria-label="Filter by ownership" onchange="setListParam('scope', this.value)">
+        <option value="" {% if not scope %}selected{% endif %}>All documents</option>
+        {% if not read_only_user %}<option value="mine" {% if scope == 'mine' %}selected{% endif %}>My uploads</option>{% endif %}
+        <option value="shared" {% if scope == 'shared' %}selected{% endif %}>Shared with me</option>
+      </select>
+    </label>
+    <label class="filter-select-wrap mobile-sort-wrap{% if sort %} is-active{% endif %}" title="Sort documents">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4"/>
+      </svg>
+      <select class="filter-select" aria-label="Sort documents" onchange="setListParam('sort', this.value)">
+        <option value="" {% if not sort or sort == 'modified_new' %}selected{% endif %}>Recently modified</option>
+        <option value="newest" {% if sort == 'newest' %}selected{% endif %}>Newest created</option>
+        <option value="oldest" {% if sort == 'oldest' %}selected{% endif %}>Oldest created</option>
+        <option value="name" {% if sort == 'name' %}selected{% endif %}>Name A–Z</option>
+        <option value="modified_old" {% if sort == 'modified_old' %}selected{% endif %}>Least recently modified</option>
+        <option value="status_draft" {% if sort == 'status_draft' %}selected{% endif %}>Drafts first</option>
+        <option value="status_final" {% if sort == 'status_final' %}selected{% endif %}>Final copies first</option>
+      </select>
+    </label>
     {% if not read_only_user %}<a href="/upload/" class="btn btn-primary">+ Upload Contract</a>{% endif %}
   </div>
 </div>
@@ -1165,11 +1272,71 @@
   <thead>
     <tr>
       <th style="width:28px;"><input type="checkbox" id="select-all"></th>
-      <th>Document Name</th>
-      <th>Uploaded by</th>
-      <th>Date Created ↑</th>
-      <th style="width:120px;">Status</th>
-      <th>Modified</th>
+      <th>
+        <div class="status-dropdown th-menu-wrap">
+          <button type="button" class="th-sort-btn{% if sort == 'name' %} is-active{% endif %}" aria-haspopup="menu" aria-expanded="false" aria-controls="name-sort-menu" title="Sort documents by name" onclick="toggleThMenu(event, 'name-sort-menu')">
+            {% if sort == 'name' %}Name A–Z{% else %}Document Name{% endif %}
+            <svg class="status-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <ul class="status-dropdown-menu th-menu" id="name-sort-menu" role="menu" aria-label="Sort by name">
+          <li role="menuitemradio" tabindex="0" aria-checked="{% if sort != 'name' %}true{% else %}false{% endif %}" class="{% if sort != 'name' %}is-selected{% endif %}" onclick="setListParam('sort', '')" onkeydown="thMenuItemKey(event)">Default order<svg class="th-menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></li>
+          <li role="menuitemradio" tabindex="0" aria-checked="{% if sort == 'name' %}true{% else %}false{% endif %}" class="{% if sort == 'name' %}is-selected{% endif %}" onclick="setListParam('sort', 'name')" onkeydown="thMenuItemKey(event)">Name A–Z<svg class="th-menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></li>
+          </ul>
+        </div>
+      </th>
+      <th>
+        <div class="status-dropdown th-menu-wrap">
+          <button type="button" class="th-sort-btn{% if scope %} is-active{% endif %}" aria-haspopup="menu" aria-expanded="false" aria-controls="uploader-scope-menu" title="Show all documents, your uploads, or documents shared with you" onclick="toggleThMenu(event, 'uploader-scope-menu')">
+            {% if scope == 'mine' %}My uploads{% elif scope == 'shared' %}Shared with me{% else %}Uploaded by{% endif %}
+            <svg class="status-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <ul class="status-dropdown-menu th-menu" id="uploader-scope-menu" role="menu" aria-label="Filter by ownership">
+          <li role="menuitemradio" tabindex="0" aria-checked="{% if not scope %}true{% else %}false{% endif %}" class="{% if not scope %}is-selected{% endif %}" onclick="setListParam('scope', '')" onkeydown="thMenuItemKey(event)">All documents<svg class="th-menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></li>
+          {% if not read_only_user %}<li role="menuitemradio" tabindex="0" aria-checked="{% if scope == 'mine' %}true{% else %}false{% endif %}" class="{% if scope == 'mine' %}is-selected{% endif %}" onclick="setListParam('scope', 'mine')" onkeydown="thMenuItemKey(event)">My uploads<svg class="th-menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></li>
+          {% endif %}
+          <li role="menuitemradio" tabindex="0" aria-checked="{% if scope == 'shared' %}true{% else %}false{% endif %}" class="{% if scope == 'shared' %}is-selected{% endif %}" onclick="setListParam('scope', 'shared')" onkeydown="thMenuItemKey(event)">Shared with me<svg class="th-menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></li>
+          </ul>
+        </div>
+      </th>
+      <th aria-sort="{% if sort == 'newest' %}descending{% elif sort == 'oldest' %}ascending{% else %}none{% endif %}">
+        <button type="button" class="th-sort-btn{% if sort == 'newest' or sort == 'oldest' %} is-active{% endif %}" onclick="toggleSortPair('newest', 'oldest')"
+                title="{% if sort == 'newest' %}Newest first - click for oldest first{% elif sort == 'oldest' %}Oldest first - click for newest first{% else %}Sort by date created{% endif %}">
+          Date Created
+          {% if sort == 'newest' %}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
+          {% elif sort == 'oldest' %}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+          {% else %}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 9 5-5 5 5M7 15l5 5 5-5"/></svg>
+          {% endif %}
+        </button>
+      </th>
+      <th style="width:130px;" aria-sort="{% if sort == 'status_draft' %}descending{% elif sort == 'status_final' %}ascending{% else %}none{% endif %}">
+        <button type="button" class="th-sort-btn{% if sort == 'status_draft' or sort == 'status_final' %} is-active{% endif %}" onclick="toggleSortPair('status_draft', 'status_final')"
+                title="{% if sort == 'status_draft' %}Drafts first - click for final copies first{% elif sort == 'status_final' %}Final copies first - click for drafts first{% else %}Sort by status{% endif %}">
+          {% if sort == 'status_draft' %}Drafts first{% elif sort == 'status_final' %}Final first{% else %}Status{% endif %}
+          {% if sort == 'status_draft' %}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
+          {% elif sort == 'status_final' %}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+          {% else %}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 9 5-5 5 5M7 15l5 5 5-5"/></svg>
+          {% endif %}
+        </button>
+      </th>
+      <th aria-sort="{% if sort == 'modified_new' %}descending{% elif sort == 'modified_old' %}ascending{% else %}none{% endif %}">
+        <button type="button" class="th-sort-btn{% if sort == 'modified_new' or sort == 'modified_old' %} is-active{% endif %}" onclick="toggleSortPair('modified_new', 'modified_old')"
+                title="{% if sort == 'modified_new' %}Newest first - click for oldest first{% elif sort == 'modified_old' %}Oldest first - click for newest first{% else %}Sort by modified{% endif %}">
+          {% if sort == 'modified_new' %}Modified{% elif sort == 'modified_old' %}Modified{% else %}Modified{% endif %}
+          {% if sort == 'modified_new' %}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
+          {% elif sort == 'modified_old' %}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+          {% else %}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 9 5-5 5 5M7 15l5 5 5-5"/></svg>
+          {% endif %}
+        </button>
+      </th>
       <th></th>
     </tr>
   </thead>
@@ -1183,7 +1350,7 @@
         data-download-url="{% if not read_only_user %}{% url 'download_contract' contract.id %}{% endif %}"
         data-contract-title="{{ contract.title|escapejs }}"
         data-encrypted="{% if contract.encrypted_cf %}1{% else %}0{% endif %}"
-        data-search="{{ contract.title|lower }} {{ contract.uploaded_by.username|default:''|lower }}"
+        data-search="{{ contract.title|lower }} {{ contract.uploaded_by_display|default:''|lower }}"
         draggable="true"
         ondragstart="dragContractStart(event, {{ contract.id }})">
 
@@ -1212,7 +1379,7 @@
                    value="{{ contract.title }}"
                    onblur="submitRename({{ contract.id }})"
                    onkeydown="if(event.key==='Enter') submitRename({{ contract.id }}); if(event.key==='Escape') cancelRename({{ contract.id }});">
-            <div style="margin-top:3px;">
+            <div class="doc-badges">
               {% if contract.encrypted_cf %}
                 <span class="enc-badge encrypted">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1230,6 +1397,16 @@
                   Not Encrypted
                 </span>
               {% endif %}
+              {% if contract.version_count %}
+                <span class="enc-badge version"
+                      title="This PDF has {{ contract.version_count }} revision{{ contract.version_count|pluralize }} (currently v{{ contract.version_count }})"
+                      aria-label="This PDF has {{ contract.version_count }} revision{{ contract.version_count|pluralize }}">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="m12 2 10 5-10 5L2 7Z"/><path d="m2 12 10 5 10-5"/><path d="m2 17 10 5 10-5"/>
+                  </svg>
+                  v{{ contract.version_count }}
+                </span>
+              {% endif %}
             </div>
           </div>
         </div>
@@ -1237,7 +1414,7 @@
 
       <!-- Uploaded by -->
       <td style="color:#667788;">
-        {{ contract.uploaded_by.username|default:"—" }}
+        {% if contract.uploaded_by_deleted %}<span class="deleted-account" title="This account has been deleted">{{ contract.uploaded_by_name }}</span>{% else %}{{ contract.uploaded_by_display|default:"—" }}{% endif %}
       </td>
 
       <!-- Date Created -->
@@ -1407,8 +1584,8 @@
       <option value="25" {% if per_page == 25 %}selected{% endif %}>25</option>
       <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
     </select>
-    {% if page_obj.has_previous %}<a href="?q={{ search_query|urlencode }}&amp;status={{ status_filter|urlencode }}&amp;folder={{ folder_filter|urlencode }}&amp;per_page={{ per_page }}&amp;page=1" aria-label="First page" title="First page"><svg class="pagination-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 17 6 12l5-5"/><path d="m18 17-5-5 5-5"/></svg></a>{% endif %}
-    {% if page_obj.has_previous %}<a href="?q={{ search_query|urlencode }}&amp;status={{ status_filter|urlencode }}&amp;folder={{ folder_filter|urlencode }}&amp;per_page={{ per_page }}&amp;page={{ page_obj.previous_page_number }}" aria-label="Previous page" title="Previous page"><svg class="pagination-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></a>{% endif %}
+    {% if page_obj.has_previous %}<a href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page=1" aria-label="First page" title="First page"><svg class="pagination-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 17 6 12l5-5"/><path d="m18 17-5-5 5-5"/></svg></a>{% endif %}
+    {% if page_obj.has_previous %}<a href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ page_obj.previous_page_number }}" aria-label="Previous page" title="Previous page"><svg class="pagination-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></a>{% endif %}
     <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
     <form method="get" aria-label="Go to contract page">
       <label for="contracts-page-number">Go to</label>
@@ -1416,11 +1593,14 @@
       <input type="hidden" name="q" value="{{ search_query }}">
       <input type="hidden" name="status" value="{{ status_filter }}">
       <input type="hidden" name="folder" value="{{ folder_filter }}">
+      <input type="hidden" name="uploader" value="{{ uploader_filter }}">
+      <input type="hidden" name="scope" value="{{ scope }}">
+      <input type="hidden" name="sort" value="{{ sort }}">
       <input type="hidden" name="per_page" value="{{ per_page }}">
       <button type="submit" class="pagination-submit">Go</button>
     </form>
-    {% if page_obj.has_next %}<a href="?q={{ search_query|urlencode }}&amp;status={{ status_filter|urlencode }}&amp;folder={{ folder_filter|urlencode }}&amp;per_page={{ per_page }}&amp;page={{ page_obj.next_page_number }}" aria-label="Next page" title="Next page"><svg class="pagination-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></a>{% endif %}
-    {% if page_obj.has_next %}<a href="?q={{ search_query|urlencode }}&amp;status={{ status_filter|urlencode }}&amp;folder={{ folder_filter|urlencode }}&amp;per_page={{ per_page }}&amp;page={{ page_obj.paginator.num_pages }}" aria-label="Last page" title="Last page"><svg class="pagination-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 17 5-5-5-5"/><path d="m6 17 5-5-5-5"/></svg></a>{% endif %}
+    {% if page_obj.has_next %}<a href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ page_obj.next_page_number }}" aria-label="Next page" title="Next page"><svg class="pagination-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></a>{% endif %}
+    {% if page_obj.has_next %}<a href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ page_obj.paginator.num_pages }}" aria-label="Last page" title="Last page"><svg class="pagination-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 17 5-5-5-5"/><path d="m6 17 5-5-5-5"/></svg></a>{% endif %}
   </span>
 </nav>
 {% endif %}
@@ -1432,8 +1612,13 @@
     <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
   </svg>
   </div>
+  {% if filters_active %}
+  <p>No documents match these filters.</p>
+  <a href="{% url 'contract_list' %}" class="btn btn-outline">Clear filters</a>
+  {% else %}
   <p>No contracts uploaded yet.</p>
-  <a href="/upload/" class="btn btn-primary">Upload your first contract</a>
+  {% if not read_only_user %}<a href="/upload/" class="btn btn-primary">Upload your first contract</a>{% endif %}
+  {% endif %}
 </div>
 {% endif %}
 
@@ -1574,6 +1759,51 @@ function submitSearchFilter() {
     else url.searchParams.delete('q');
     url.searchParams.delete('page');
     window.location.href = url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '');
+}
+
+// Server-side list options (uploader, sort) keep every other filter in the URL.
+function setListParam(name, value) {
+  const url = new URL(window.location.href);
+  if (value) url.searchParams.set(name, value); else url.searchParams.delete(name);
+  url.searchParams.delete('page');
+  window.location.href = url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '');
+}
+
+// Column header menus (name sort, ownership) reuse the status dropdown menu.
+function toggleThMenu(event, menuId) {
+  event.stopPropagation();
+  const menu = document.getElementById(menuId);
+  const button = event.currentTarget;
+  const isOpen = menu.classList.contains('open');
+  document.querySelectorAll('.status-dropdown-menu.open').forEach(m => m.classList.remove('open'));
+  document.querySelectorAll('.th-menu-wrap [aria-expanded="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+  if (isOpen) return;
+  const rect = button.getBoundingClientRect();
+  menu.style.left = rect.left + 'px';
+  menu.style.top = (rect.bottom + 6) + 'px';
+  menu.classList.add('open');
+  button.setAttribute('aria-expanded', 'true');
+  const selected = menu.querySelector('.is-selected') || menu.querySelector('li');
+  if (selected) selected.focus();
+}
+
+function thMenuItemKey(event) {
+  const item = event.currentTarget;
+  if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); item.click(); }
+  else if (event.key === 'ArrowDown' && item.nextElementSibling) { event.preventDefault(); item.nextElementSibling.focus(); }
+  else if (event.key === 'ArrowUp' && item.previousElementSibling) { event.preventDefault(); item.previousElementSibling.focus(); }
+  else if (event.key === 'Escape') {
+    item.closest('.status-dropdown-menu').classList.remove('open');
+    const button = item.closest('.th-menu-wrap').querySelector('button');
+    button.setAttribute('aria-expanded', 'false');
+    button.focus();
+  }
+}
+
+// Sortable headers flip between two orders; the first click uses the first one.
+function toggleSortPair(first, second) {
+  const current = new URLSearchParams(window.location.search).get('sort');
+  setListParam('sort', current === first ? second : first);
 }
 
 function changeContractsPerPage(value) {
@@ -1918,6 +2148,14 @@ function getVersionHistory(contractId) {
   return versionHistoryRequests.get(key);
 }
 
+// Shows who added a version, flagging usernames kept from deleted accounts.
+function showVersionAccount(el, version) {
+  el.textContent = version ? (version.created_by || 'Unknown account') : 'Unknown account';
+  const deleted = Boolean(version && version.created_by_deleted);
+  el.classList.toggle('deleted-account', deleted);
+  if (deleted) el.title = 'This account has been deleted'; else el.removeAttribute('title');
+}
+
 function escapeVersionHistoryText(value) {
   return String(value == null ? '' : value).replace(/[&<>"']/g, function(character) {
     return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[character];
@@ -1944,7 +2182,7 @@ function openPdfPreview(contractId, url, title, forceDetails = false, downloadUr
   document.getElementById('pdf-meta-encrypted').textContent = '—';
   document.getElementById('pdf-meta-verified').textContent = '—';
   document.getElementById('pdf-meta-version').textContent = '—';
-  document.getElementById('pdf-meta-uploader').textContent = '—';
+  showVersionAccount(document.getElementById('pdf-meta-uploader'), { created_by: '—' });
   document.getElementById('pdf-version-list').innerHTML = '<div class="version-list-loading">Loading version history…</div>';
 
   getVersionHistory(contractId)
@@ -1956,7 +2194,7 @@ function openPdfPreview(contractId, url, title, forceDetails = false, downloadUr
       document.getElementById('pdf-meta-verified').textContent = data.verified;
       document.getElementById('pdf-meta-version').textContent = 'v' + data.version_count;
       const selected = data.versions.find(v => v.is_current);
-      document.getElementById('pdf-meta-uploader').textContent = selected ? selected.created_by : 'Unknown account';
+      showVersionAccount(document.getElementById('pdf-meta-uploader'), selected || { created_by: data.uploaded_by, created_by_deleted: data.uploaded_by_deleted });
 
       const listEl = document.getElementById('pdf-version-list');
       listEl.innerHTML = '';
@@ -1966,7 +2204,7 @@ function openPdfPreview(contractId, url, title, forceDetails = false, downloadUr
         item.className = 'version-item' + (v.is_current ? ' active' : '');
         const downloadName = document.getElementById('pdf-panel-title').textContent.trim() + '_v' + v.version_number + '.pdf';
         item.onclick = function() {
-          document.getElementById('pdf-meta-uploader').textContent = v.created_by || 'Unknown account';
+          showVersionAccount(document.getElementById('pdf-meta-uploader'), v);
           document.getElementById('pdf-meta-version').textContent = 'v' + v.version_number;
           viewPdfVersion(v.preview_url, item, downloadName, v.file_url);
         };
@@ -1974,7 +2212,7 @@ function openPdfPreview(contractId, url, title, forceDetails = false, downloadUr
           <div>
             <div class="version-item-title">v${v.version_number} — ${v.source}${v.is_current ? ' (Current)' : ''}</div>
             <div class="version-item-date">${v.created_at}</div>
-            <div class="version-item-account">Added by ${escapeVersionHistoryText(v.created_by)}</div>
+            <div class="version-item-account">Added by ${v.created_by_deleted ? '<span class="deleted-account" title="This account has been deleted">' + escapeVersionHistoryText(v.created_by) + '</span>' : escapeVersionHistoryText(v.created_by)}</div>
           </div>
         `;
         listEl.appendChild(item);
@@ -2772,6 +3010,7 @@ function showContractContextMenu(event, contractId) {
 document.addEventListener('click', function(event) {
   if (!event.target.closest('.status-dropdown')) {
     document.querySelectorAll('.status-dropdown-menu.open').forEach(menu => menu.classList.remove('open'));
+    document.querySelectorAll('.th-menu-wrap [aria-expanded="true"]').forEach(button => button.setAttribute('aria-expanded', 'false'));
   }
   if (!event.target.closest('#folder-context-menu')) {
     document.getElementById('folder-context-menu').classList.remove('active');

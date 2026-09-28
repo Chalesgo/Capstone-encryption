@@ -3,7 +3,7 @@ import time
 
 from django.conf import settings
 from django.contrib.auth.signals import user_logged_in, user_logged_out, user_login_failed
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, pre_delete
 from django.db.backends.signals import connection_created
 from django.contrib.auth.models import User
 from django.core.cache import cache
@@ -35,6 +35,14 @@ def sync_sealguard_role_group(instance):
 @receiver(post_save, sender=User)
 def sync_sealguard_role_group_on_save(sender, instance, **kwargs):
     sync_sealguard_role_group(instance)
+
+
+@receiver(pre_delete, sender=User)
+def preserve_deleted_uploader_name(sender, instance, **kwargs):
+    """Keep the username on documents before SET_NULL clears the account link."""
+    from .models import Contract, ContractVersion
+    Contract.objects.filter(uploaded_by=instance).update(uploaded_by_name=instance.username)
+    ContractVersion.objects.filter(created_by=instance).update(created_by_name=instance.username)
 
 
 @receiver(connection_created)

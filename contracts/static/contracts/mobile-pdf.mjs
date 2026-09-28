@@ -74,6 +74,13 @@ document.addEventListener('keydown', event => {
   }
 });
 
+// Account names kept from deleted users are flagged in faint red.
+function showAccount(el, name, deleted) {
+  el.textContent = name || 'Unknown account';
+  el.classList.toggle('deleted-account', Boolean(deleted));
+  if (deleted) el.title = 'This account has been deleted'; else el.removeAttribute('title');
+}
+
 async function loadVersions() {
   if (versionsLoading) return;
   const contractId = params.get('contract');
@@ -106,7 +113,8 @@ async function loadVersions() {
     get('details-created').textContent = data.created || '—';
     get('details-encrypted').textContent = data.encrypted || '—';
     get('details-verified').textContent = data.verified || 'Not yet verified';
-    get('details-uploader').textContent = 'Unknown account';
+    // Fallback when the open file has no version row: the document owner.
+    showAccount(get('details-uploader'), data.uploaded_by, data.uploaded_by_deleted);
     get('details-version').textContent = 'Opened document';
     const source = new URL(params.get('file'), location.origin);
     source.hash = '';
@@ -130,13 +138,15 @@ async function loadVersions() {
       date.textContent = version.created_at;
       const account = document.createElement('span');
       account.className = 'version-option-account';
-      account.textContent = 'Added by ' + (version.created_by || 'Unknown account');
+      const accountName = document.createElement('span');
+      showAccount(accountName, version.created_by, version.created_by_deleted);
+      account.append('Added by ', accountName);
       details.append(label, date, account);
       button.append(icon, details);
       if (selected) {
         get('versions-toggle').textContent = 'v' + version.version_number;
         get('details-version').textContent = 'v' + version.version_number;
-        get('details-uploader').textContent = version.created_by || 'Unknown account';
+        showAccount(get('details-uploader'), version.created_by, version.created_by_deleted);
       }
       button.onclick = () => {
         if (selected) { sheet(false); return; }

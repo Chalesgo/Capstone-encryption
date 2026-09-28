@@ -317,3 +317,86 @@ class DocumentAccessTests(TestCase):
             response = self.client.get(url)
             self.assertEqual(response.status_code, 200)
             response.close()
+
+
+class ContractListFilterTests(TestCase):
+    setUp = DocumentAccessTests.setUp
+    login = DocumentAccessTests.login
+
+    def test_sort_by_date_created_both_directions(self):
+        newer = Contract.objects.create(title='Newer document', uploaded_by=self.owner)
+        newer.file.save('newer.pdf', ContentFile(b'%PDF-1.4 newer'))
+        Contract.objects.filter(pk=self.contract.pk).update(uploaded_at=newer.uploaded_at.replace(year=2020))
+        self.login(self.admin)
+        newest = [c.pk for c in self.client.get(reverse('contract_list'), {'sort': 'newest'}).context['contracts']]
+        oldest = [c.pk for c in self.client.get(reverse('contract_list'), {'sort': 'oldest'}).context['contracts']]
+        self.assertEqual(newest, [newer.pk, self.contract.pk])
+        self.assertEqual(oldest, [self.contract.pk, newer.pk])
+
+    def test_uploader_filter_and_pagination_keep_filters(self):
+        other_doc = Contract.objects.create(title='Editor upload', uploaded_by=self.editor)
+        other_doc.file.save('editor.pdf', ContentFile(b'%PDF-1.4 editor'))
+        self.login(self.admin)
+        response = self.client.get(reverse('contract_list'), {'uploader': self.editor.pk, 'sort': 'oldest', 'per_page': 10})
+        self.assertEqual([c.pk for c in response.context['contracts']], [other_doc.pk])
+        self.assertIn(f'uploader={self.editor.pk}', response.context['filter_query'])
+        self.assertIn('sort=oldest', response.context['filter_query'])
+        self.assertContains(response, 'id="uploader-filter"')
+
+    def test_scope_menu_filters_my_uploads_and_shared_with_me(self):
+        own = Contract.objects.create(title='Editor own upload', uploaded_by=self.editor)
+        own.file.save('own.pdf', ContentFile(b'%PDF-1.4 own'))
+        self.login(self.editor)
+        mine = self.client.get(reverse('contract_list'), {'scope': 'mine'})
+        shared = self.client.get(reverse('contract_list'), {'scope': 'shared'})
+        self.assertEqual([c.pk for c in mine.context['contracts']], [own.pk])
+        self.assertEqual([c.pk for c in shared.context['contracts']], [self.contract.pk])
+        self.assertContains(shared, 'Shared with me')
+        self.assertIn('scope=shared', shared.context['filter_query'])
+
+    def test_sort_by_name_a_to_z(self):
+        for title in ('beta document', 'Alpha document'):
+            doc = Contract.objects.create(title=title, uploaded_by=self.owner)
+            doc.file.save('doc.pdf', ContentFile(b'%PDF-1.4 doc'))
+        self.login(self.admin)
+        response = self.client.get(reverse('contract_list'), {'sort': 'name'})
+        self.assertEqual([c.title for c in response.context['contracts']],
+                         ['Alpha document', 'beta document', 'Private document'])
+        self.assertContains(response, 'Name A–Z')
+
+    def test_status_and_modified_sorts(self):
+        final = Contract.objects.create(title='Final document', uploaded_by=self.owner, status='final')
+        final.file.save('final.pdf', ContentFile(b'%PDF-1.4 final'))
+        self.login(self.admin)
+        def order(sort):
+            return [c.pk for c in self.client.get(reverse('contract_list'), {'sort': sort}).context['contracts']]
+        self.assertEqual(order('status_draft'), [self.contract.pk, final.pk])
+        self.assertEqual(order('status_final'), [final.pk, self.contract.pk])
+        self.assertEqual(order('modified_new'), [final.pk, self.contract.pk])
+        self.assertEqual(order('modified_old'), [self.contract.pk, final.pk])
+        self.assertContains(self.client.get(reverse('contract_list'), {'sort': 'status_final'}), 'Final first')
+
+    def test_version_history_reports_document_owner_as_fallback(self):
+        self.login(self.admin)
+        history = self.client.get(reverse('contract_version_history', args=[self.contract.pk])).json()
+        self.assertEqual(history['uploaded_by'], 'uploader')
+        self.assertFalse(history['uploaded_by_deleted'])
+
+    def test_revision_badge_shows_version_count(self):
+        ContractVersion.objects.create(contract=self.contract, version_number=2, created_by=self.owner)
+        self.login(self.admin)
+        response = self.client.get(reverse('contract_list'))
+        self.assertContains(response, 'This PDF has 2 revisions')
+
+    def test_deleted_uploader_name_is_preserved(self):
+        self.owner.delete()
+        self.contract.refresh_from_db()
+        self.version.refresh_from_db()
+        self.assertEqual(self.contract.uploaded_by_display, 'uploader')
+        self.assertTrue(self.contract.uploaded_by_deleted)
+        self.assertEqual(self.version.created_by_name, 'uploader')
+        self.login(self.admin)
+        self.assertContains(self.client.get(reverse('contract_list')), 'title="This account has been deleted">uploader</span>')
+        history = self.client.get(reverse('contract_version_history', args=[self.contract.pk])).json()
+        self.assertEqual(history['versions'][0]['created_by'], 'uploader')
+        self.assertTrue(history['versions'][0]['created_by_deleted'])

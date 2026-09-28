@@ -46,8 +46,12 @@ from .utils import log_activity
 from .models import Contract, AuditLog
 from django.utils import timezone
 from datetime import timedelta
+from django.db import transaction
 from django.core.paginator import Paginator
 from django.urls import reverse
+from django.utils.http import urlencode
+from django.db.models import Case, Value, When
+from django.db.models.functions import Lower
 from django.core.files import File
 from django.contrib.auth.models import User
 from django.contrib.auth import login
@@ -451,31 +455,34 @@ def upload_contract(request):
             if os.path.isfile(pdf_path):
                 os.remove(pdf_path)
 
-            contract.file = f'contracts/{final_filename}'
-            contract.seal_image = f'seals/seal_{contract.id}.png'
-            contract.save()
+            # Contract pointer and version row must commit together, or the
+            # viewer loses track of which version is current.
+            with transaction.atomic():
+                contract.file = f'contracts/{final_filename}'
+                contract.seal_image = f'seals/seal_{contract.id}.png'
+                contract.save()
 
-            version = ContractVersion.objects.create(
-                contract=contract,
-                version_number=1,
-                source='upload',
-                file=contract.file.name,
-                fingerprint=sealed_cf,
-                vector_fingerprint=vector_cf,
-                previous_fingerprint='',
-                encrypted_cf=encrypted,
-                hmac_value=hmac_value,
-                wrapped_key=wrapped_key,
-                aes_iv=aes_iv,
-                created_by=request.user,
-            )
+                version = ContractVersion.objects.create(
+                    contract=contract,
+                    version_number=1,
+                    source='upload',
+                    file=contract.file.name,
+                    fingerprint=sealed_cf,
+                    vector_fingerprint=vector_cf,
+                    previous_fingerprint='',
+                    encrypted_cf=encrypted,
+                    hmac_value=hmac_value,
+                    wrapped_key=wrapped_key,
+                    aes_iv=aes_iv,
+                    created_by=request.user,
+                )
 
-            elapsed_ms = round((time.perf_counter() - started_at) * 1000)
-            log_activity(
-                request, 'added', contract=contract,
-                note=f'Initial encryption completed; version=1; duration_ms={elapsed_ms}'
-            )
-            _save_physical_manifest(version, manifest, manifest_signature)
+                elapsed_ms = round((time.perf_counter() - started_at) * 1000)
+                log_activity(
+                    request, 'added', contract=contract,
+                    note=f'Initial encryption completed; version=1; duration_ms={elapsed_ms}'
+                )
+                _save_physical_manifest(version, manifest, manifest_signature)
             _process_log(
                 'initial_encryption', 'completed', contract=contract, request=request,
                 version=1, duration_ms=elapsed_ms,
@@ -541,31 +548,34 @@ def encrypt_contract(request, contract_id):
     contract.aes_key = ''
     contract.aes_iv = aes_iv
 
-    contract.file = f'contracts/{final_filename}'
-    contract.seal_image = f'seals/seal_{contract.id}.png'
-    contract.save()
+    # Contract pointer and version row must commit together, or the
+    # viewer loses track of which version is current.
+    with transaction.atomic():
+        contract.file = f'contracts/{final_filename}'
+        contract.seal_image = f'seals/seal_{contract.id}.png'
+        contract.save()
 
-    version = ContractVersion.objects.create(
-        contract=contract,
-        version_number=next_version_number,
-        source='reencrypt',
-        file=contract.file.name,
-        fingerprint=version_cf,
-        vector_fingerprint=vector_cf,
-        previous_fingerprint=previous_cf or '',
-        encrypted_cf=encrypted,
-        hmac_value=hmac_value,
-        wrapped_key=wrapped_key,
-        aes_iv=aes_iv,
-        created_by=request.user,
-    )
+        version = ContractVersion.objects.create(
+            contract=contract,
+            version_number=next_version_number,
+            source='reencrypt',
+            file=contract.file.name,
+            fingerprint=version_cf,
+            vector_fingerprint=vector_cf,
+            previous_fingerprint=previous_cf or '',
+            encrypted_cf=encrypted,
+            hmac_value=hmac_value,
+            wrapped_key=wrapped_key,
+            aes_iv=aes_iv,
+            created_by=request.user,
+        )
 
-    elapsed_ms = round((time.perf_counter() - started_at) * 1000)
-    log_activity(
-        request, 'encrypted', contract=contract,
-        note=f'Re-encryption completed; version={next_version_number}; duration_ms={elapsed_ms}'
-    )
-    _save_physical_manifest(version, manifest, manifest_signature)
+        elapsed_ms = round((time.perf_counter() - started_at) * 1000)
+        log_activity(
+            request, 'encrypted', contract=contract,
+            note=f'Re-encryption completed; version={next_version_number}; duration_ms={elapsed_ms}'
+        )
+        _save_physical_manifest(version, manifest, manifest_signature)
     _process_log(
         'reencryption', 'completed', contract=contract, request=request,
         version=next_version_number, duration_ms=elapsed_ms,
@@ -652,34 +662,37 @@ def add_revision(request, contract_id):
         contract.wrapped_key = wrapped_key
         contract.aes_key = ''
         contract.aes_iv = aes_iv
-        contract.file = f'contracts/{final_filename}'
-        contract.seal_image = f'seals/seal_{contract.id}.png'
-        contract.save()
+        # Contract pointer and version row must commit together, or the
+        # viewer loses track of which version is current.
+        with transaction.atomic():
+            contract.file = f'contracts/{final_filename}'
+            contract.seal_image = f'seals/seal_{contract.id}.png'
+            contract.save()
 
-        if os.path.isfile(temp_path):
-            os.remove(temp_path)
+            if os.path.isfile(temp_path):
+                os.remove(temp_path)
 
-        version = ContractVersion.objects.create(
-            contract=contract,
-            version_number=next_version_number,
-            source='revision',
-            file=contract.file.name,
-            fingerprint=version_cf,
-            vector_fingerprint=vector_cf,
-            previous_fingerprint=previous_cf or '',
-            encrypted_cf=encrypted,
-            hmac_value=hmac_value,
-            wrapped_key=wrapped_key,
-            aes_iv=aes_iv,
-            created_by=request.user,
-        )
+            version = ContractVersion.objects.create(
+                contract=contract,
+                version_number=next_version_number,
+                source='revision',
+                file=contract.file.name,
+                fingerprint=version_cf,
+                vector_fingerprint=vector_cf,
+                previous_fingerprint=previous_cf or '',
+                encrypted_cf=encrypted,
+                hmac_value=hmac_value,
+                wrapped_key=wrapped_key,
+                aes_iv=aes_iv,
+                created_by=request.user,
+            )
 
-        elapsed_ms = round((time.perf_counter() - started_at) * 1000)
-        log_activity(
-            request, 'edited', contract=contract,
-            note=f'New revision encrypted; version={next_version_number}; duration_ms={elapsed_ms}'
-        )
-        _save_physical_manifest(version, manifest, manifest_signature)
+            elapsed_ms = round((time.perf_counter() - started_at) * 1000)
+            log_activity(
+                request, 'edited', contract=contract,
+                note=f'New revision encrypted; version={next_version_number}; duration_ms={elapsed_ms}'
+            )
+            _save_physical_manifest(version, manifest, manifest_signature)
         _process_log(
             'revision_encryption', 'completed', contract=contract, request=request,
             version=next_version_number, duration_ms=elapsed_ms,
@@ -698,6 +711,7 @@ def contract_list(request):
         contracts = contracts.filter(
             Q(title__icontains=search_query)
             | Q(uploaded_by__username__icontains=search_query)
+            | Q(uploaded_by_name__icontains=search_query)
             | Q(tags__icontains=search_query)
         )
     status_filter = request.GET.get('status', '').strip()
@@ -706,6 +720,43 @@ def contract_list(request):
     folder_filter = request.GET.get('folder', '').strip()
     if folder_filter.isdigit():
         contracts = contracts.filter(folder_id=int(folder_filter))
+    # Uploader choices come from every visible document, not just the filtered
+    # page, so switching between uploaders never empties the dropdown.
+    uploaders = User.objects.filter(
+        uploaded_contracts__in=viewable_contracts(request.user).filter(is_trashed=False)
+    ).distinct().order_by('username')
+    uploader_filter = request.GET.get('uploader', '').strip()
+    if uploader_filter.isdigit():
+        contracts = contracts.filter(uploaded_by_id=int(uploader_filter))
+    else:
+        uploader_filter = ''
+    scope = request.GET.get('scope', '').strip()
+    if scope == 'mine':
+        contracts = contracts.filter(uploaded_by=request.user)
+    elif scope == 'shared':
+        contracts = contracts.filter(collaborators=request.user).exclude(uploaded_by=request.user)
+    else:
+        scope = ''
+    sort = request.GET.get('sort', '').strip()
+    if sort == 'name':
+        contracts = contracts.order_by(Lower('title'), 'id')
+    elif sort == 'newest':
+        contracts = contracts.order_by('-uploaded_at', '-id')
+    elif sort == 'oldest':
+        contracts = contracts.order_by('uploaded_at', 'id')
+    elif sort == 'modified_new':
+        contracts = contracts.order_by('-modified_at', '-id')
+    elif sort == 'modified_old':
+        contracts = contracts.order_by('modified_at', 'id')
+    elif sort in {'status_draft', 'status_final'}:
+        draft_rank = 0 if sort == 'status_draft' else 1
+        contracts = contracts.order_by(
+            Case(When(status='pending', then=Value(draft_rank)), default=Value(1 - draft_rank)),
+            '-modified_at', '-id',
+        )
+    else:
+        sort = ''
+    contracts = contracts.annotate(version_count=Count('versions', distinct=True))
     try:
         per_page = int(request.GET.get('per_page', 25))
     except (TypeError, ValueError):
@@ -713,6 +764,13 @@ def contract_list(request):
     if per_page not in {10, 25, 50}:
         per_page = 25
     page_obj = Paginator(contracts, per_page).get_page(request.GET.get('page'))
+    # Shared by the pagination links so every filter survives a page change.
+    filter_query = urlencode({
+        key: value for key, value in (
+            ('q', search_query), ('status', status_filter), ('folder', folder_filter),
+            ('uploader', uploader_filter), ('scope', scope), ('sort', sort), ('per_page', per_page),
+        ) if value
+    })
     for contract in page_obj.object_list:
         contract.can_share = can_share(request.user, contract)
         contract.can_manage = can_manage(request.user, contract)
@@ -726,6 +784,12 @@ def contract_list(request):
         'folders': folders,
         'status_filter': status_filter,
         'folder_filter': folder_filter,
+        'uploaders': uploaders,
+        'uploader_filter': uploader_filter,
+        'scope': scope,
+        'sort': sort,
+        'filter_query': filter_query,
+        'filters_active': bool(search_query or status_filter or folder_filter or uploader_filter or scope),
         'per_page': per_page,
         'read_only_user': is_read_only_user(request.user),
         'workspace_role': 'Admin' if is_admin(request.user) else ('Staff' if request.user.is_staff else 'User'),
@@ -1387,7 +1451,8 @@ def contract_version_history(request, contract_id):
             'version_number': v.version_number,
             'source': v.get_source_display(),
             'created_at': v.created_at.strftime('%b %d, %Y'),
-            'created_by': v.created_by.username if v.created_by else 'Unknown account',
+            'created_by': v.created_by_display or 'Unknown account',
+            'created_by_deleted': v.created_by_deleted,
             'file_url': reverse('download_contract_version', args=[v.id]) if v.file else '',
             'preview_url': reverse('preview_contract_version', args=[v.id]) if v.file else '',
             'is_current': bool(contract.file) and v.file.name == contract.file.name,
@@ -1399,6 +1464,8 @@ def contract_version_history(request, contract_id):
         'encrypted': versions_data[0]['created_at'] if versions_data else None,
         'verified': verified_log.timestamp.strftime('%b %d, %Y') if verified_log else 'Not yet verified',
         'version_count': len(versions_data),
+        'uploaded_by': contract.uploaded_by_display or 'Unknown account',
+        'uploaded_by_deleted': contract.uploaded_by_deleted,
         'title': contract.title,
         'versions': versions_data,
     }
@@ -2634,7 +2701,7 @@ def contract_access(request, contract_id):
         .exclude(pk=contract.uploaded_by_id).order_by('username')
     ]
     response = JsonResponse({
-        'owner': contract.uploaded_by.username if contract.uploaded_by else 'Administrator-managed document',
+        'owner': contract.uploaded_by_display or 'Administrator-managed document',
         'users': list(contract.collaborators.order_by('username').values('username')),
         'accounts': accounts,
     })

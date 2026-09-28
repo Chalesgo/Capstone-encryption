@@ -1507,6 +1507,18 @@ class EndToEndWorkflowTests(TestCase):
             processed.append((contract, original))
         return processed
 
+    def test_failed_revision_does_not_leave_contract_without_version_row(self):
+        (contract, _original), = self.process_documents(1)
+        file_before = contract.file.name
+        with patch('contracts.views.ContractVersion.objects.create', side_effect=RuntimeError('db down')):
+            with self.assertRaises(RuntimeError):
+                self.client.post(reverse('add_revision', args=[contract.id]), {
+                    'file': SimpleUploadedFile('revision.pdf', self.make_pdf(7), content_type='application/pdf'),
+                })
+        contract.refresh_from_db()
+        self.assertEqual(contract.file.name, file_before)
+        self.assertTrue(contract.versions.filter(file=contract.file.name).exists())
+
     def test_e2e01_complete_lifecycle_matrix(self):
         processed = self.process_documents(30)
         for contract, _original in processed:

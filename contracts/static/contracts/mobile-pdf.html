@@ -10,6 +10,7 @@
     :root { color-scheme:light; --accent:#3b5bdb; --text:#243443; --muted:#6b7a8d; }
     * { box-sizing:border-box; }
     [hidden] { display:none !important; }
+    button, input, select, textarea { font-family:inherit; }
     body { margin:0; height:100dvh; overflow:hidden; font:14px/1.4 system-ui,sans-serif; color:var(--text); background:#e9edf2; }
     button { font:inherit; color:inherit; border:0; cursor:pointer; min-height:44px; min-width:44px; background:transparent; border-radius:50%; }
     button:disabled { opacity:.4; cursor:default; }
@@ -47,6 +48,7 @@
     .version-option-details span { display:block; font-size:11px; overflow-wrap:anywhere; margin-top:2px; }
     .version-option-date { color:#889aab; }
     .version-option-account { color:#60758a; }
+    .deleted-account { color:#d9776f; text-decoration:underline dotted rgba(217,119,111,.55); text-underline-offset:3px; cursor:help; }
     #version-message { margin:8px 0; color:var(--muted); }
     #retry-versions { border-radius:8px; color:var(--accent); }
     #version-content { display:flex; flex-direction:column; min-height:0; }
@@ -136,6 +138,6 @@
     <p class="sidebar-section-label">Version History</p>
     <div id="details-versions"></div>
   </aside>
-  <script type="module" src="mobile-pdf.mjs?v=revision-list-1"></script>
+  <script type="module" src="mobile-pdf.mjs?v=uploader-fallback-1"></script>
 </body>
 </html>

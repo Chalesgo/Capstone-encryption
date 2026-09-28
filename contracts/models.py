@@ -165,9 +165,19 @@ class ContractVersion(models.Model):
     aes_iv = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    # Username snapshot taken when the account is deleted (see signals.py).
+    created_by_name = models.CharField(max_length=150, blank=True, editable=False)
     class Meta:
         ordering = ['-version_number']
         unique_together = ['contract', 'version_number']
+
+    @property
+    def created_by_display(self):
+        return self.created_by.username if self.created_by else self.created_by_name
+
+    @property
+    def created_by_deleted(self):
+        return self.created_by_id is None and bool(self.created_by_name)
 
     def __str__(self):
         return f"{self.contract.title} — v{self.version_number} ({self.get_source_display()})"
@@ -201,6 +211,8 @@ def validate_pdf_signature(file):
 class Contract(models.Model):
     uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
                                     related_name='uploaded_contracts', editable=False)
+    # Username snapshot taken when the account is deleted (see signals.py).
+    uploaded_by_name = models.CharField(max_length=150, blank=True, editable=False)
     collaborators = models.ManyToManyField(User, blank=True, related_name='shared_contracts')
     title = models.CharField(max_length=255)
     file = models.FileField(
@@ -233,6 +245,14 @@ class Contract(models.Model):
 
     def tag_list(self):
         return [t.strip() for t in self.tags.split(',') if t.strip()]
+
+    @property
+    def uploaded_by_display(self):
+        return self.uploaded_by.username if self.uploaded_by else self.uploaded_by_name
+
+    @property
+    def uploaded_by_deleted(self):
+        return self.uploaded_by_id is None and bool(self.uploaded_by_name)
 
     def __str__(self):
         return self.title

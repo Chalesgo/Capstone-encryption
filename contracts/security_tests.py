@@ -67,6 +67,7 @@ class ApplicationSecurityMatrixTests(TestCase):
             ("public_verify", "page"), ("public_verify", "q"),
             ("contract_list", "order"), ("dashboard", "filter"),
             ("public_verify", "search"), ("contract_list", "title"),
+            ("contract_list", "uploader"), ("contract_list", "sort"), ("contract_list", "scope"),
         )
         for name, parameter in parameter_targets:
             for payload in payloads:
