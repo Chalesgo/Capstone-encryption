@@ -722,12 +722,22 @@ def contract_list(request):
         contracts = contracts.filter(folder_id=int(folder_filter))
     # Uploader choices come from every visible document, not just the filtered
     # page, so switching between uploaders never empties the dropdown.
-    uploaders = User.objects.filter(
-        uploaded_contracts__in=viewable_contracts(request.user).filter(is_trashed=False)
-    ).distinct().order_by('username')
+    visible_contracts = viewable_contracts(request.user).filter(is_trashed=False)
+    uploaders = User.objects.filter(uploaded_contracts__in=visible_contracts).distinct().order_by('username')
+    # Deleted accounts only survive as the username snapshot on their documents.
+    deleted_uploaders = list(
+        visible_contracts.filter(uploaded_by__isnull=True).exclude(uploaded_by_name='')
+        .order_by('uploaded_by_name').values_list('uploaded_by_name', flat=True).distinct()
+    )
     uploader_filter = request.GET.get('uploader', '').strip()
+    uploader_label, uploader_label_deleted = '', False
+    deleted_name = uploader_filter.removeprefix('deleted:') if uploader_filter.startswith('deleted:') else None
     if uploader_filter.isdigit():
         contracts = contracts.filter(uploaded_by_id=int(uploader_filter))
+        uploader_label = next((u.username for u in uploaders if u.pk == int(uploader_filter)), '')
+    elif deleted_name in deleted_uploaders:
+        contracts = contracts.filter(uploaded_by__isnull=True, uploaded_by_name=deleted_name)
+        uploader_label, uploader_label_deleted = deleted_name, True
     else:
         uploader_filter = ''
     scope = request.GET.get('scope', '').strip()
@@ -786,6 +796,10 @@ def contract_list(request):
         'folder_filter': folder_filter,
         'uploaders': uploaders,
         'uploader_filter': uploader_filter,
+        'deleted_uploaders': deleted_uploaders,
+        'uploader_label': uploader_label,
+        'uploader_label_deleted': uploader_label_deleted,
+        'uploader_choice_count': len(uploaders) + len(deleted_uploaders),
         'scope': scope,
         'sort': sort,
         'filter_query': filter_query,

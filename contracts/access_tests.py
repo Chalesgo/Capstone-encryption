@@ -382,6 +382,22 @@ class ContractListFilterTests(TestCase):
         self.assertEqual(history['uploaded_by'], 'uploader')
         self.assertFalse(history['uploaded_by_deleted'])
 
+    def test_deleted_uploaders_are_listed_and_filterable(self):
+        other_doc = Contract.objects.create(title='Editor upload', uploaded_by=self.editor)
+        other_doc.file.save('editor.pdf', ContentFile(b'%PDF-1.4 editor'))
+        self.owner.delete()
+        self.login(self.admin)
+        response = self.client.get(reverse('contract_list'))
+        self.assertEqual(response.context['deleted_uploaders'], ['uploader'])
+        self.assertContains(response, 'Deleted accounts')
+        self.assertContains(response, '<span class="deleted-account">uploader</span>', html=False)
+        filtered = self.client.get(reverse('contract_list'), {'uploader': 'deleted:uploader'})
+        self.assertEqual([c.pk for c in filtered.context['contracts']], [self.contract.pk])
+        self.assertTrue(filtered.context['uploader_label_deleted'])
+        self.assertIn('uploader=deleted%3Auploader', filtered.context['filter_query'])
+        unknown = self.client.get(reverse('contract_list'), {'uploader': 'deleted:nobody'})
+        self.assertEqual(unknown.context['uploader_filter'], '')
+
     def test_revision_badge_shows_version_count(self):
         ContractVersion.objects.create(contract=self.contract, version_number=2, created_by=self.owner)
         self.login(self.admin)

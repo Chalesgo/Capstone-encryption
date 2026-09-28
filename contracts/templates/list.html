@@ -719,6 +719,40 @@
   .th-menu li:focus-visible { outline: 2px solid #3b5bdb; outline-offset: -2px; }
   .th-menu li.is-selected { color: #3b5bdb; background: #eef2ff; }
   .th-menu-check { width: 14px; height: 14px; visibility: hidden; }
+  .filter-menu-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    min-width: 120px;
+    max-width: 180px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: #444;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .filter-menu-btn > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .filter-menu-btn:focus-visible { outline: 2px solid #3b5bdb; outline-offset: 3px; border-radius: 3px; }
+  .filter-menu { max-height: 320px; overflow-y: auto; min-width: 200px; }
+  .filter-menu .deleted-account { cursor: inherit; }
+  .th-menu li.filter-menu-label {
+    margin-top: 4px;
+    padding: 8px 10px 4px;
+    border-top: 1px solid #eef0f4;
+    border-radius: 0;
+    color: #889aab;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    cursor: default;
+  }
+  .th-menu li.filter-menu-label:hover { background: none; }
+  @media (max-width: 900px) {
+    .filter-menu-btn { flex: 1; max-width: none; }
+  }
   .th-menu li.is-selected .th-menu-check { visibility: visible; }
 
   /* Empty state */
@@ -1215,18 +1249,32 @@
       </svg>
       <input type="search" id="doc-search" class="search-input" value="{{ search_query }}" placeholder="Search title or uploader..." aria-label="Search documents" onkeydown="if(event.key==='Enter' && !event.isComposing) { event.preventDefault(); submitSearchFilter(); }">
     </div>
-    {% if uploaders|length > 1 or uploader_filter %}
-    <label class="filter-select-wrap{% if uploader_filter %} is-active{% endif %}" title="Filter by uploader">
+    {% if uploader_choice_count > 1 or uploader_filter %}
+    <div class="status-dropdown filter-select-wrap filter-menu-wrap{% if uploader_filter %} is-active{% endif %}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 16 0v1"/>
       </svg>
-      <select id="uploader-filter" class="filter-select" aria-label="Filter by uploader" onchange="setListParam('uploader', this.value)">
-        <option value="">All uploaders</option>
+      <button type="button" id="uploader-filter" class="filter-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="uploader-filter-menu" title="Filter by uploader" onclick="toggleThMenu(event, 'uploader-filter-menu')">
+        {% if uploader_label_deleted %}<span class="deleted-account" title="This account has been deleted">{{ uploader_label }}</span>{% else %}<span>{{ uploader_label|default:"All uploaders" }}</span>{% endif %}
+        <svg class="status-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <ul class="status-dropdown-menu th-menu filter-menu" id="uploader-filter-menu" role="menu" aria-label="Filter by uploader">
+        <li role="menuitemradio" tabindex="0" aria-checked="{% if not uploader_filter %}true{% else %}false{% endif %}" class="{% if not uploader_filter %}is-selected{% endif %}" data-value="" onclick="setListParam('uploader', this.dataset.value)" onkeydown="thMenuItemKey(event)">All uploaders<svg class="th-menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></li>
         {% for uploader in uploaders %}
-        <option value="{{ uploader.id }}" {% if uploader_filter == uploader.id|stringformat:"d" %}selected{% endif %}>{{ uploader.username }}{% if uploader.id == user.id %} (you){% endif %}</option>
+        {% with uploader_value=uploader.id|stringformat:"d" %}
+        <li role="menuitemradio" tabindex="0" aria-checked="{% if uploader_filter == uploader_value %}true{% else %}false{% endif %}" class="{% if uploader_filter == uploader_value %}is-selected{% endif %}" data-value="{{ uploader_value }}" onclick="setListParam('uploader', this.dataset.value)" onkeydown="thMenuItemKey(event)"><span>{{ uploader.username }}{% if uploader.id == user.id %} (you){% endif %}</span><svg class="th-menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></li>
+        {% endwith %}
         {% endfor %}
-      </select>
-    </label>
+        {% if deleted_uploaders %}
+        <li class="filter-menu-label" role="presentation">Deleted accounts</li>
+        {% for name in deleted_uploaders %}
+        {% with uploader_value="deleted:"|add:name %}
+        <li role="menuitemradio" tabindex="0" aria-checked="{% if uploader_filter == uploader_value %}true{% else %}false{% endif %}" class="{% if uploader_filter == uploader_value %}is-selected{% endif %}" data-value="{{ uploader_value }}" title="This account has been deleted" aria-label="{{ name }} (deleted account)" onclick="setListParam('uploader', this.dataset.value)" onkeydown="thMenuItemKey(event)"><span class="deleted-account">{{ name }}</span><svg class="th-menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></li>
+        {% endwith %}
+        {% endfor %}
+        {% endif %}
+      </ul>
+    </div>
     {% endif %}
     <label class="filter-select-wrap mobile-sort-wrap{% if scope %} is-active{% endif %}" title="Show all documents, your uploads, or documents shared with you">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -1776,7 +1824,7 @@ function toggleThMenu(event, menuId) {
   const button = event.currentTarget;
   const isOpen = menu.classList.contains('open');
   document.querySelectorAll('.status-dropdown-menu.open').forEach(m => m.classList.remove('open'));
-  document.querySelectorAll('.th-menu-wrap [aria-expanded="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+  document.querySelectorAll('[aria-haspopup="menu"][aria-expanded="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
   if (isOpen) return;
   const rect = button.getBoundingClientRect();
   menu.style.left = rect.left + 'px';
@@ -1789,12 +1837,15 @@ function toggleThMenu(event, menuId) {
 
 function thMenuItemKey(event) {
   const item = event.currentTarget;
+  const items = [...item.parentElement.querySelectorAll('[role="menuitemradio"]')];
+  const index = items.indexOf(item);
   if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); item.click(); }
-  else if (event.key === 'ArrowDown' && item.nextElementSibling) { event.preventDefault(); item.nextElementSibling.focus(); }
-  else if (event.key === 'ArrowUp' && item.previousElementSibling) { event.preventDefault(); item.previousElementSibling.focus(); }
+  else if (event.key === 'ArrowDown' && items[index + 1]) { event.preventDefault(); items[index + 1].focus(); }
+  else if (event.key === 'ArrowUp' && index > 0) { event.preventDefault(); items[index - 1].focus(); }
   else if (event.key === 'Escape') {
-    item.closest('.status-dropdown-menu').classList.remove('open');
-    const button = item.closest('.th-menu-wrap').querySelector('button');
+    const menu = item.closest('.status-dropdown-menu');
+    menu.classList.remove('open');
+    const button = document.querySelector('[aria-controls="' + menu.id + '"]');
     button.setAttribute('aria-expanded', 'false');
     button.focus();
   }
@@ -3010,7 +3061,7 @@ function showContractContextMenu(event, contractId) {
 document.addEventListener('click', function(event) {
   if (!event.target.closest('.status-dropdown')) {
     document.querySelectorAll('.status-dropdown-menu.open').forEach(menu => menu.classList.remove('open'));
-    document.querySelectorAll('.th-menu-wrap [aria-expanded="true"]').forEach(button => button.setAttribute('aria-expanded', 'false'));
+    document.querySelectorAll('[aria-haspopup="menu"][aria-expanded="true"]').forEach(button => button.setAttribute('aria-expanded', 'false'));
   }
   if (!event.target.closest('#folder-context-menu')) {
     document.getElementById('folder-context-menu').classList.remove('active');
