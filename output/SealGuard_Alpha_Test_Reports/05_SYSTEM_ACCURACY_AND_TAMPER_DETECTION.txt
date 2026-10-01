@@ -1,0 +1,21 @@
+SECTION E - SYSTEM ACCURACY AND TAMPER DETECTION
+
+Initial problem:
+The system needed controlled authentic, tampered, and unknown-document cases. Vector modifications were repeatedly difficult to interpret because PDF editors and re-saving can alter a document without an obvious visual change.
+
+Fix and decision:
+Vector/editor changes are treated as a possible modification. This is intentional: a document that has passed through an editor cannot be assumed unchanged merely because the visible text appears the same.
+
+Results:
+The controlled dataset was rerun after the vector-handling clarification. Authentic, text-tampered, image-tampered, vector-tampered, metadata-tampered, structurally changed, and unknown cases were evaluated without relying on filename-based demonstration results.
+
+ACC-01 classification accuracy: COMPLETED.
+ACC-02 false positives: RECORDED with the vector/editor limitation.
+ACC-03 false negatives: RECORDED separately.
+ACC-04 unknown-document accuracy: COMPLETED.
+ACC-05 decryption integrity: COVERED by cryptographic workflow testing.
+ACC-06 ciphertext distinction: COVERED by cryptographic workflow testing.
+ACC-07 manuscript interpretation: COMPLETED with the actual result and limitation retained.
+
+Conclusion:
+Section E was completed. Results should not be described as perfect accuracy; the vector/editor limitation must remain in the manuscript.

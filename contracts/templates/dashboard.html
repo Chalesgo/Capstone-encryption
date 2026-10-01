@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 {% block title %}Dashboard{% endblock %}
 
 {% block mobile_topbar_extra %}
@@ -842,7 +843,6 @@
           data-verified-on="{{ log.timestamp|date:'Y-m-d H:i:s' }}"
           data-file-size="{% if log.display_document_size is not None %}{{ log.display_document_size|filesizeformat }}{% else %}—{% endif %}"
           data-note="{{ log.note|default:'This document has been reported to the admin for further investigation.' }}"
-          data-debug-log="{{ log.verification_debug_log|default:'No debug log was recorded for this activity.'|escapejs }}"
           onclick="openAuditPdfFromRow(this)"
           onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openAuditPdfFromRow(this); }"{% endif %}>
         <td>
@@ -998,6 +998,7 @@
   </div>
 </div>
 {% endcomment %}
+<script src="{% static 'contracts/dashboard-verification.js' %}?v=1"></script>
 <script>
 function styleDashboardStatusFilter(select) {
   if (!select) return;
@@ -1016,13 +1017,13 @@ window.dashboardIsAdmin = {% if request.user.is_superuser %}true{% else %}false{
 function openAuditPdfDetails(row) {
   const url = row.dataset.previewUrl;
   const title = row.dataset.title;
-  if (url && openPdfInMobileViewer(url, row.dataset.contractId, title, true)) return;
+  if (url && openPdfInMobileViewer(url, row.dataset.contractId, title, true, row.dataset.version, row.dataset.logId)) return;
   const frame = document.getElementById('audit-pdf-frame');
   const unavailable = document.getElementById('audit-pdf-unavailable');
   const unavailableReason = document.getElementById('audit-pdf-unavailable-reason');
   const download = document.getElementById('audit-pdf-download-btn');
 
-  frame.src = sealGuardPdfFrameUrl(url || '', row.dataset.contractId, row.dataset.title);
+  frame.src = sealGuardPdfFrameUrl(url || '', row.dataset.contractId, row.dataset.title, row.dataset.logId);
   frame.style.display = url ? 'block' : 'none';
   unavailable.classList.toggle('show', !url);
   unavailableReason.textContent = 'Reason: ' + (row.dataset.previewReason || 'This PDF is no longer retained.');
@@ -1045,7 +1046,7 @@ function openAuditPdfDetails(row) {
   document.getElementById('audit-pdf-overlay').classList.add('open');
   document.getElementById('audit-pdf-panel').setAttribute('aria-hidden', 'false');
   loadAuditVersions(row.dataset.contractId, row.dataset.version);
-  loadVerificationHistory(row.dataset.logId);
+  loadVerificationHistory(row.dataset.logId, row.dataset.result);
 
   if (url) {
     fetch(url, { method: 'HEAD', credentials: 'same-origin' })
@@ -1097,7 +1098,7 @@ function auditMobileViewPdf() {
   const row = auditMobileRow;
   if (!row || !row.dataset.previewUrl) return;
   closeAuditMobileSheet();
-  openPdfInMobileViewer(row.dataset.previewUrl, row.dataset.contractId, row.dataset.title);
+  openPdfInMobileViewer(row.dataset.previewUrl, row.dataset.contractId, row.dataset.title, false, row.dataset.version, row.dataset.logId);
 }
 function auditMobileViewDetails() {
   const row = auditMobileRow;
@@ -1172,95 +1173,14 @@ function escapeAuditVersionHistoryText(value) {
   });
 }
 
-function loadVerificationHistory(logId) {
-  const list = document.getElementById('audit-pdf-verification-history');
-  if (!list) return;
-  list.innerHTML = '<div class="verification-history-empty">Loading verification history...</div>';
-  if (!logId) {
-    list.innerHTML = '<div class="verification-history-empty">No verification history is linked to this activity.</div>';
-    return;
-  }
-
-  fetch('/dashboard/activity/' + encodeURIComponent(logId) + '/verification-history/')
-    .then(function(response) {
-      if (!response.ok) throw new Error('Unable to load verification history');
-      return response.json();
-    })
-    .then(function(data) {
-      list.innerHTML = '';
-      if (!data.events || !data.events.length) {
-        list.innerHTML = '<div class="verification-history-empty">This document has no recorded verification attempts.</div>';
-        return;
-      }
-
-      data.events.forEach(function(event) {
-        const item = document.createElement('div');
-        item.className = 'verification-history-item';
-
-        const toggle = document.createElement('button');
-        toggle.type = 'button';
-        toggle.className = 'verification-history-toggle';
-        toggle.setAttribute('aria-expanded', 'false');
-
-        const date = document.createElement('span');
-        date.className = 'verification-history-date';
-        date.textContent = event.verified_at + (event.is_selected ? ' · Selected' : '');
-
-        const result = document.createElement('span');
-        result.className = 'verification-history-result ' + (
-          event.result === 'Authentic' ? 'authentic' :
-          event.result === 'Possible Modification' ? 'warning' : ''
-        );
-        result.textContent = event.result;
-
-        const chevron = document.createElement('span');
-        chevron.className = 'verification-history-chevron';
-        chevron.setAttribute('aria-hidden', 'true');
-        chevron.textContent = '⌄';
-
-        const detail = document.createElement('div');
-        detail.className = 'verification-history-detail';
-        detail.hidden = true;
-
-        toggle.append(date, result, chevron);
-        item.append(toggle, detail);
-        list.appendChild(item);
-
-        toggle.addEventListener('click', function() {
-          const expanding = toggle.getAttribute('aria-expanded') !== 'true';
-          toggle.setAttribute('aria-expanded', expanding ? 'true' : 'false');
-          detail.hidden = !expanding;
-          if (!expanding || detail.dataset.loaded === 'true') return;
-
-          detail.textContent = 'Loading verification trace...';
-          fetch('/dashboard/activity/' + encodeURIComponent(event.id) + '/verification-log/')
-            .then(function(response) {
-              if (!response.ok) throw new Error('Unable to load verification trace');
-              return response.json();
-            })
-            .then(function(logData) {
-              detail.innerHTML = '';
-              if (logData.note) {
-                const note = document.createElement('p');
-                note.className = 'verification-history-note';
-                note.textContent = logData.note;
-                detail.appendChild(note);
-              }
-              const trace = document.createElement('pre');
-              trace.className = 'verification-history-log';
-              trace.textContent = logData.debug_log || 'A debug trace was not stored for this older verification.';
-              detail.appendChild(trace);
-              detail.dataset.loaded = 'true';
-            })
-            .catch(function() {
-              detail.textContent = 'The verification trace could not be loaded.';
-            });
-        });
-      });
-    })
-    .catch(function() {
-      list.innerHTML = '<div class="verification-history-empty">Verification history could not be loaded.</div>';
-    });
+function loadVerificationHistory(logId, result) {
+  window.SealGuardAuditVerification.load({
+    logId: logId,
+    initialResult: result,
+    resultElement: document.getElementById('audit-pdf-verification-result'),
+    section: document.getElementById('audit-pdf-verification-logs'),
+    list: document.getElementById('audit-pdf-verification-history'),
+  });
 }
 
 function closeAuditPdf() {

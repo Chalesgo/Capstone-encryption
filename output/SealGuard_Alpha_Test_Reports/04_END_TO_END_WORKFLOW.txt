@@ -1,0 +1,15 @@
+SECTION D - END-TO-END WORKFLOW
+
+Initial problem:
+The workflow needed proof that actual PDFs moved through upload, fingerprinting, encryption, sealing, storage, retrieval, and verification without missing records or files.
+
+Results:
+E2E-01 complete document lifecycle: PASSED.
+E2E-02 authorized download/decryption: manually confirmed; not presented as a new automated claim.
+E2E-03 verification logging: PASSED; staff and public verification activity was retained in the audit trail.
+E2E-04 persistence after restart: manually confirmed; records remained retrievable and verifiable.
+E2E-05 operational storage integration: manually confirmed through retrieval and verification records.
+E2E-06 failure behavior and rollback: manually confirmed through repeated interruption/failed-operation checks; incomplete work was not presented as successfully completed.
+
+Conclusion:
+Section D was completed using actual system workflows. Manual evidence is explicitly labeled because it is not identical to automated fault injection.

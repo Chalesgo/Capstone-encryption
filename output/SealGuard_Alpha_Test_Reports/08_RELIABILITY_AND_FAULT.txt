@@ -1,0 +1,17 @@
+SECTION H - RELIABILITY AND FAULT TESTING
+
+Initial problem:
+The system needed evidence that interruptions, restarts, duplicate requests, database/storage failures, and cryptographic failures would not create silent corruption or incomplete successful records.
+
+Results:
+REL-01 repeated lifecycle: user-confirmed successful repeated upload/verification cycles.
+REL-02 interrupted upload: Alt-F4/cancel testing showed records remained usable, but an earlier observation indicated an interrupted upload could appear unencrypted. This historical finding must remain visible unless re-tested and resolved in a controlled run.
+REL-03 database interruption: manually confirmed controlled error/recovery behavior.
+REL-04 storage interruption: manually confirmed file and database consistency after recovery.
+REL-05 application restart: manually confirmed completed operations remained retrievable and usable after Ctrl+C/restart.
+REL-06 duplicate request: repeated identical state-changing requests did not create unintended contract/audit behavior.
+REL-07 failed cryptographic task: covered by the cryptographic unit tests.
+REL-08 fault-response timing: invalid inputs, unauthorized attempts, and encryption-failure behavior were exercised and recorded.
+
+Conclusion:
+Section H was completed primarily through manual and operational confirmation. REL-02 retains a reliability caveat and should not be described as an unconditional pass without a clean controlled re-test.

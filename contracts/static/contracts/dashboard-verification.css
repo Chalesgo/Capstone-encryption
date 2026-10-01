@@ -1,0 +1,10 @@
+[hidden] { display: none !important; }
+.verification-history-list { margin: 0 10px; border: 1px solid #e3e9ef; border-radius: 10px; background: #fff; overflow: hidden; }
+.verification-history-item + .verification-history-item { border-top: 1px solid #edf1f4; }
+.verification-history-toggle { display: flex; align-items: center; gap: 8px; padding: 10px 11px; cursor: pointer; font: inherit; color: #2d3a47; }
+.verification-history-date { flex: 1; min-width: 0; font-size: 11.5px; font-weight: 600; }
+.verification-history-result { padding: 3px 7px; border-radius: 999px; font-size: 9.5px; font-weight: 700; }
+.verification-history-result.warning { background: #fff0f0; color: #c43d3d; }
+.verification-history-detail { padding: 0 11px 11px; }
+.verification-history-note { font-size: 11.5px; color: #607184; overflow-wrap: anywhere; }
+.verification-history-log { max-height: 230px; padding: 10px; overflow: auto; border: 1px solid #dfe6ed; border-radius: 7px; background: #fff; color: #334455; font: inherit; font-size: 11px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }

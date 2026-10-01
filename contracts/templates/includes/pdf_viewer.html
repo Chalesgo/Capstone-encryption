@@ -24,8 +24,9 @@
     <aside class="pdf-sidebar{% if viewer_show_verification %} audit-pdf-sidebar{% endif %}">
       <p class="pdf-sidebar-title{% if viewer_show_verification %} audit-pdf-title{% endif %}" id="{{ viewer_prefix }}-panel-title">Document</p>
       {% if viewer_show_verification %}
-      <p class="sidebar-section-label">Activity Summary</p>
+      <p class="sidebar-section-label">Document Info</p>
       <div class="meta-list audit-meta-list">
+        <div class="meta-row audit-meta-row"><span class="meta-row-label audit-meta-label">Verification Result</span><span class="meta-row-value audit-meta-value" id="{{ viewer_prefix }}-verification-result">Not evaluated</span></div>
         <div class="meta-row audit-meta-row"><span class="meta-row-label audit-meta-label">Source</span><span class="meta-row-value audit-meta-value" id="{{ viewer_prefix }}-source">—</span></div>
         <div class="meta-row audit-meta-row"><span class="meta-row-label audit-meta-label">Result</span><span class="meta-row-value audit-meta-value" id="{{ viewer_prefix }}-result">—</span></div>
         <div class="meta-row audit-meta-row"><span class="meta-row-label audit-meta-label">Integrity</span><span class="meta-row-value audit-meta-value" id="{{ viewer_prefix }}-integrity">—</span></div>
@@ -50,10 +51,12 @@
       {% if viewer_show_verification %}
       <p class="sidebar-section-label">Activity Note</p>
       <p class="pdf-viewer-note" id="{{ viewer_prefix }}-note">No additional activity note.</p>
-      <p class="sidebar-section-label">Verification History</p>
+      <section id="{{ viewer_prefix }}-verification-logs" hidden>
+      <p class="sidebar-section-label">Verification Logs</p>
       <div class="verification-history-list" id="{{ viewer_prefix }}-verification-history">
         <div class="verification-history-empty">This document has no recorded verification attempts.</div>
       </div>
+      </section>
       {% endif %}
     </aside>
   </div>

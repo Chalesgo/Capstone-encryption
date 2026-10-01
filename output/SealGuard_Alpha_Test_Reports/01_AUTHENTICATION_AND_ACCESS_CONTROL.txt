@@ -1,0 +1,27 @@
+SECTION A - AUTHENTICATION AND ACCESS CONTROL
+
+Initial problem:
+The Clerk account initially behaved like an ordinary user, failed login attempts were not visible in the dashboard, and the authentication test evidence was incomplete.
+
+Fixes and improvements:
+- Corrected the Administrator/Clerk role setup and protected-system routing.
+- Removed public registration and restricted the rest of the system to authorized users.
+- Added failed-login audit entries and user-facing generic error messages.
+- Added temporary brute-force lockout and remaining-attempt feedback.
+- Added dashboard filtering and authentication activity visibility.
+- Enforced logout invalidation, role permissions, and object-level authorization.
+
+Results:
+AUTH-01 successful Administrator and Clerk logins: PASSED.
+AUTH-02 unsuccessful login cases: PASSED; denial and failed-login logging confirmed.
+AUTH-03 brute-force lockout: PASSED.
+AUTH-04 lockout duration: PASSED using the temporary configured duration.
+AUTH-05 logout and protected URL reuse: PASSED.
+AUTH-06 unauthenticated protected actions: PASSED.
+AUTH-07 RBAC permission matrix: PASSED.
+AUTH-08 object-level authorization: PASSED.
+AUTH-09 authentication audit logs: PASSED.
+AUTH-10 session reuse after logout: PASSED.
+
+Conclusion:
+Section A was completed. The main initial security problem was incomplete role enforcement and missing failed-login visibility; those gaps were corrected and tested.

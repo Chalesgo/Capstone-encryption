@@ -1,0 +1,29 @@
+SECTION B - DOCUMENT MANAGEMENT
+
+Initial problem:
+Document lifecycle behavior, duplicate handling, revisions, audit records, filtering, and reporting needed repeatable coverage. The upload-size parameter was also undefined.
+
+Fixes and improvements:
+- Set the maximum upload size to 15 MB.
+- Added validation for invalid, malformed, empty, unsupported, and over-limit files.
+- Added metadata, folders, revisions, Trash, restore, and permanent deletion behavior.
+- Added duplicate prompts for new document versus revision decisions.
+- Added dashboard filters, pagination persistence, audit details, and CSV export checks.
+- Corrected viewing/download audit behavior so opening a PDF does not falsely create a download event.
+
+Results:
+DOC-01 valid PDF upload: PASSED.
+DOC-02 invalid upload rejection: PASSED.
+DOC-03 metadata storage: PASSED.
+DOC-04 authorized view/download: PASSED.
+DOC-05 unauthorized view/download: PASSED.
+DOC-06 archive/restore/delete lifecycle: PASSED.
+DOC-07 version control: PASSED.
+DOC-08 version-chain tampering: PASSED.
+DOC-09 search: PASSED.
+DOC-10 filtering and pagination: PASSED.
+DOC-11 duplicate submission: PASSED after duplicate-aware prompts were added.
+DOC-12 archive/report combinations and export behavior: PASSED/covered.
+
+Conclusion:
+Section B was completed. The main fixes converted document operations into a traceable lifecycle with revision history, recovery, duplicate decisions, and audit evidence.

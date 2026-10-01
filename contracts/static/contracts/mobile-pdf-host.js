@@ -1,7 +1,7 @@
 (() => {
   const viewer = new URL(document.currentScript.dataset.viewer, location.href);
   let overlay, frame, previousFocus, previousOverflow;
-  window.sealGuardPdfFrameUrl = (url, contractId = null, title = '') => {
+  window.sealGuardPdfFrameUrl = (url, contractId = null, title = '', auditLogId = null) => {
     if (!url) return url;
     const source = new URL(url, location.href);
     source.hash = '';
@@ -12,6 +12,7 @@
     const selectedContract = contractId || inferredContract?.[1];
     if (selectedContract) target.searchParams.set('contract', selectedContract);
     if (title) target.searchParams.set('title', title);
+    if (auditLogId && /^\d+$/.test(String(auditLogId))) target.searchParams.set('audit_log', auditLogId);
     return target.href;
   };
   function close() {
@@ -23,7 +24,7 @@
   }
   window.SealGuardPdf = {
     close,
-    open(url, contractId = null, title = '', details = false, version = null) {
+    open(url, contractId = null, title = '', details = false, version = null, auditLogId = null) {
       // Desktop uses the original SealGuard side-panel layout. The full-screen
       // canvas is reserved for compact/mobile layouts.
       if (!url || !matchMedia('(max-width: 900px)').matches) return false;
@@ -44,7 +45,7 @@
         previousFocus = document.activeElement;
         previousOverflow = document.body.style.overflow;
       }
-      const fullScreenUrl = new URL(window.sealGuardPdfFrameUrl(url, contractId, title));
+      const fullScreenUrl = new URL(window.sealGuardPdfFrameUrl(url, contractId, title, auditLogId));
       console.info('[SealGuard PDF] viewer_open', {contractId, url, details});
       const sourcePath = new URL(url, location.href).pathname;
       const inferredContract = sourcePath.match(/^\/contract\/(\d+)\/(?:preview|download)\/$/);

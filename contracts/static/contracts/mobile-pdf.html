@@ -83,6 +83,7 @@
     body.sidebar-pinned #details-toggle, body.sidebar-pinned #close-details,
     body.sidebar-pinned #versions-toggle, body.sidebar-pinned #details-backdrop { display:none; }
     body.sidebar-pinned .pdf-sidebar-title { padding-right:17px; }
+    body.sidebar-hidden #versions-toggle,
     body.sidebar-hidden #details-toggle,
     body.sidebar-hidden #pdf-sidebar,
     body.sidebar-hidden #details-backdrop { display:none !important; }
@@ -132,12 +133,19 @@
       <div class="meta-row"><span class="meta-row-label">Created</span><span id="details-created" class="meta-row-value">—</span></div>
       <div class="meta-row"><span class="meta-row-label">Last Encrypted</span><span id="details-encrypted" class="meta-row-value">—</span></div>
       <div class="meta-row"><span class="meta-row-label">Last Verified</span><span id="details-verified" class="meta-row-value">—</span></div>
+      <div class="meta-row" id="audit-verification-result-row" hidden><span class="meta-row-label">Verification Result</span><span id="audit-verification-result" class="meta-row-value">Not evaluated</span></div>
       <div class="meta-row"><span class="meta-row-label">Version</span><span id="details-version" class="meta-row-value">—</span></div>
       <div class="meta-row"><span class="meta-row-label">Uploaded by</span><span id="details-uploader" class="meta-row-value">—</span></div>
     </div>
     <p class="sidebar-section-label">Version History</p>
     <div id="details-versions"></div>
+    <section id="audit-verification-logs" hidden>
+      <p class="sidebar-section-label">Verification Logs</p>
+      <div id="audit-verification-history" class="verification-history-list"></div>
+    </section>
   </aside>
-  <script type="module" src="mobile-pdf.mjs?v=revision-metadata-2"></script>
+  <link rel="stylesheet" href="dashboard-verification.css?v=1">
+  <script src="dashboard-verification.js?v=1"></script>
+  <script type="module" src="mobile-pdf.mjs?v=audit-investigation-1"></script>
 </body>
 </html>

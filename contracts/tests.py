@@ -339,7 +339,7 @@ class AuditLogTests(TestCase):
 
             self.client.force_login(self.user)
             dashboard = self.client.get(reverse('dashboard'))
-            self.assertContains(dashboard, 'Verification History')
+            self.assertContains(dashboard, 'Verification Logs')
             self.assertNotContains(dashboard, 'Verification pipeline initialized')
 
             history = self.client.get(
@@ -2467,7 +2467,7 @@ class PhysicalVerificationTests(TestCase):
         self.assertEqual(payload['version'], 1)
         self.assertEqual(payload['page'], 1)
         self.assertEqual(payload['total_pages'], 3)
-        self.assertIn('Capture the complete page content', payload['message'])
+        self.assertIn('capture the complete page', payload['message'])
 
     def test_physical_qr_check_rejects_invalid_code_safely(self):
         response = self.client.post(reverse('verify_physical_qr'), {
@@ -2477,7 +2477,6 @@ class PhysicalVerificationTests(TestCase):
         self.assertFalse(response.json()['valid'])
 
     def test_physical_qr_preview_contains_only_the_scanned_version_page(self):
-        import base64
         # A newer version must not replace the page identified by the old QR.
         self.issue_document('New revision', ['Different newer page'], contract=self.contract, version_number=2)
         response = self.client.post(reverse('verify_physical_qr'), {'qr_token': self.tokens[1]})
@@ -2485,19 +2484,25 @@ class PhysicalVerificationTests(TestCase):
         self.assertEqual(response['Cache-Control'], 'private, no-store')
         data = response.json()
         self.assertEqual((data['version'], data['page']), (1, 2))
-        with fitz.open(stream=self.pdf_bytes, filetype='pdf') as document:
-            page = document[1]
-            scale = min(2, 1800 / max(page.rect.width, page.rect.height))
-            expected = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False).tobytes('png')
-        self.assertEqual(base64.b64decode(data['page_image'].split(',', 1)[1]), expected)
-        self.assertNotIn('preview_url', data)
+        self.assertNotIn('page_image', data)
+        page = self.client.get(data['page_pdf_url'])
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(page['Content-Type'], 'application/pdf')
+        with fitz.open(stream=b''.join(page.streaming_content), filetype='pdf') as document:
+            self.assertEqual(len(document), 1)
+            self.assertIn('Page two terms and signature', document[0].get_text())
+
+    def test_physical_page_pdf_rejects_invalid_token(self):
+        response = self.client.get(reverse('verify_physical_page'), {'qr_token': 'SGP1.forged'})
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self.client.get(reverse('verify_physical_page')).status_code, 404)
 
     def test_physical_qr_preview_rejects_trashed_document(self):
         self.contract.is_trashed = True
         self.contract.save()
         response = self.client.post(reverse('verify_physical_qr'), {'qr_token': self.tokens[0]})
         self.assertEqual(response.status_code, 410)
-        self.assertNotIn('page_image', response.json())
+        self.assertNotIn('page_pdf_url', response.json())
 
     def mutate_pdf(self, callback):
         document = fitz.open(stream=self.pdf_bytes, filetype='pdf')

@@ -1,0 +1,18 @@
+SECTION J - MOBILE AUTHENTICATION APPLICATION
+
+Status: CONDITIONAL / NOT CLAIMED COMPLETE
+
+This section applies only if SealGuard includes a separate mobile authentication application. The responsive mobile website and browser-based physical verification tests do not automatically count as a separate mobile application.
+
+MOB-01 normal scanning: 3 Android devices x 30 documents = 90 scans. Test authentic, tampered, and unknown documents.
+MOB-02 printed and screen copies: 15 printed and 15 screen-displayed documents per device = 90 scans across 3 devices.
+MOB-03 adverse scanning: 10 scans each under dim lighting, glare, a 30-degree angle, and partial blur = 40 scans.
+MOB-04 missing/damaged seals: 10 missing and 10 damaged seals = 20 scans.
+MOB-05 scan-to-result time: record average, median, and 95th-percentile time for normal and adverse scans.
+MOB-06 screen compatibility: test small, medium, and large Android screens for scanning, result, error, navigation, and exit controls.
+
+Current device limitation:
+Two Android phones are available from the recorded compatibility testing. The matrix requires three devices for the full MOB-01 and MOB-02 counts. A third device is required for a full claim, or the matrix must be reported as reduced-scope.
+
+Decision needed:
+If no separate mobile authentication application is part of the final deliverable, mark Section J Not Applicable and revise the manuscript rather than reporting these cases as passed.

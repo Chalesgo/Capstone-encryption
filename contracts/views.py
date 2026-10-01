@@ -1058,19 +1058,19 @@ def empty_trash(request):
         return JsonResponse({'success': True, 'count': count})
     return JsonResponse({'success': False}, status=400)
 
-def verify_physical_qr(request):
-    """Validate a scanned page token before the full physical-page comparison."""
-    if request.method != 'POST':
-        return JsonResponse({'valid': False, 'message': 'Invalid request method.'}, status=405)
+def _resolve_physical_page(token):
+    """Validate a page token against its signed manifest.
 
-    token = request.POST.get('qr_token', '').strip()
+    Returns (manifest_record, payload, None) or (None, None, error_response).
+    """
+    token = (token or '').strip()
     if not token:
-        return JsonResponse({'valid': False, 'message': 'No QR code was received.'}, status=400)
+        return None, None, JsonResponse({'valid': False, 'message': 'No QR code was received.'}, status=400)
 
     try:
         payload = decode_page_token(token)
     except (ValueError, TypeError, json.JSONDecodeError):
-        return JsonResponse({
+        return None, None, JsonResponse({
             'valid': False,
             'message': 'This is not a valid SealGuard physical-page QR code.',
         }, status=400)
@@ -1079,7 +1079,7 @@ def verify_physical_qr(request):
         'version__contract'
     ).filter(manifest_id=payload['m']).first()
     if not manifest_record:
-        return JsonResponse({
+        return None, None, JsonResponse({
             'valid': False,
             'message': 'No registered SealGuard document was found for this QR code.',
         }, status=404)
@@ -1089,25 +1089,45 @@ def verify_physical_qr(request):
         manifest_record.signature,
         settings.RSA_PUBLIC_KEY_PATH,
     ) or not validate_token_membership(payload, manifest_record.manifest):
-        return JsonResponse({
+        return None, None, JsonResponse({
             'valid': False,
             'message': 'The QR code does not match the signed document manifest.',
         }, status=422)
 
-    contract = manifest_record.version.contract
-    if contract.is_trashed:
-        return JsonResponse({
+    if manifest_record.version.contract.is_trashed:
+        return None, None, JsonResponse({
             'valid': False,
             'message': 'This QR belongs to a document currently in the trash.',
         }, status=410)
+    return manifest_record, payload, None
+
+
+def _registered_page_pdf(manifest_record, page_number):
+    """Return a one-page PDF so a single QR never exposes the rest of the document."""
+    with open_pdf(manifest_record.version.file.path) as document:
+        single = fitz.open()
+        try:
+            single.insert_pdf(document, from_page=page_number - 1, to_page=page_number - 1)
+            return single.tobytes(garbage=3, deflate=True)
+        finally:
+            single.close()
+
+
+def verify_physical_qr(request):
+    """Validate a scanned page token before the full physical-page comparison."""
+    if request.method != 'POST':
+        return JsonResponse({'valid': False, 'message': 'Invalid request method.'}, status=405)
+
+    token = request.POST.get('qr_token', '').strip()
+    manifest_record, payload, error = _resolve_physical_page(token)
+    if error:
+        return error
 
     page_number = int(payload['p'])
     total_pages = int(payload['n'])
+    contract = manifest_record.version.contract
     try:
-        with open_pdf(manifest_record.version.file.path) as document:
-            page = document.load_page(page_number - 1)
-            scale = min(2, 1800 / max(page.rect.width, page.rect.height))
-            image = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False).tobytes('png')
+        _registered_page_pdf(manifest_record, page_number)
     except (OSError, ValueError, RuntimeError):
         return JsonResponse({'valid': False, 'message': 'The registered page is unavailable. Please contact staff.'}, status=410)
     response = JsonResponse({
@@ -1117,14 +1137,27 @@ def verify_physical_qr(request):
         'version': manifest_record.version.version_number,
         'page': page_number,
         'total_pages': total_pages,
-        'page_image': 'data:image/png;base64,' + base64.b64encode(image).decode('ascii'),
+        'page_pdf_url': reverse('verify_physical_page') + '?' + urlencode({'qr_token': token}),
         'message': (
             f'Registered QR confirmed: page {page_number} of {total_pages}. '
-            'Capture the complete page content to finish verification.'
+            'Compare it with your printed page, then capture the complete page to finish verification.'
         ),
     })
     response['Cache-Control'] = 'private, no-store'
     return response
+
+
+@never_cache
+def verify_physical_page(request):
+    """Serve only the registered page identified by a valid QR token, as a PDF."""
+    manifest_record, payload, error = _resolve_physical_page(request.GET.get('qr_token', ''))
+    if error:
+        raise Http404
+    try:
+        data = _registered_page_pdf(manifest_record, int(payload['p']))
+    except (OSError, ValueError, RuntimeError):
+        raise Http404
+    return FileResponse(io.BytesIO(data), content_type='application/pdf', filename='registered-page.pdf')
 
 
 def verify_physical(request):
@@ -1625,14 +1658,22 @@ def audit_verification_history(request, log_id):
         }
         for entry in history.order_by('-timestamp', '-id')
     ]
-    return JsonResponse({'success': True, 'events': events})
+    return JsonResponse({
+        'success': True,
+        'selected_result': selected_log.inspection_result,
+        'events': events,
+    })
 
 
 @login_required
 def audit_verification_log_detail(request, log_id):
-    if not request.user.is_superuser:
+    if not (request.user.is_superuser or request.user.is_staff):
         return JsonResponse({'success': False, 'message': 'Administrator access required.'}, status=403)
-    entry = get_object_or_404(AuditLog, pk=log_id, verification_result__gt='')
+    entry = get_object_or_404(
+        visible_logs(request.user), pk=log_id, verification_result__gt='',
+    )
+    if not request.user.is_superuser and entry.verification_result.casefold() == 'authentic':
+        return JsonResponse({'success': False, 'message': 'Administrator access required.'}, status=403)
     elapsed_ms = None
     if entry.verification_result == 'Running':
         elapsed_ms = max(0, round((timezone.now() - entry.timestamp).total_seconds() * 1000))

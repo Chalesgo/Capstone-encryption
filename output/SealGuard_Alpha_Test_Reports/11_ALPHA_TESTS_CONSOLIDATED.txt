@@ -1,0 +1,35 @@
+SEALGUARD ALPHA TESTS - CONSOLIDATED REPORT
+
+Overall result:
+Sections A through I were completed or confirmed with the evidence boundaries described in the individual reports. Section J remains conditional. Beta/UAT was intentionally excluded because it belongs to a separate evaluation group.
+
+Section status:
+A Authentication and Access Control - COMPLETED.
+B Document Management - COMPLETED.
+C Cryptographic Unit Testing - COMPLETED for implemented/covered mechanisms; CRY-11 intentionally omitted.
+D End-to-End Workflow - COMPLETED or manually confirmed.
+E System Accuracy and Tamper Detection - COMPLETED with vector/editor limitation.
+F Cybersecurity and Penetration Testing - SUBSTANTIALLY COMPLETED with deployment hardening and external/browser-scan boundaries retained.
+G Performance and Stress Testing - COMPLETED with retained failures, reconstructed evidence, and environment limits.
+H Reliability and Fault Testing - COMPLETED primarily through manual/operational confirmation; REL-02 historical caveat retained.
+I Browser and Viewport Compatibility - COMPLETED based on desktop, laptop, iPad Safari, two Android phones, and deployed-browser checks.
+J Mobile Authentication Application - CONDITIONAL; depends on whether a separate mobile application is in final scope.
+
+Initial project-wide problems:
+- Role and Clerk-account permissions were unclear.
+- Failed login attempts were not visible in the dashboard.
+- Document duplicates, revisions, Trash, and audit details needed clearer lifecycle behavior.
+- PDF viewing and downloading produced incorrect audit events in some paths.
+- Mobile navigation, PDF viewers, filters, dropdowns, and horizontal overflow caused usability problems.
+- Load testing exposed duplicate/revision races and limitations in the evidence harness.
+- Vector/editor PDF changes were difficult to classify and required a conservative tamper policy.
+
+Major corrective outcomes:
+- Authentication, lockout, RBAC, private-document authorization, and audit logging were strengthened.
+- Document validation, duplicate-aware revision prompts, metadata, version history, Trash, reports, and exports were expanded.
+- Cryptographic, fingerprint, seal, tamper, and sensitive-data checks were exercised.
+- Locust and reliability evidence were preserved with failures and limitations instead of being hidden.
+- Responsive navigation and document/verification views were tested across desktop, tablet, iPad, Android, and deployed environments.
+
+Next decision:
+Determine whether Section J represents a real separate mobile application. If not, mark it Not Applicable and update the manuscript. Do not add UAT results to this Alpha package.

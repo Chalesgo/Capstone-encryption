@@ -22,6 +22,16 @@ function setTitle(title) {
   document.title = title + ' — SealGuard';
 }
 setTitle(params.get('title') || 'Document');
+const auditLogId = params.get('audit_log');
+if (auditLogId && /^\d+$/.test(auditLogId)) {
+  get('audit-verification-result-row').hidden = false;
+  window.SealGuardAuditVerification.load({
+    logId: auditLogId,
+    resultElement: get('audit-verification-result'),
+    section: get('audit-verification-logs'),
+    list: get('audit-verification-history'),
+  });
+}
 
 let sidebarPinned = false;
 const sidebarHidden = params.get('hide_sidebar') === '1';

@@ -1,0 +1,24 @@
+SECTION G - PERFORMANCE AND STRESS TESTING
+
+Initial problems:
+Early performance runs exposed fixture/title collisions, Locust spawning/reporting issues, missing native exports for some runs, and media/logo serving problems. The first mixed workload had duplicate/revision race failures.
+
+Fixes and follow-up:
+- Used disposable test data and unique title/filename handling for repeatable uploads.
+- Restarted Locust after harness changes and waited for the stopped state before interpreting results.
+- Preserved separate PERF-01 through PERF-09 evidence.
+- Restored media/seal serving and checked deployed-browser behavior.
+
+Recorded results:
+PERF-01 sequential baseline: completed; report labeled reconstructed where native export was unavailable.
+PERF-02 load ramp: 10/20/30/50-user sequence completed; one early failure remained in the historical evidence.
+PERF-03 concurrent login: three 30-user repetitions completed without unexpected server errors.
+PERF-04 concurrent upload: 105 uploads completed with zero recorded HTTP failures.
+PERF-05 concurrent verification: completed with a small number of recorded failures retained in the evidence.
+PERF-06 mixed workload: initial run had 732 failures out of 15,674 requests (4.67%) from duplicate/revision races; follow-up with unique data completed without those failures. PERF-06 remains labeled reconstructed where applicable.
+PERF-07 sudden spike: three 50-user spikes completed without observed corruption.
+PERF-08 endurance: two-hour run recorded 82,259 requests, 23 failures (about 0.028%), average 555 ms, p95 1.8 s, p99 2.6 s, with no crash or restart observed.
+PERF-09 PDF response time: 30 uploads completed; near-limit aggregate p95 was approximately 2.7 seconds in the recorded run.
+
+Conclusion:
+Section G was completed with limitations. The report preserves failures and reconstructed evidence instead of claiming a completely failure-free load test.

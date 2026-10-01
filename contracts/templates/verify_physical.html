@@ -3,9 +3,12 @@
 {% block content %}
 <div class="physical-shell">
   <dialog id="registered-page-dialog" aria-labelledby="registered-page-title">
-    <header class="registered-page-heading"><div><h2 id="registered-page-title">Registered page</h2><p id="registered-page-label"></p></div><button type="button" class="btn btn-outline" id="registered-page-close" autofocus>Continue scanning</button></header>
-    <p>Compare this registered page with your physical copy. A matching QR identifies the page; it does not verify the printed contents.</p>
-    <img id="registered-page-image" alt="Registered page corresponding to the scanned QR code">
+    <header class="registered-page-heading">
+      <div><h2 id="registered-page-title">Registered page</h2><p id="registered-page-label"></p></div>
+      <button type="button" class="btn btn-primary" id="registered-page-close" autofocus>Continue</button>
+    </header>
+    <p class="registered-page-note">Compare this registered page with your printed copy. A matching QR identifies the page; it does not verify the printed contents.</p>
+    <iframe id="registered-page-frame" title="Registered page corresponding to the scanned QR code"></iframe>
   </dialog>
   <header class="physical-header">
     <span class="physical-eyebrow">
@@ -83,39 +86,39 @@
 /* ── Registered-page dialog ── */
 #registered-page-dialog {
   width: min(900px, calc(100vw - 24px));
+  height: min(900px, calc(100dvh - 24px));
   max-height: calc(100dvh - 24px);
   margin: auto;
-  padding: 0 20px 20px;
+  padding: 0;
   border: 1px solid #e8e6e2;
   border-radius: 16px;
   background: #f7f6f4;
   color: #2d3a47;
-  overflow: auto;
+  overflow: hidden;
   box-shadow: 0 24px 60px rgba(15, 23, 42, .3);
 }
+#registered-page-dialog[open] { display: flex; flex-direction: column; }
 #registered-page-dialog::backdrop { background: rgba(16, 20, 28, .62); }
 .registered-page-heading {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 18px 0 12px;
+  padding: 14px 16px 12px;
   background: #f7f6f4;
   border-bottom: 1px solid #e8e6e2;
 }
-.registered-page-heading h2 { margin: 0; font-size: 18px; font-weight: 700; color: #1a1a2e; }
-#registered-page-dialog p { margin: 12px 0; font-size: 13px; line-height: 1.55; color: #667788; }
-#registered-page-dialog #registered-page-label { margin: 4px 0 0; font-size: 12.5px; color: #889aab; }
-#registered-page-image {
-  display: block;
-  width: 100%;
-  height: auto;
-  border: 1px solid #e8e6e2;
-  border-radius: 10px;
-  background: #fff;
+.registered-page-heading h2 { margin: 0; font-size: 17px; font-weight: 700; color: #1a1a2e; }
+.registered-page-heading .btn { flex: 0 0 auto; margin: 0; }
+#registered-page-dialog p { margin: 0; font-size: 12.5px; line-height: 1.5; color: #667788; }
+#registered-page-dialog #registered-page-label { margin-top: 3px; color: #889aab; }
+#registered-page-dialog .registered-page-note { flex: 0 0 auto; padding: 9px 16px; background: #fdf8ef; border-bottom: 1px solid #f0e0c6; color: #92400e; }
+#registered-page-frame { flex: 1 1 auto; min-height: 0; width: 100%; border: 0; background: #e9edf2; }
+@media (max-width: 760px) {
+  #registered-page-dialog { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; }
+  .registered-page-heading { padding-top: calc(12px + env(safe-area-inset-top)); }
+  .registered-page-heading .btn { min-height: 44px; padding: 0 18px; }
 }
 
 /* ── Page shell ── */
@@ -783,6 +786,16 @@ function hideQrLoading() {
   loadingBar.style.width = '12%';
 }
 
+function openRegisteredPage(result) {
+  const label = `${result.title} — Version ${result.version}, page ${result.page} of ${result.total_pages}`;
+  document.getElementById('registered-page-label').textContent = label;
+  const viewer = new URL(window.sealGuardPdfFrameUrl(result.page_pdf_url, null, `Page ${result.page} of ${result.total_pages}`), location.href);
+  viewer.searchParams.set('hide_sidebar', '1');
+  viewer.searchParams.set('hide_close', '1');
+  document.getElementById('registered-page-frame').src = viewer.href;
+  document.getElementById('registered-page-dialog').showModal();
+}
+
 async function validateScannedCode(value) {
   if (tokens.includes(value)) {
     statusNode.textContent = 'This page QR code has already been scanned.';
@@ -809,9 +822,7 @@ async function validateScannedCode(value) {
     tokens.push(value);
     statusNode.textContent = `Registered page ${result.page} of ${result.total_pages}.`;
     setQrResult(true, `${result.title} - Version ${result.version}. ${result.message}`);
-    document.getElementById('registered-page-label').textContent = `${result.title} — Version ${result.version}, page ${result.page} of ${result.total_pages}`;
-    document.getElementById('registered-page-image').src = result.page_image;
-    document.getElementById('registered-page-dialog').showModal();
+    openRegisteredPage(result);
     renderTokens();
   } catch (error) {
     hideQrLoading();
@@ -984,7 +995,7 @@ async function detectQrValue() {
 
 document.getElementById('registered-page-close').onclick = () => document.getElementById('registered-page-dialog').close();
 document.getElementById('registered-page-dialog').addEventListener('close', () => {
-  document.getElementById('registered-page-image').removeAttribute('src');
+  document.getElementById('registered-page-frame').src = 'about:blank';
   maybeAutoSubmit();
 });
 async function scanFrame(now) {

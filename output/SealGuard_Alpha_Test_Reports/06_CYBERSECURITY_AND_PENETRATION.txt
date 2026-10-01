@@ -1,0 +1,20 @@
+SECTION F - CYBERSECURITY AND PENETRATION TESTING
+
+Initial problem:
+Security testing needed to cover input attacks, authorization boundaries, direct file access, upload abuse, CSRF, session protection, and error disclosure without exposing real production data.
+
+Environment rule:
+Testing was restricted to authorized local/disposable or staging environments.
+
+Recorded coverage:
+- 100 SQL-injection input requests: completed checks passed.
+- 60 XSS context checks: completed safe-encoding checks passed; browser execution evidence remains separate.
+- 30 CSRF requests: rejected with HTTP 400. The result differs from the matrix's planned 403 wording but still demonstrates rejection.
+- 40 private-object authorization requests: denied.
+- 30 invalid-upload checks: rejected safely.
+- 20 direct media/storage-path attempts: denied or returned 404.
+- Error-disclosure checks found no sensitive key, password, storage path, or configuration disclosure after excluding the ordinary login Password label false positive.
+- Deployment checks retained five warnings: HSTS, SSL redirect, secure session cookie, secure CSRF cookie, and X-Frame-Options policy.
+
+Conclusion:
+Section F was substantially completed. Local security controls passed the recorded checks, while deployment HTTPS hardening and browser/external-scanner evidence must remain separately documented.

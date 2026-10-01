@@ -1,0 +1,28 @@
+SECTION C - CRYPTOGRAPHIC UNIT TESTING
+
+Initial problem:
+The manuscript described several cryptographic mechanisms, but each mechanism needed to be checked against the actual implementation instead of being assumed from the manuscript.
+
+Fixes and testing work:
+- Repeated SHA-256 and canonical-fingerprint calculations.
+- Tested encryption/decryption round trips, wrong keys, and corrupted ciphertext.
+- Tested LSB payload embedding/extraction and invalid seal conditions.
+- Inspected database records, audit logs, and responses for sensitive data exposure.
+- Treated vector/editor changes conservatively because PDF re-saving can change canonical content.
+
+Results:
+CRY-01 SHA-256 consistency: PASSED.
+CRY-02 canonical-fingerprint consistency: PASSED.
+CRY-03 fingerprint change detection: PASSED with the documented vector/editor limitation.
+CRY-04 AES encryption/decryption: PASSED.
+CRY-05 incorrect-key handling: PASSED.
+CRY-06 corrupted-ciphertext handling: PASSED.
+CRY-07 HMAC: report only where present in the release implementation; covered as implementation-dependent.
+CRY-08 RSA key wrapping: report only where present in the release implementation; covered as implementation-dependent.
+CRY-09 LSB embed/extract: PASSED.
+CRY-10 invalid LSB payloads: PASSED.
+CRY-11 unauthorized decryption: intentionally omitted because equivalent authorization tests covered it.
+CRY-12 sensitive-data inspection: COMPLETED.
+
+Important limitation:
+Vector/editor changes can be classified as possible modification even when no obvious visual tampering was added. This is a security-conservative result, not a defect to hide.
