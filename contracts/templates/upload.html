@@ -365,13 +365,19 @@
             <div style="display:flex; gap:10px;">
                 <button type="submit" id="upload-btn" class="btn btn-primary"
                         style="flex:1; justify-content:center; padding:12px;">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                    <svg id="upload-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
                          stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                         <polyline points="17,8 12,3 7,8"/>
                         <line x1="12" y1="3" x2="12" y2="15"/>
                     </svg>
-                    <span id="upload-btn-label">{% if is_revision %}Upload Revision{% else %}Upload & Encrypt{% endif %}</span>
+                    <span id="upload-btn-spinner" class="upload-button-spinner" hidden aria-hidden="true">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <circle cx="12" cy="12" r="9" opacity=".3"/>
+                            <path d="M12 3a9 9 0 0 1 9 9" stroke-linecap="round"/>
+                        </svg>
+                    </span>
+                    <span id="upload-btn-label" aria-live="polite">{% if is_revision %}Upload Revision{% else %}Upload & Encrypt{% endif %}</span>
                 </button>
                 <a href="/contracts/" class="btn btn-outline" style="padding: 12px 20px;">
                     Cancel
@@ -423,12 +429,37 @@
     const warningBox = document.getElementById('file-warning');
     const uploadBtn = document.getElementById('upload-btn');
     const uploadBtnLabel = document.getElementById('upload-btn-label');
+    const uploadBtnIcon = document.getElementById('upload-btn-icon');
+    const uploadBtnSpinner = document.getElementById('upload-btn-spinner');
+    const defaultUploadLabel = uploadBtnLabel.textContent;
     const uploadProcessInfo = document.getElementById('upload-process-info');
     const uploadForm = document.getElementById('upload-form');
     const duplicateModal = document.getElementById('duplicate-modal');
     const duplicateMessage = document.getElementById('duplicate-modal-message');
     let duplicateContracts = [];
     let duplicateCheckComplete = false;
+    let duplicateCheckInFlight = false;
+
+    function setUploadLoading(label) {
+        uploadBtn.disabled = true;
+        uploadBtn.setAttribute('aria-busy', 'true');
+        uploadBtnLabel.textContent = label;
+        uploadBtnSpinner.hidden = false;
+        uploadBtnIcon.style.display = 'none';
+    }
+
+    function updateUploadModeLabel() {
+        uploadBtn.disabled = false;
+        uploadBtn.removeAttribute('aria-busy');
+        uploadBtnLabel.textContent = defaultUploadLabel;
+        uploadBtnSpinner.hidden = true;
+        uploadBtnIcon.style.display = '';
+    }
+
+    function submitUpload() {
+        setUploadLoading('Processing...');
+        HTMLFormElement.prototype.submit.call(uploadForm);
+    }
 
     function formatBytes(bytes) {
         if (bytes < 1024) return bytes + ' B';
@@ -457,13 +488,17 @@
         zone.style.display = 'none';
     }
 
-    function showWarning() {
+    function showWarning(message = 'This file is not a PDF. Please convert your document to PDF format before uploading.', allowRetry = false) {
+        warningBox.querySelector('strong').textContent = message;
+        warningBox.querySelector('strong').nextElementSibling.textContent = allowRetry
+            ? 'Your file has not been uploaded. Please try again.' : 'Please choose another file.';
         warningBox.classList.add('show');
-        preview.classList.remove('show');
-        zone.style.display = 'none';
-        uploadBtn.disabled = true;
-        uploadBtn.style.opacity = '0.5';
-        uploadBtn.style.cursor = 'not-allowed';
+        preview.classList.toggle('show', allowRetry);
+        zone.style.display = allowRetry ? 'none' : 'block';
+        updateUploadModeLabel();
+        uploadBtn.disabled = !allowRetry;
+        uploadBtn.style.opacity = allowRetry ? '1' : '0.5';
+        uploadBtn.style.cursor = allowRetry ? 'pointer' : 'not-allowed';
     }
 
     function clearWarning() {
@@ -519,6 +554,7 @@
     });
 
     uploadForm.addEventListener('submit', async function(e) {
+        if (duplicateCheckInFlight) { e.preventDefault(); return; }
         const file = input.files[0];
         if (!file || !isPdf(file)) {
             e.preventDefault();
@@ -527,20 +563,27 @@
         }
         if (!duplicateCheckComplete) {
             e.preventDefault();
-            uploadBtn.disabled = true;
-            uploadBtn.textContent = 'Checking for duplicates...';
+            duplicateCheckInFlight = true;
+            setUploadLoading('Checking for duplicates...');
             const formData = new FormData();
             formData.append('file', file);
             const titleField = uploadForm.querySelector('[name="title"]');
             if (titleField) formData.append('title', titleField.value);
             const csrfToken = uploadForm.querySelector('[name=csrfmiddlewaretoken]').value;
+            const controller = new AbortController();
+            const timeout = window.setTimeout(() => controller.abort(), 30000);
             try {
                 const response = await fetch('{% url "check_duplicate_upload" %}', {
                     method: 'POST',
                     headers: {'X-CSRFToken': csrfToken},
                     body: formData,
+                    signal: controller.signal,
                 });
                 const result = await response.json();
+                if (result.error === 'invalid_file') {
+                    showWarning(result.message);
+                    return;
+                }
                 if (!response.ok || !result.success) throw new Error('duplicate check failed');
                 if (result.already_authenticated) {
                     const existing = result.already_authenticated;
@@ -555,7 +598,7 @@
                 }
                 if (uploadForm.dataset.isRevision === 'true') {
                     duplicateCheckComplete = true;
-                    uploadForm.submit();
+                    submitUpload();
                     return;
                 }
                 duplicateContracts = result.duplicates || [];
@@ -573,24 +616,18 @@
                     return;
                 }
                 duplicateCheckComplete = true;
-                uploadForm.submit();
+                submitUpload();
             } catch (error) {
-                uploadBtn.disabled = false;
-                updateUploadModeLabel();
-                uploadForm.submit();
+                showWarning(error.name === 'AbortError'
+                    ? 'The duplicate check timed out. Please try again.'
+                    : 'The duplicate check could not be completed. Please try again.', true);
+            } finally {
+                window.clearTimeout(timeout);
+                duplicateCheckInFlight = false;
             }
             return;
         }
-        const btn = document.getElementById('upload-btn');
-        btn.disabled = true;
-        btn.innerHTML = `
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
-                style="animation: spin 1s linear infinite;">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            </svg>
-            Processing...
-        `;
+        setUploadLoading('Processing...');
     });
 
     function closeDuplicateModal() {
@@ -614,7 +651,7 @@
         uploadForm.action = `/contract/${duplicate.id}/add-revision/`;
         duplicateCheckComplete = true;
         closeDuplicateModal();
-        uploadForm.submit();
+        submitUpload();
     });
 
     document.getElementById('duplicate-new-btn').addEventListener('click', function() {
@@ -629,11 +666,15 @@
         forceNew.value = '1';
         duplicateCheckComplete = true;
         closeDuplicateModal();
-        uploadForm.submit();
+        submitUpload();
     });
 </script>
 
 <style>
+.upload-button-spinner { display: inline-flex; flex-shrink: 0; }
+.upload-button-spinner[hidden] { display: none; }
+.upload-button-spinner svg { animation: spin 1s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .upload-button-spinner svg { animation: none; } }
 @keyframes spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }

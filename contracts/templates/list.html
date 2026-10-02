@@ -1827,8 +1827,8 @@ function toggleThMenu(event, menuId) {
   document.querySelectorAll('[aria-haspopup="menu"][aria-expanded="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
   if (isOpen) return;
   const rect = button.getBoundingClientRect();
-  menu.style.left = rect.left + 'px';
-  menu.style.top = (rect.bottom + 6) + 'px';
+  menu.style.left = sgCssPx(rect.left);
+  menu.style.top = sgCssPx(rect.bottom + 6);
   menu.classList.add('open');
   button.setAttribute('aria-expanded', 'true');
   const selected = menu.querySelector('.is-selected') || menu.querySelector('li');
@@ -2826,8 +2826,8 @@ function toggleStatusDropdown(event, id) {
 
   if (!isOpen) {
     const btnRect = event.currentTarget.getBoundingClientRect();
-    menu.style.left = btnRect.left + 'px';
-    menu.style.top = (btnRect.bottom + 4) + 'px';
+    menu.style.left = sgCssPx(btnRect.left);
+    menu.style.top = sgCssPx(btnRect.bottom + 4);
     menu.classList.add('open');
   }
 }
@@ -3032,8 +3032,8 @@ function positionContextMenu(menu, event) {
     Math.max(event.clientY, margin),
     Math.max(margin, window.innerHeight - menu.offsetHeight - margin)
   );
-  menu.style.left = x + 'px';
-  menu.style.top = y + 'px';
+  menu.style.left = sgCssPx(x);
+  menu.style.top = sgCssPx(y);
 }
 
 function showContractContextMenu(event, contractId) {

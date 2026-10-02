@@ -1234,8 +1234,8 @@ function closeAuditPdf() {
     let top = triggerRect.bottom + 5;
     if (top + menuHeight > window.innerHeight - 8) top = triggerRect.top - menuHeight - 5;
     let left = Math.min(triggerRect.left, window.innerWidth - width - 8);
-    menu.style.top = Math.max(8, top) + 'px';
-    menu.style.left = Math.max(8, left) + 'px';
+    menu.style.top = sgCssPx(Math.max(8, top));
+    menu.style.left = sgCssPx(Math.max(8, left));
   }
   window.addEventListener('resize', positionActivityMenu);
   window.addEventListener('scroll', positionActivityMenu, true);

@@ -293,6 +293,16 @@ def check_duplicate_upload(request):
     if not uploaded_file:
         return JsonResponse({'success': False, 'error': 'missing_file'}, status=400)
 
+    validation_form = ContractForm({'title': request.POST.get('title') or 'Duplicate check'}, request.FILES)
+    validation_form.is_valid()
+    if validation_form.errors.get('file'):
+        return JsonResponse({
+            'success': False,
+            'error': 'invalid_file',
+            'message': ' '.join(validation_form.errors['file']),
+        }, status=400)
+    uploaded_file.seek(0)
+
     existing = _existing_sealed_upload(uploaded_file, request.user)
     if existing:
         return JsonResponse({'success': True, 'already_authenticated': existing, 'duplicates': []})

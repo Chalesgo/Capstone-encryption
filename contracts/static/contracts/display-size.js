@@ -2,6 +2,13 @@
  * the surrounding page's scale, so they must not multiply it a second time. */
 (() => {
   'use strict';
+  // The page is scaled with CSS zoom, which multiplies `position: fixed`
+  // offsets but not getBoundingClientRect()/clientX/innerWidth. Convert those
+  // viewport pixels to CSS pixels before assigning left/top.
+  window.sgCssPx = value => {
+    const zoom = parseFloat(document.documentElement.style.zoom) || 1;
+    return (value / zoom) + 'px';
+  };
   if (window.self !== window.top) return;
   const key = 'sealguard.displaySize';
   const levels = [100, 110, 125, 150, 175, 200];
