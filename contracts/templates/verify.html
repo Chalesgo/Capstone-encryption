@@ -1254,9 +1254,16 @@
                     Possible Modification
                 </div>
                 <div class="result-desc">
+                    {% if filename_hint == 'unlinked_modification' %}
+                    SealGuard authentication details could not be matched to an active official record.
+                    Editing or re-exporting this PDF may have removed or changed its verification data.
+                    Its original official record could not be identified, and the remaining authentication
+                    evidence does not establish authenticity.
+                    {% else %}
                     This document differs from its official authenticated record.
                     Was it opened or re-saved using a PDF editor? Some editors can alter
                     protected PDF data even when no visible changes were intentionally made.
+                    {% endif %}
                 </div>
             </div>
         </div>

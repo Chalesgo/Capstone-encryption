@@ -1102,15 +1102,24 @@ def _resolve_physical_page(token):
     return manifest_record, payload, None
 
 
-def _registered_page_pdf(manifest_record, page_number):
-    """Return a one-page PDF so a single QR never exposes the rest of the document."""
+def _registered_page_pdf(manifest_record, page_number, thumbnail_width=None):
+    """Return a one-page PDF so a single QR never exposes the rest of the document.
+
+    With thumbnail_width, returns (pdf_bytes, png_bytes) instead.
+    """
     with open_pdf(manifest_record.version.file.path) as document:
+        thumbnail = None
+        if thumbnail_width:
+            page = document.load_page(page_number - 1)
+            scale = thumbnail_width / page.rect.width
+            thumbnail = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False).tobytes('png')
         single = fitz.open()
         try:
             single.insert_pdf(document, from_page=page_number - 1, to_page=page_number - 1)
-            return single.tobytes(garbage=3, deflate=True)
+            data = single.tobytes(garbage=3, deflate=True)
         finally:
             single.close()
+    return (data, thumbnail) if thumbnail_width else data
 
 
 def verify_physical_qr(request):
@@ -1127,7 +1136,7 @@ def verify_physical_qr(request):
     total_pages = int(payload['n'])
     contract = manifest_record.version.contract
     try:
-        _registered_page_pdf(manifest_record, page_number)
+        _data, thumbnail = _registered_page_pdf(manifest_record, page_number, thumbnail_width=240)
     except (OSError, ValueError, RuntimeError):
         return JsonResponse({'valid': False, 'message': 'The registered page is unavailable. Please contact staff.'}, status=410)
     response = JsonResponse({
@@ -1137,6 +1146,7 @@ def verify_physical_qr(request):
         'version': manifest_record.version.version_number,
         'page': page_number,
         'total_pages': total_pages,
+        'thumbnail': 'data:image/png;base64,' + base64.b64encode(thumbnail).decode('ascii'),
         'page_pdf_url': reverse('verify_physical_page') + '?' + urlencode({'qr_token': token}),
         'message': (
             f'Registered QR confirmed: page {page_number} of {total_pages}. '
@@ -2084,6 +2094,15 @@ def public_verify(request):
                 if marker_owner_exists:
                     debug_log.append("[FAIL] Sealed PDF fingerprint does not match the contract identified by its marker")
                     failure_reason = 'sealed fingerprint mismatch'
+                    result = 'tampered'
+                elif has_footer or extracted_encrypted:
+                    debug_log.append("[WARN] SealGuard authentication evidence remains, but no active official record could be identified")
+                    debug_log.append(
+                        "[WARN] Authentication details may have been removed or changed by editing or re-exporting this PDF. "
+                        "The remaining footer or marker does not prove its authenticity."
+                    )
+                    failure_reason = 'authentication evidence remains without an identifiable active official record'
+                    filename_hint = 'unlinked_modification'
                     result = 'tampered'
                 else:
                     debug_log.append("[FAIL] No active contract matches the sealed fingerprint or encrypted marker")

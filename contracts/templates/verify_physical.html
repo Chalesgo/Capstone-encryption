@@ -65,6 +65,14 @@
     </form>
   </div>
   <div class="physical-sheet-backdrop" id="sheet-backdrop"></div>
+  <section class="scanned-sheet" id="scanned-sheet" aria-labelledby="scanned-sheet-title" hidden>
+    <div class="scanned-sheet-handle" aria-hidden="true"></div>
+    <header class="scanned-sheet-heading">
+      <div><h2 id="scanned-sheet-title">Scanned pages</h2><p id="scanned-sheet-summary"></p></div>
+      <button type="button" class="scanned-sheet-close" id="scanned-sheet-close" aria-label="Close scanned pages">&times;</button>
+    </header>
+    <ol class="scanned-list" id="scanned-list"></ol>
+  </section>
   <div class="physical-fabs">
     <a href="{% url 'public_verify' %}" class="fab fab-exit" title="Exit physical verification" aria-label="Exit physical verification and return to Verify Document"><svg class="fab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></a>
     <button type="button" class="fab fab-tokens" id="fab-tokens" aria-label="View scanned pages"><svg class="fab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3h11a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M3 7v12a2 2 0 0 0 2 2"/><path d="M10 8h7M10 12h7M10 16h4"/></svg><span class="fab-badge" id="fab-tokens-badge" hidden>0</span></button>
@@ -369,6 +377,60 @@
 .upload-panel small { color: #889aab; font-size: 12.5px; line-height: 1.5; }
 .upload-panel .btn { justify-content: center; }
 
+/* ── Scanned-page record ── */
+.scanned-sheet {
+  margin: 0 0 12px;
+  border: 1px solid #e8e6e2;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+.scanned-sheet[hidden] { display: none; }
+.scanned-sheet-handle,
+.scanned-sheet-close { display: none; }
+.scanned-sheet-heading { padding: 11px 13px 6px; }
+.scanned-sheet-heading h2 { margin: 0; font-size: 14px; font-weight: 700; color: #1a1a2e; }
+.scanned-sheet-heading p { margin: 2px 0 0; font-size: 12px; color: #889aab; }
+.scanned-list { display: grid; gap: 6px; margin: 0; padding: 6px 10px 10px; list-style: none; }
+.scanned-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #e8e6e2;
+  border-radius: 10px;
+  background: #f7f6f4;
+  color: #2d3a47;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.scanned-item:hover { border-color: #f4a34d; background: #fdf8f1; }
+.scanned-item:focus-visible { outline: 3px solid rgba(244, 163, 77, .5); outline-offset: 2px; }
+.scanned-thumb {
+  flex: 0 0 auto;
+  width: 54px;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  object-position: top;
+  border: 1px solid #e0deda;
+  border-radius: 5px;
+  background: #fff;
+}
+.scanned-item-text { flex: 1 1 auto; min-width: 0; }
+.scanned-item-text strong { display: block; font-size: 13.5px; font-weight: 700; color: #1a1a2e; }
+.scanned-item-text span {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  font-size: 12px;
+  color: #667788;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.scanned-item-open { flex: 0 0 auto; font-size: 12px; font-weight: 700; color: #d9822b; }
+
 /* ── Result card ── */
 .result {
   position: relative;
@@ -502,6 +564,46 @@ body.camera-view-active { overflow: hidden; }
     border-radius: 12px;
     box-shadow: 0 10px 24px rgba(8, 12, 18, .4);
   }
+  .scanned-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 210;
+    display: flex;
+    flex-direction: column;
+    max-height: 70dvh;
+    margin: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    border: 0;
+    border-radius: 22px 22px 0 0;
+    box-shadow: 0 -14px 34px rgba(8, 12, 18, .45);
+    transform: translateY(105%);
+    visibility: hidden;
+    transition: transform .28s ease, visibility .28s;
+  }
+  .scanned-sheet[hidden] { display: flex; }
+  .scanned-sheet.sheet-open { transform: translateY(0); visibility: visible; }
+  .scanned-sheet-handle { display: block; flex: 0 0 auto; width: 40px; height: 4px; margin: 10px auto 0; border-radius: 999px; background: #d8d5cf; }
+  .scanned-sheet-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 18px 8px; }
+  .scanned-sheet-heading h2 { font-size: 16px; }
+  .scanned-sheet-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid #e8e6e2;
+    border-radius: 50%;
+    background: #fff;
+    color: #556270;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .scanned-list { overflow-y: auto; overscroll-behavior: contain; padding: 4px 14px 16px; }
+  .scanned-item { min-height: 64px; }
+  .scanned-thumb { width: 60px; }
   .physical-sheet-backdrop {
     position: fixed;
     inset: 0;
@@ -681,6 +783,7 @@ body.camera-view-active { overflow: hidden; }
   .physical-spinner,
   .camera-live::before { animation: none !important; }
   .result,
+  .scanned-sheet,
   .physical-sheet-backdrop,
   .fab,
   .upload-panel input[type="file"] { transition: none !important; }
@@ -716,10 +819,16 @@ const pageCaptureGuide = document.getElementById('page-capture-guide');
 const uploadClose = document.getElementById('upload-close');
 const resultClose = document.getElementById('result-close');
 const resultSheet = document.getElementById('result-sheet');
+const scannedSheet = document.getElementById('scanned-sheet');
+const scannedList = document.getElementById('scanned-list');
+const scannedSummary = document.getElementById('scanned-sheet-summary');
+const mobileQuery = window.matchMedia('(max-width: 760px)');
+const scannedPages = new Map();
 
 function closeAllSheets() {
   physicalForm.classList.remove('sheet-open');
   if (resultSheet) resultSheet.classList.remove('sheet-open');
+  scannedSheet.classList.remove('sheet-open');
   tokenList.classList.remove('floating-visible');
   sheetBackdrop.classList.remove('visible');
 }
@@ -730,10 +839,10 @@ function openSheet(el) {
   sheetBackdrop.classList.add('visible');
 }
 if (fabTokens) fabTokens.addEventListener('click', () => {
-  const willShow = !tokenList.classList.contains('floating-visible');
-  closeAllSheets();
-  if (willShow) tokenList.classList.add('floating-visible');
+  if (scannedSheet.classList.contains('sheet-open')) { closeAllSheets(); return; }
+  openSheet(scannedSheet);
 });
+document.getElementById('scanned-sheet-close').addEventListener('click', closeAllSheets);
 if (fabResult) fabResult.addEventListener('click', () => openSheet(resultSheet));
 if (uploadClose) uploadClose.addEventListener('click', closeAllSheets);
 if (resultClose) resultClose.addEventListener('click', closeAllSheets);
@@ -763,8 +872,45 @@ function renderTokens() {
     if (tokens.length) { fabTokensBadge.hidden = false; fabTokensBadge.textContent = String(tokens.length); }
     else { fabTokensBadge.hidden = true; }
   }
+  renderScannedPages();
   maybeAutoSubmit();
 }
+
+// Keeps a record of every registered page scanned this session so it can be
+// reopened without rescanning.
+function renderScannedPages() {
+  const records = tokens.map(token => scannedPages.get(token)).filter(Boolean);
+  scannedSheet.hidden = !records.length && !mobileQuery.matches;
+  scannedSummary.textContent = records.length
+    ? `${records.length}${expectedTotal ? ` of ${expectedTotal}` : ''} scanned. Tap a page to view it again.`
+    : 'No pages scanned yet.';
+  scannedList.replaceChildren(...records.map(record => {
+    const item = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'scanned-item';
+    button.setAttribute('aria-label', `View registered page ${record.page} of ${record.total_pages} again`);
+    const thumb = document.createElement('img');
+    thumb.className = 'scanned-thumb';
+    thumb.alt = '';
+    thumb.src = record.thumbnail;
+    const text = document.createElement('div');
+    text.className = 'scanned-item-text';
+    const heading = document.createElement('strong');
+    heading.textContent = `Page ${record.page} of ${record.total_pages}`;
+    const detail = document.createElement('span');
+    detail.textContent = `${record.title} · Version ${record.version}`;
+    text.append(heading, detail);
+    const open = document.createElement('span');
+    open.className = 'scanned-item-open';
+    open.textContent = 'View';
+    button.append(thumb, text, open);
+    button.addEventListener('click', () => { closeAllSheets(); openRegisteredPage(record); });
+    item.append(button);
+    return item;
+  }));
+}
+mobileQuery.addEventListener('change', renderScannedPages);
 
 function setQrResult(valid, message) {
   qrResult.hidden = false;
@@ -798,7 +944,9 @@ function openRegisteredPage(result) {
 
 async function validateScannedCode(value) {
   if (tokens.includes(value)) {
+    const known = scannedPages.get(value);
     statusNode.textContent = 'This page QR code has already been scanned.';
+    if (known) openRegisteredPage(known);
     return;
   }
   showQrLoading();
@@ -820,6 +968,7 @@ async function validateScannedCode(value) {
     }
     expectedTotal = Number(result.total_pages);
     tokens.push(value);
+    scannedPages.set(value, result);
     statusNode.textContent = `Registered page ${result.page} of ${result.total_pages}.`;
     setQrResult(true, `${result.title} - Version ${result.version}. ${result.message}`);
     openRegisteredPage(result);
@@ -900,7 +1049,7 @@ function captureCompletePage() {
 }
 
 removeButton.addEventListener('click', () => {
-  tokens.pop();
+  scannedPages.delete(tokens.pop());
   if (!tokens.length) expectedTotal = null;
   capturedPageFiles = [];
   physicalFile.value = '';

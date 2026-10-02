@@ -2100,13 +2100,62 @@ class PublicVerificationCryptoTests(TestCase):
 
         self.assertEqual(result, 'tampered')
 
-    def test_missing_database_record_returns_unknown_result(self):
+    def test_missing_record_with_authentication_evidence_returns_possible_modification(self):
         self.contract.delete()
 
         result, _debug_log = self.verify()
 
+        self.assertEqual(result, 'tampered')
+        self.assertEqual(self.client.session['verify_filename_hint'], 'unlinked_modification')
+        report = AuditLog.objects.get(action='reported_tampering')
+        self.assertEqual(report.verification_result, 'Possible Modification')
+        self.assertIsNone(report.contract_id)
+        self.assertTrue(report.evidence_file)
+
+    def test_editor_export_without_markers_retains_warning_evidence_and_trace(self):
+        def export_without_markers(document):
+            document.set_metadata({'keywords': '', 'creator': 'PDF editor', 'producer': 'PDF editor'})
+            for page in document:
+                for image in page.get_images(full=True):
+                    page.delete_image(image[0])
+                page.insert_text((72, 110), 'Edited agreement amount: PHP 50,000.00')
+
+        modified = self.mutate_pdf(export_without_markers)
+        result, debug_log = self.verify(modified)
+
+        self.assertEqual(result, 'tampered')
+        self.assertEqual(self.client.session['verify_filename_hint'], 'unlinked_modification')
+        self.assertIn('[PASS] Footer check: Barangay footer detected', debug_log)
+        self.assertTrue(any('no active official record could be identified' in line for line in debug_log))
+        report = AuditLog.objects.get(action='reported_tampering')
+        self.assertEqual(report.verification_result, 'Possible Modification')
+        self.assertIsNone(report.contract_id)
+        self.assertEqual(read_pdf(report.evidence_file.path), modified)
+        self.assertIn('removed or changed', report.verification_debug_log)
+        response = self.client.get(reverse('public_verify'))
+        self.assertContains(response, 'Possible Modification')
+        self.assertContains(response, 'Its original official record could not be identified')
+        self.assertNotContains(response, 'This document differs from its official authenticated record.')
+
+    def test_unregistered_pdf_without_authentication_evidence_remains_not_found(self):
+        with fitz.open() as document:
+            document.new_page().insert_text((72, 72), 'An unrelated unregistered agreement')
+            pdf_bytes = document.tobytes()
+        result, _debug_log = self.verify(pdf_bytes)
         self.assertEqual(result, 'not_found')
-        self.assertEqual(self.client.session['verify_filename_hint'], 'unknown')
+        report = AuditLog.objects.get(action='verification')
+        self.assertEqual(report.verification_result, 'Not Found')
+        self.assertFalse(report.evidence_file)
+
+    def test_copied_authentication_footer_never_grants_authenticity(self):
+        with fitz.open() as document:
+            page = document.new_page()
+            page.insert_text((72, 72), 'Unregistered document with a copied footer')
+            page.insert_text((72, 110), 'Barangay Sto. Nino - Digitally Authenticated Document')
+            pdf_bytes = document.tobytes()
+        result, _debug_log = self.verify(pdf_bytes)
+        self.assertEqual(result, 'tampered')
+        self.assertIsNone(AuditLog.objects.get(action='reported_tampering').contract_id)
 
     def test_revision_chain_metadata_does_not_override_pdf_authenticity(self):
         self.version.previous_fingerprint = 'broken-link'
@@ -2450,6 +2499,8 @@ class PhysicalVerificationTests(TestCase):
         self.assertContains(response, 'id="page-capture-guide"')
         self.assertContains(response, 'id="fab-capture"')
         self.assertContains(response, 'id="fab-files"')
+        self.assertContains(response, 'id="scanned-sheet"')
+        self.assertContains(response, 'id="scanned-list"')
         self.assertContains(response, "captureCanvas.toBlob")
         self.assertContains(response, "physicalFile.click()")
         self.assertNotContains(response, 'openSheet(physicalForm)')
@@ -2485,6 +2536,7 @@ class PhysicalVerificationTests(TestCase):
         data = response.json()
         self.assertEqual((data['version'], data['page']), (1, 2))
         self.assertNotIn('page_image', data)
+        self.assertTrue(data['thumbnail'].startswith('data:image/png;base64,'))
         page = self.client.get(data['page_pdf_url'])
         self.assertEqual(page.status_code, 200)
         self.assertEqual(page['Content-Type'], 'application/pdf')

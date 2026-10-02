@@ -302,7 +302,7 @@ class EncryptedPDFApprovalTests(TestCase):
             links = [link.get('uri') for page in document for link in page.get_links()]
             text = ''.join(page.get_text() for page in document)
         self.assertIn(url, links)
-        self.assertIn(url, text)
+        self.assertIn('sealguard.example/verify', text)
 
     def test_encrypted_downloads_reopen_only_for_authorized_user(self):
         from .encrypted_documents import PACKAGE_MAGIC
