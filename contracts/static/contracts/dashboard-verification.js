@@ -3,10 +3,11 @@
   const isAuthentic = result => String(result || '').trim().toLowerCase() === 'authentic';
 
   window.SealGuardAuditVerification = {
-    async load({logId, resultElement, section, list, initialResult = ''}) {
+    async load({logId, resultElement, section, list, initialResult = '', compareLink = null}) {
       const request = {};
       activeRequests.set(list, request);
       const current = () => activeRequests.get(list) === request;
+      if (compareLink) compareLink.hidden = true;
       resultElement.textContent = initialResult || 'Not evaluated';
       section.hidden = !initialResult || isAuthentic(initialResult);
       list.replaceChildren();
@@ -16,6 +17,11 @@
         if (!response.ok) throw new Error();
         const data = await response.json();
         if (!current()) return;
+        // Offered only for Possible Modification reports with a preserved copy.
+        if (compareLink && data.compare_url) {
+          compareLink.href = data.compare_url;
+          compareLink.hidden = false;
+        }
         const selectedResult = data.selected_result || initialResult;
         resultElement.textContent = selectedResult || 'Not evaluated';
         section.hidden = !selectedResult || isAuthentic(selectedResult);

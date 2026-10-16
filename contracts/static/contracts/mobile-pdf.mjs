@@ -30,6 +30,7 @@ if (auditLogId && /^\d+$/.test(auditLogId)) {
     resultElement: get('audit-verification-result'),
     section: get('audit-verification-logs'),
     list: get('audit-verification-history'),
+    compareLink: get('audit-compare-official'),
   });
 }
 

@@ -1113,6 +1113,32 @@ def _resolve_physical_page(token):
     return manifest_record, payload, None
 
 
+def _manifest_from_page_qr(pdf_path, max_pages=3):
+    """Find a signed SealGuard page QR in the footer of the first pages.
+
+    Re-exported copies (for example from Canva) can lose the metadata marker
+    while the stamped page QR survives as an image. Returns the signed
+    manifest record the QR belongs to, or None.
+    """
+    try:
+        import zxingcpp
+    except ImportError:
+        logger.warning('zxing-cpp is not installed; page QR lookup skipped')
+        return None
+    with open_pdf(pdf_path) as document:
+        for page_index in range(min(document.page_count, max_pages)):
+            page = document.load_page(page_index)
+            area = page.rect
+            footer = fitz.Rect(area.x0, area.y1 - area.height * 0.25, area.x1, area.y1)
+            pixmap = page.get_pixmap(dpi=150, clip=footer)
+            image = Image.frombytes('RGB', (pixmap.width, pixmap.height), pixmap.samples).convert('L')
+            for barcode in zxingcpp.read_barcodes(image, formats=zxingcpp.BarcodeFormat.QRCode):
+                manifest_record, _payload, error = _resolve_physical_page(barcode.text)
+                if not error:
+                    return manifest_record
+    return None
+
+
 def _registered_page_pdf(manifest_record, page_number, thumbnail_width=None):
     """Return a one-page PDF so a single QR never exposes the rest of the document.
 
@@ -1449,12 +1475,15 @@ def has_barangay_footer(pdf_path: str):
             'barangay sto. niño',
             'binan city',
         ]
+        # Wording printed only by the current SealGuard footer strip, so plain
+        # barangay documents that mention Biñan City are not mistaken for seals.
+        sealguard_footer_markers = ['verify this document online', 'scan to verify']
 
         for page in doc:
             text = page.get_text().lower()
             # Check if at least 2 footer keywords are present
             matches = sum(1 for kw in footer_keywords if kw in text)
-            if matches >= 2:
+            if matches >= 2 or all(marker in text for marker in sealguard_footer_markers):
                 doc.close()
                 return True
 
@@ -1679,10 +1708,18 @@ def audit_verification_history(request, log_id):
         }
         for entry in history.order_by('-timestamp', '-id')
     ]
+    can_compare = bool(
+        (request.user.is_superuser or request.user.is_staff)
+        and selected_log.verification_result == 'Possible Modification'
+        and selected_log.evidence_file
+        and selected_log.contract
+        and not selected_log.contract.is_trashed
+    )
     return JsonResponse({
         'success': True,
         'selected_result': selected_log.inspection_result,
         'events': events,
+        'compare_url': reverse('compare_reported_copy', args=[selected_log.id]) if can_compare else None,
     })
 
 
@@ -2018,16 +2055,25 @@ def public_verify(request):
                     enrollment_seal_lsb_matches = False
 
             if not matched_contract:
-                marker_owner_exists = bool(
-                    extracted_encrypted
-                    and Contract.objects.filter(
-                        encrypted_cf=extracted_encrypted,
-                        is_trashed=False,
-                    ).exists()
-                )
-                if marker_owner_exists:
+                marker_owner = Contract.objects.filter(
+                    encrypted_cf=extracted_encrypted,
+                    is_trashed=False,
+                ).first() if extracted_encrypted else None
+                # Only look for a page QR when the marker cannot identify the record.
+                qr_manifest = None if marker_owner else _manifest_from_page_qr(temp_path)
+                if marker_owner:
                     debug_log.append("[FAIL] Sealed PDF fingerprint does not match the contract identified by its marker")
                     failure_reason = 'sealed fingerprint mismatch'
+                    # Link the report to its official record so staff can compare the two.
+                    matched_contract = marker_owner
+                    result = 'tampered'
+                elif qr_manifest:
+                    matched_contract = qr_manifest.version.contract
+                    debug_log.append(f"[FAIL] Page QR code links to active contract [{matched_contract.id}], but the document content differs")
+                    debug_log.append(
+                        "[WARN] The PDF may have been edited or re-exported, which removed its metadata marker."
+                    )
+                    failure_reason = 'page QR code links to an official record, but the content differs'
                     result = 'tampered'
                 elif has_footer or extracted_encrypted:
                     debug_log.append("[WARN] SealGuard authentication evidence remains, but no active official record could be identified")

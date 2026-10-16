@@ -92,6 +92,12 @@
     .download-actions.has-options #download { border-radius:8px 0 0 8px; }
     .corner-actions #download-options { border-radius:0 8px 8px 0; min-width:25px; width:25px; padding:0; border-left:0; }
     #download-options svg { width:14px; height:14px; }
+    .audit-compare-link { display:flex; align-items:center; gap:10px; margin:12px 10px 0; padding:10px 12px; border:1px solid #f3c99a; border-radius:10px; background:#fff7ed; color:#8a4b13; text-decoration:none; }
+    .audit-compare-link:hover { background:#ffefdc; }
+    .audit-compare-link:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    .audit-compare-link svg { flex:0 0 20px; }
+    .audit-compare-link strong { display:block; font-size:13px; }
+    .audit-compare-link small { display:block; color:#9a6a3c; font-size:11.5px; margin-top:2px; }
     #download-menu { position:absolute; top:calc(100% + 7px); right:0; min-width:170px; padding:5px; border:1px solid #e5ebf0; border-radius:9px; background:white; box-shadow:0 6px 20px #24344326; }
     .corner-actions #download-pdf { width:100%; border:0; border-radius:6px; box-shadow:none; text-align:left; padding:8px 12px; white-space:nowrap; font-size:13px; }
   </style>
@@ -137,6 +143,10 @@
       <div class="meta-row"><span class="meta-row-label">Version</span><span id="details-version" class="meta-row-value">—</span></div>
       <div class="meta-row"><span class="meta-row-label">Uploaded by</span><span id="details-uploader" class="meta-row-value">—</span></div>
     </div>
+    <a id="audit-compare-official" class="audit-compare-link" target="_self" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="7" height="16" rx="1"/><rect x="14" y="4" width="7" height="16" rx="1"/></svg>
+      <span><strong>Compare with official record</strong><small>See the reported copy beside the sealed original</small></span>
+    </a>
     <p class="sidebar-section-label">Version History</p>
     <div id="details-versions"></div>
     <section id="audit-verification-logs" hidden>
@@ -145,7 +155,7 @@
     </section>
   </aside>
   <link rel="stylesheet" href="dashboard-verification.css?v=1">
-  <script src="dashboard-verification.js?v=1"></script>
-  <script type="module" src="mobile-pdf.mjs?v=audit-investigation-1"></script>
+  <script src="dashboard-verification.js?v=2"></script>
+  <script type="module" src="mobile-pdf.mjs?v=evidence-compare-1"></script>
 </body>
 </html>

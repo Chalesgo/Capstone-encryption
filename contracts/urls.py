@@ -1,7 +1,7 @@
 from django.urls import path
 from . import views, approval_views, encrypted_documents, contact_views
 from .notifications import notification_list
-from .comparison import compare_revisions
+from .comparison import compare_reported_copy, compare_revisions
 
 urlpatterns = [
     path('accounts/verification-contacts/', contact_views.verification_contacts, name='verification_contacts'),
@@ -18,6 +18,7 @@ urlpatterns = [
     path('verify/', views.public_verify, name='public_verify'),
     path('verify/preview/<str:token>/', views.verification_preview, name='verification_preview'),
     path('dashboard/activity/<int:log_id>/preview/', views.audit_evidence_preview, name='audit_evidence_preview'),
+    path('dashboard/activity/<int:log_id>/compare/', compare_reported_copy, name='compare_reported_copy'),
     path('dashboard/activity/<int:log_id>/verification-history/', views.audit_verification_history, name='audit_verification_history'),
     path('dashboard/activity/<int:log_id>/verification-log/', views.audit_verification_log_detail, name='audit_verification_log_detail'),
     path('contracts/', views.contract_list, name='contract_list'),
