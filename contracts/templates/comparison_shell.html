@@ -1,0 +1,73 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Compare{% endblock %} — SealGuard</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f0efed;color:#2d3a47;font:14px/1.45 'Segoe UI',system-ui,-apple-system,sans-serif}
+.cmp-bar{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;padding:10px 14px;background:#fffffff2;border-bottom:1px solid #e5ebf0;backdrop-filter:blur(8px)}
+.cmp-bar button{flex-shrink:0;min-width:40px;min-height:40px;border:1px solid #e5ebf0;border-radius:8px;background:#fff;color:#2d3a47;font:inherit;cursor:pointer}
+.cmp-bar button:hover{background:#f7f6f4}
+button:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid #c87525;outline-offset:2px}
+#cmp-back{padding:0 12px;font-weight:600}
+.cmp-heading{min-width:0;flex:1}
+.cmp-heading h1{margin:0;font-size:16px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmp-heading p{margin:2px 0 0;color:#6b7a8d;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmp-badge{flex-shrink:0;padding:4px 10px;border-radius:999px;background:#fef2f2;color:#b91c1c;font-size:12px;font-weight:700}
+main{padding:14px}
+.cmp-controls{display:flex;align-items:end;flex-wrap:wrap;gap:12px;margin-bottom:14px;padding:12px 14px;background:#fff;border:1px solid #e0deda;border-radius:12px}
+.cmp-controls label{display:grid;gap:5px;font-size:12.5px;font-weight:600;min-width:0}
+.cmp-controls select{max-width:100%;padding:8px 10px;border:1px solid #d9dde3;border-radius:8px;background:#fff;font:inherit;font-weight:400}
+.cmp-controls button{min-height:38px;padding:0 16px;border:0;border-radius:8px;background:#f4a34d;color:#1a1a2e;font:inherit;font-weight:700;cursor:pointer}
+.cmp-panes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.cmp-pane{min-width:0;overflow:hidden;background:#fff;border:1px solid #e0deda;border-radius:12px}
+.cmp-pane header{padding:10px 14px;border-bottom:1px solid #eef0f3}
+.cmp-pane h2{margin:0;font-size:14px;color:#1a1a2e}
+.cmp-pane.tone-good h2{color:#1e6b43}
+.cmp-pane.tone-bad h2{color:#b91c1c}
+.cmp-pane header p{margin:3px 0 0;color:#6b7a8d;font-size:12px;overflow-wrap:anywhere}
+.cmp-pane iframe{display:block;width:100%;height:calc(100vh - 150px);min-height:420px;border:0}
+.deleted-account{color:#d9776f;text-decoration:underline dotted rgba(217,119,111,.55);text-underline-offset:3px;cursor:help}
+.cmp-note{margin:14px 0;padding:12px 14px;border-left:4px solid #f4a34d;border-radius:8px;background:#fff7ed;font-size:13px}
+.cmp-changes h2{margin:22px 0 4px;font-size:16px}
+.cmp-changes>p{margin:0 0 10px;color:#6b7a8d;font-size:12.5px}
+.cmp-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.cmp-list{min-width:0;overflow:hidden;background:#fff;border:1px solid #e0deda;border-radius:12px}
+.cmp-list h3{margin:0;padding:10px 14px;font-size:13px;background:#f7f6f4;color:#1a1a2e}
+.cmp-list.tone-good h3{background:#eef9f2;color:#1e6b43}
+.cmp-list.tone-bad h3{background:#fff2f0;color:#b91c1c}
+.cmp-list ol{margin:0;padding:8px 14px 12px 34px;font-size:13px}
+.cmp-list li{padding:3px 0;overflow-wrap:anywhere}
+.cmp-list .empty{margin:0;padding:12px 14px;color:#6b7a8d;font-size:13px}
+@media(max-width:760px){.cmp-panes,.cmp-columns{grid-template-columns:1fr}.cmp-pane iframe{height:70vh}.cmp-badge{display:none}}
+</style>
+</head>
+<body>
+<div class="cmp-bar">
+  <button type="button" id="cmp-back" aria-label="Go back">&larr; Back</button>
+  <div class="cmp-heading">
+    <h1>{% block heading %}{% endblock %}</h1>
+    <p>{% block subheading %}{% endblock %}</p>
+  </div>
+  {% block badge %}{% endblock %}
+  <button type="button" id="cmp-close" aria-label="Close">&#10005;</button>
+</div>
+<main>{% block content %}{% endblock %}</main>
+<script>
+// Inside the PDF viewer this page replaces the viewer in the same frame, so
+// Back returns to it and Close closes the viewer; opened directly, both lead
+// back to the workspace.
+const cmpExitUrl = '{% block exit_url %}{% url "contract_list" %}{% endblock %}';
+document.getElementById('cmp-back').addEventListener('click', function () {
+  if (history.length > 1) history.back();
+  else location.assign(cmpExitUrl);
+});
+document.getElementById('cmp-close').addEventListener('click', function () {
+  if (parent === window) location.assign(cmpExitUrl);
+  else parent.postMessage({type: 'sealguard-pdf-close'}, location.origin);
+});
+</script>
+</body>
+</html>

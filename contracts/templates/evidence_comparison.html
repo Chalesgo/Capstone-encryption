@@ -1,69 +1,25 @@
-{% load static %}<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Compare with official record — SealGuard</title>
-<style>
-*{box-sizing:border-box}
-body{margin:0;background:#f0efed;color:#2d3a47;font:14px/1.45 'Segoe UI',system-ui,-apple-system,sans-serif}
-.cmp-bar{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;padding:10px 14px;background:#fffffff2;border-bottom:1px solid #e5ebf0;backdrop-filter:blur(8px)}
-.cmp-bar button{flex-shrink:0;min-width:40px;min-height:40px;border:1px solid #e5ebf0;border-radius:8px;background:#fff;color:#2d3a47;font:inherit;cursor:pointer}
-.cmp-bar button:hover{background:#f7f6f4}
-.cmp-bar button:focus-visible,a:focus-visible{outline:2px solid #c87525;outline-offset:2px}
-#cmp-back{padding:0 12px;font-weight:600}
-.cmp-heading{min-width:0;flex:1}
-.cmp-heading h1{margin:0;font-size:16px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cmp-heading p{margin:2px 0 0;color:#6b7a8d;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cmp-badge{flex-shrink:0;padding:4px 10px;border-radius:999px;background:#fef2f2;color:#b91c1c;font-size:12px;font-weight:700}
-main{padding:14px}
-.cmp-panes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-.cmp-pane{min-width:0;overflow:hidden;background:#fff;border:1px solid #e0deda;border-radius:12px}
-.cmp-pane header{padding:10px 14px;border-bottom:1px solid #eef0f3}
-.cmp-pane h2{margin:0;font-size:14px}
-.cmp-pane.official h2{color:#1e6b43}
-.cmp-pane.reported h2{color:#b91c1c}
-.cmp-pane header p{margin:3px 0 0;color:#6b7a8d;font-size:12px;overflow-wrap:anywhere}
-.cmp-pane iframe{display:block;width:100%;height:calc(100vh - 150px);min-height:420px;border:0}
-.cmp-note{margin:14px 0;padding:12px 14px;border-left:4px solid #f4a34d;border-radius:8px;background:#fff7ed;font-size:13px}
-.cmp-changes h2{margin:22px 0 4px;font-size:16px}
-.cmp-changes>p{margin:0 0 10px;color:#6b7a8d;font-size:12.5px}
-.cmp-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-.cmp-list{min-width:0;overflow:hidden;background:#fff;border:1px solid #e0deda;border-radius:12px}
-.cmp-list h3{margin:0;padding:10px 14px;font-size:13px}
-.cmp-list.official h3{background:#eef9f2;color:#1e6b43}
-.cmp-list.reported h3{background:#fff2f0;color:#b91c1c}
-.cmp-list ol{margin:0;padding:8px 14px 12px 34px;font-size:13px}
-.cmp-list li{padding:3px 0;overflow-wrap:anywhere}
-.cmp-list .empty{margin:0;padding:12px 14px;color:#6b7a8d;font-size:13px}
-@media(max-width:760px){.cmp-panes,.cmp-columns{grid-template-columns:1fr}.cmp-pane iframe{height:70vh}.cmp-badge{display:none}}
-</style>
-</head>
-<body>
-<div class="cmp-bar">
-  <button type="button" id="cmp-back" aria-label="Back to the reported document">&larr; Back</button>
-  <div class="cmp-heading">
-    <h1>Compare with official record</h1>
-    <p>{{ contract.title }} · reported {{ entry.timestamp|date:"M j, Y, g:i a" }}</p>
-  </div>
-  <span class="cmp-badge">Possible Modification</span>
-  <button type="button" id="cmp-close" aria-label="Close viewer">&#10005;</button>
-</div>
-<main>
+{% extends 'comparison_shell.html' %}
+{% load static %}
+{% block title %}Compare with official record{% endblock %}
+{% block heading %}Compare with official record{% endblock %}
+{% block subheading %}{{ contract.title }} · reported {{ entry.timestamp|date:"M j, Y, g:i a" }}{% endblock %}
+{% block badge %}<span class="cmp-badge">Possible Modification</span>{% endblock %}
+{% block exit_url %}{% url "dashboard" %}{% endblock %}
+{% block content %}
 {% if error %}
   <p class="cmp-note" role="alert">{{ error }}</p>
 {% else %}
   {% url 'preview_contract_version' official.pk as official_url %}
   {% url 'audit_evidence_preview' entry.id as reported_url %}
   <div class="cmp-panes">
-    <section class="cmp-pane official" aria-label="Official record">
+    <section class="cmp-pane tone-good" aria-label="Official record">
       <header>
         <h2>Official record · v{{ official.version_number }}</h2>
         <p>Sealed {{ official.created_at|date:"M j, Y, g:i a" }} · {{ official_pages }} page{{ official_pages|pluralize }}</p>
       </header>
       <iframe title="Official record, version {{ official.version_number }}" src="{% static 'contracts/mobile-pdf.html' %}?file={{ official_url|urlencode }}&amp;embedded=1&amp;comparison=1&amp;hide_close=1&amp;hide_sidebar=1&amp;title={{ contract.title|urlencode }}%20%28official%29"></iframe>
     </section>
-    <section class="cmp-pane reported" aria-label="Reported copy">
+    <section class="cmp-pane tone-bad" aria-label="Reported copy">
       <header>
         <h2>Reported copy</h2>
         <p>{{ entry.display_document_title|default:"Submitted PDF" }} · {{ reported_pages }} page{{ reported_pages|pluralize }} · {{ reported_size|filesizeformat }}</p>
@@ -79,11 +35,11 @@ main{padding:14px}
     {% if limited %}<p class="cmp-note">The text check covers the first 100 pages and 60,000 characters of each document. Both viewers above still show every page.</p>{% endif %}
     {% if truncated %}<p class="cmp-note">Only the first 200 differing lines of each document are listed.</p>{% endif %}
     <div class="cmp-columns">
-      <div class="cmp-list official">
+      <div class="cmp-list tone-good">
         <h3>Only in the official record ({{ only_official|length }})</h3>
         {% if only_official %}<ol>{% for line in only_official %}<li>{{ line }}</li>{% endfor %}</ol>{% else %}<p class="empty">Every line of the official record also appears in the reported copy.</p>{% endif %}
       </div>
-      <div class="cmp-list reported">
+      <div class="cmp-list tone-bad">
         <h3>Only in the reported copy ({{ only_reported|length }})</h3>
         {% if only_reported %}<ol>{% for line in only_reported %}<li>{{ line }}</li>{% endfor %}</ol>{% else %}<p class="empty">No added or changed text was found. The change may be visual, such as a drawing, image or layout edit, so compare the pages above.</p>{% endif %}
       </div>
@@ -91,16 +47,4 @@ main{padding:14px}
     <p class="cmp-note">This comparison helps staff see what changed. It does not replace the verification result.</p>
   </section>
 {% endif %}
-</main>
-<script>
-document.getElementById('cmp-back').addEventListener('click', function () {
-  if (history.length > 1) history.back();
-  else location.assign('{% url "dashboard" %}');
-});
-document.getElementById('cmp-close').addEventListener('click', function () {
-  if (parent === window) location.assign('{% url "dashboard" %}');
-  else parent.postMessage({type: 'sealguard-pdf-close'}, location.origin);
-});
-</script>
-</body>
-</html>
+{% endblock %}

@@ -118,7 +118,8 @@ async function loadVersions() {
     const compare = get('compare-revisions');
     if (compare && data.versions.filter(v => v.preview_url).length >= 2 && params.get('comparison') !== '1') {
       compare.href = '/contract/' + contractId + '/compare/';
-      compare.target = '_top';
+      // Opens inside this viewer; its Back button returns here.
+      compare.target = '_self';
       compare.hidden = false;
     }
     get('details-created').textContent = data.created || '—';

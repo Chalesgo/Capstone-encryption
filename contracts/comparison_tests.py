@@ -61,12 +61,18 @@ class RevisionComparisonTests(TestCase):
         self.assertNotContains(response, '<script>alert(1)</script>')
         self.assertContains(response, 'comparison=1', count=2)
         self.assertEqual(response.context['before']['pages'], 1)
+        self.assertEqual(response.context['only_left'], ['Payment is 100 pesos.'])
+        self.assertEqual(response.context['only_right'], ['Payment is 200 pesos. <script>alert(1)</script>'])
+        # The page stands alone so it can open inside the PDF viewer.
+        self.assertNotContains(response, 'class="sidebar"')
+        self.assertContains(response, 'id="cmp-back"')
 
     def test_any_saved_pair_can_be_selected_and_same_pair_is_identical(self):
         self.add_version(3, 'Third version')
         response = self.client.get(self.url, {'left': 1, 'right': 1})
         self.assertTrue(response.context['identical'])
-        self.assertEqual(response.context['differences'], [])
+        self.assertEqual(response.context['only_left'], [])
+        self.assertEqual(response.context['only_right'], [])
 
     def test_permission_and_trashed_document_checks(self):
         self.client.logout()

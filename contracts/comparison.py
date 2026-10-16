@@ -1,5 +1,4 @@
 """Authorized visual revision comparison with a bounded text summary."""
-import difflib
 import hashlib
 
 import fitz
@@ -116,13 +115,10 @@ def compare_revisions(request, contract_id):
         context.update(left_version=left, right_version=right)
         try:
             before, after = describe(left), describe(right)
-            differences = []
-            for tag, a, b, c, d in difflib.SequenceMatcher(None, before['lines'], after['lines']).get_opcodes():
-                if tag != 'equal':
-                    differences.append({'kind': {'replace': 'Changed', 'delete': 'Removed', 'insert': 'Added'}[tag],
-                                        'before': '\n'.join(before['lines'][a:b]),
-                                        'after': '\n'.join(after['lines'][c:d])})
-            context.update(before=before, after=after, differences=differences,
+            only_left, left_more = _lines_missing_from(before['lines'], after['lines'])
+            only_right, right_more = _lines_missing_from(after['lines'], before['lines'])
+            context.update(before=before, after=after, only_left=only_left, only_right=only_right,
+                           truncated=left_more or right_more,
                            identical=before['digest'] == after['digest'],
                            limited=before['limited'] or after['limited'],
                            no_text=not before['lines'] or not after['lines'])
