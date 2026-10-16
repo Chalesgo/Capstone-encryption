@@ -39,6 +39,10 @@ class DocumentAccessRequest(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
     reviewed_at = models.DateTimeField(null=True, blank=True)
+    # reviewed_by changes when access is later revoked; keep who granted it.
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name='approved_access_requests')
+    approved_at = models.DateTimeField(null=True, blank=True)
     review_note = models.CharField(max_length=500, blank=True)
     expires_at = models.DateTimeField(null=True, blank=True)
     approved_version = models.ForeignKey('ContractVersion', null=True, blank=True, on_delete=models.SET_NULL)

@@ -217,7 +217,7 @@ def approval_queue(request):
     status = request.GET.get('status', 'pending')
     if status not in {'pending', 'approved', 'rejected', 'revoked'}:
         status = 'pending'
-    entries = DocumentAccessRequest.objects.filter(status=status).select_related('link__contract', 'reviewed_by', 'approved_version')
+    entries = DocumentAccessRequest.objects.filter(status=status).select_related('link__contract', 'link__requested_version', 'reviewed_by', 'approved_by', 'approved_version')
     if request.GET.get('request_id'):
         from uuid import UUID
         try:
@@ -226,7 +226,7 @@ def approval_queue(request):
             raise Http404
         entry = get_object_or_404(DocumentAccessRequest, pk=entry_id)
         status = entry.status
-        entries = DocumentAccessRequest.objects.filter(pk=entry.pk).select_related('link__contract', 'reviewed_by', 'approved_version')
+        entries = DocumentAccessRequest.objects.filter(pk=entry.pk).select_related('link__contract', 'link__requested_version', 'reviewed_by', 'approved_by', 'approved_version')
     log_activity(request, 'viewed', note=f'PDF access request queue viewed; status={status}')
     return render(request, 'access/queue.html', {'entries': Paginator(entries, 25).get_page(request.GET.get('page')), 'status': status})
 
@@ -262,6 +262,8 @@ def review_request(request, request_id):
                 entry.approved_file = version.file.name if version else contract.file.name
                 entry.expires_at = timezone.now() + timedelta(hours=hours)
                 entry.status = 'approved'
+                entry.approved_by = request.user
+                entry.approved_at = timezone.now()
             else:
                 entry.status = 'rejected'
         elif action == 'revoke' and entry.status == 'approved':

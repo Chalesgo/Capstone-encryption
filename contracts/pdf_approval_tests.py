@@ -191,6 +191,25 @@ class EncryptedPDFApprovalTests(TestCase):
         reviewer.post(reverse('review_document_request', args=[entry.pk]), {'action': 'revoke'})
         self.assertEqual(self.client.get(self.view_url).status_code, 404)
 
+    def test_approver_is_kept_after_another_staff_member_revokes(self):
+        entry = self.request_and_verify()
+        self.approve(entry)
+        self.assertEqual(entry.approved_by, self.staff)
+        self.assertIsNotNone(entry.approved_at)
+
+        second = User.objects.create_user('second-reviewer', is_staff=True)
+        revoker = Client()
+        revoker.force_login(second)
+        revoker.post(reverse('review_document_request', args=[entry.pk]), {'action': 'revoke'})
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, 'revoked')
+        self.assertEqual(entry.approved_by, self.staff)
+        self.assertEqual(entry.reviewed_by, second)
+
+        queue = revoker.get(reverse('document_approval_queue'), {'status': 'revoked'})
+        self.assertContains(queue, 'Approved by <strong>reviewer</strong>')
+        self.assertContains(queue, 'Revoked by <strong>second-reviewer</strong>')
+
     def test_approval_does_not_expose_future_revision(self):
         entry = self.request_and_verify()
         self.approve(entry)

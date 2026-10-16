@@ -23,7 +23,7 @@
     </div>
     <aside class="pdf-sidebar{% if viewer_show_verification %} audit-pdf-sidebar{% endif %}">
       <p class="pdf-sidebar-title{% if viewer_show_verification %} audit-pdf-title{% endif %}" id="{{ viewer_prefix }}-panel-title">Document</p>
-      {% if viewer_access_request %}<h2 class="request-sidebar-heading">Requester details</h2><dl><div class="request-sidebar-group"><dt>Full name</dt><dd id="access-pdf-request-name"></dd></div><div class="request-sidebar-group"><dt>Email or phone</dt><dd id="access-pdf-request-contact"></dd></div><div class="request-sidebar-group"><dt>Organization</dt><dd id="access-pdf-request-organization"></dd></div><div class="request-sidebar-group"><dt>Message / reason</dt><dd id="access-pdf-request-reason"></dd></div></dl><hr class="request-sidebar-divider"><p class="sidebar-section-label">Request details</p><dl><div class="request-sidebar-group"><dt>Request type</dt><dd id="access-pdf-request-type"></dd></div><div class="request-sidebar-group"><dt>Submitted</dt><dd id="access-pdf-request-date"></dd></div><div class="request-sidebar-group"><dt>Document version</dt><dd id="access-pdf-request-version"></dd></div><div class="request-sidebar-group"><dt>IP address</dt><dd id="access-pdf-request-ip"></dd></div></dl>{% endif %}
+      {% if viewer_access_request %}<h2 class="request-sidebar-heading">Requester details</h2><dl><div class="request-sidebar-group"><dt>Full name</dt><dd id="access-pdf-request-name"></dd></div><div class="request-sidebar-group"><dt>Email or phone</dt><dd id="access-pdf-request-contact"></dd></div><div class="request-sidebar-group"><dt>Organization</dt><dd id="access-pdf-request-organization"></dd></div><div class="request-sidebar-group"><dt>Message / reason</dt><dd id="access-pdf-request-reason"></dd></div></dl><hr class="request-sidebar-divider"><p class="sidebar-section-label">Request details</p><dl><div class="request-sidebar-group"><dt>Request type</dt><dd id="access-pdf-request-type"></dd></div><div class="request-sidebar-group"><dt>Submitted</dt><dd id="access-pdf-request-date"></dd></div><div class="request-sidebar-group"><dt>Document version</dt><dd id="access-pdf-request-version"></dd></div><div class="request-sidebar-group"><dt>IP address</dt><dd id="access-pdf-request-ip"></dd></div><div class="request-sidebar-group"><dt>Approved by</dt><dd id="access-pdf-request-approver"></dd></div></dl>{% endif %}
       {% if viewer_show_verification %}
       <p class="sidebar-section-label">Document Info</p>
       <div class="meta-list audit-meta-list">
@@ -37,7 +37,7 @@
         <div class="meta-row audit-meta-row"><span class="meta-row-label audit-meta-label">Evidence</span><span class="meta-row-value audit-meta-value" id="{{ viewer_prefix }}-retention">—</span></div>
         <div class="meta-row audit-meta-row"><span class="meta-row-label audit-meta-label">Uploaded by</span><span class="meta-row-value audit-meta-value" id="{{ viewer_prefix }}-activity-uploader">—</span></div>
       </div>
-      {% else %}
+      {% elif not viewer_access_request %}
       <p class="sidebar-section-label">Document Info</p>
       <div class="meta-list">
         <div class="meta-row"><span class="meta-row-label">Created</span><span class="meta-row-value" id="{{ viewer_prefix }}-meta-created">—</span></div>
@@ -47,8 +47,10 @@
         <div class="meta-row"><span class="meta-row-label">Uploaded by</span><span class="meta-row-value" id="{{ viewer_prefix }}-meta-uploader">—</span></div>
       </div>
       {% endif %}
+      {% if not viewer_access_request %}{# The embedded viewer already shows this document's info and history. #}
       <p class="sidebar-section-label">Version History</p>
       <div class="version-list audit-version-list" id="{{ viewer_prefix }}-version-list"><div class="audit-version-loading">No version history available.</div></div>
+      {% endif %}
       {% if viewer_show_verification %}
       <p class="sidebar-section-label">Activity Note</p>
       <p class="pdf-viewer-note" id="{{ viewer_prefix }}-note">No additional activity note.</p>
