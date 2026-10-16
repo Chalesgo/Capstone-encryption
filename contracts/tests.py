@@ -303,7 +303,7 @@ class AuditLogTests(TestCase):
         self.assertContains(response, "document.querySelectorAll('#folder-list .folder-item')")
         self.assertContains(response, 'data-file-url=')
 
-    def test_filename_demo_mode_is_preserved_and_disclosed(self):
+    def test_filename_cannot_authenticate_an_invalid_pdf(self):
         upload = SimpleUploadedFile(
             'authentic_demo.pdf', b'%PDF-demo', content_type='application/pdf'
         )
@@ -311,17 +311,21 @@ class AuditLogTests(TestCase):
         response = self.client.post(reverse('public_verify'), {'pdf_file': upload})
 
         self.assertRedirects(response, reverse('public_verify'), fetch_redirect_response=False)
-        self.assertEqual(self.client.session['verify_result'], 'authentic')
+        self.assertEqual(self.client.session['verify_result'], 'error')
         debug_log = self.client.session['verify_debug_log']
-        self.assertIn(
+        self.assertNotIn(
             'Demo simulation enabled by filename; cryptographic checks were not executed',
             debug_log,
         )
 
     def test_tampered_verification_retains_pdf_and_inspection_details(self):
         with tempfile.TemporaryDirectory() as media_root, self.settings(MEDIA_ROOT=media_root):
+            with fitz.open() as document:
+                document.new_page().insert_text((72, 72), 'Unlinked authentication evidence')
+                document.set_metadata({'keywords': 'SEALGUARD:unlinked-marker'})
+                pdf_bytes = document.tobytes()
             upload = SimpleUploadedFile(
-                'tampered_contract.pdf', b'%PDF-demo', content_type='application/pdf'
+                'tampered_contract.pdf', pdf_bytes, content_type='application/pdf'
             )
 
             response = self.client.post(reverse('public_verify'), {'pdf_file': upload})
@@ -332,15 +336,15 @@ class AuditLogTests(TestCase):
             self.assertEqual(audit_log.verification_source, 'Official Barangay Database')
             self.assertEqual(audit_log.verification_result, 'Possible Modification')
             self.assertEqual(audit_log.integrity_check, 'Failed')
-            self.assertIn('Verification pipeline initialized', audit_log.verification_debug_log)
-            self.assertIn('document fingerprint mismatch', audit_log.verification_debug_log)
+            self.assertIn('full cryptographic pipeline', audit_log.verification_debug_log)
+            self.assertIn('no active official record', audit_log.verification_debug_log)
             self.assertTrue(audit_log.evidence_file)
             self.assertTrue(audit_log.evidence_file.storage.exists(audit_log.evidence_file.name))
 
             self.client.force_login(self.user)
             dashboard = self.client.get(reverse('dashboard'))
             self.assertContains(dashboard, 'Verification Logs')
-            self.assertNotContains(dashboard, 'Verification pipeline initialized')
+            self.assertNotContains(dashboard, 'full cryptographic pipeline')
 
             history = self.client.get(
                 reverse('audit_verification_history', args=[audit_log.id])
@@ -353,7 +357,7 @@ class AuditLogTests(TestCase):
                 reverse('audit_verification_log_detail', args=[audit_log.id])
             )
             self.assertEqual(detail.status_code, 200)
-            self.assertIn('Verification pipeline initialized', detail.json()['debug_log'])
+            self.assertIn('full cryptographic pipeline', detail.json()['debug_log'])
 
     def test_verification_history_keeps_repeated_attempts_collapsed_and_lazy(self):
         first = AuditLog.objects.create(
@@ -1524,6 +1528,7 @@ class EndToEndWorkflowTests(TestCase):
         for contract, _original in processed:
             with self.subTest(contract=contract.id):
                 version = contract.versions.get(version_number=1)
+                self.assertEqual(contract.vector_fingerprint, generate_vector_fingerprint(contract.file.path))
                 self.assertTrue(version.file and Path(version.file.path).is_file())
                 retrieved = self.client.get(reverse('preview_contract', args=[contract.id]))
                 self.assertEqual(retrieved.status_code, 200)
@@ -1933,6 +1938,23 @@ class PublicVerificationCryptoTests(TestCase):
         self.assertIn('[PASS] Metadata marker belongs to the matched contract', debug_log)
         self.assertIn('[PASS] Original fingerprint decrypted with AES-256-CBC and HMAC-SHA256 verified', debug_log)
         self.assertEqual(AuditLog.objects.get(action='viewed').contract, self.contract)
+
+    def test_misleading_filenames_do_not_control_classification(self):
+        with fitz.open(stream=self.sealed_bytes, filetype='pdf') as document:
+            document[0].insert_text((72, 210), 'Unauthorized alteration')
+            modified = document.tobytes()
+        with fitz.open() as document:
+            document.new_page().insert_text((72, 72), 'Unregistered reference')
+            unknown = document.tobytes()
+        for data, expected in ((self.sealed_bytes, 'authentic'), (modified, 'tampered'), (unknown, 'not_found')):
+            for name in ('authentic_original_legit.pdf', 'tampered_fake_modified.pdf', 'unknown.pdf'):
+                with self.subTest(expected=expected, filename=name):
+                    response = self.client.post(reverse('public_verify'), {
+                        'pdf_file': SimpleUploadedFile(name, data, content_type='application/pdf'),
+                    })
+                    self.assertEqual(response.status_code, 302)
+                    self.assertEqual(self.client.session['verify_result'], expected)
+                    self.assertFalse(any('Demo simulation' in entry for entry in self.client.session['verify_debug_log']))
 
     def test_issued_pdf_upload_offers_existing_copy_without_creating_revision(self):
         user = User.objects.create_user('issued-copy-staff', is_staff=True)

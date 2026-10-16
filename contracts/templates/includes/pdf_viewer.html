@@ -23,6 +23,7 @@
     </div>
     <aside class="pdf-sidebar{% if viewer_show_verification %} audit-pdf-sidebar{% endif %}">
       <p class="pdf-sidebar-title{% if viewer_show_verification %} audit-pdf-title{% endif %}" id="{{ viewer_prefix }}-panel-title">Document</p>
+      {% if viewer_access_request %}<h2 class="request-sidebar-heading">Requester details</h2><dl><div class="request-sidebar-group"><dt>Full name</dt><dd id="access-pdf-request-name"></dd></div><div class="request-sidebar-group"><dt>Email or phone</dt><dd id="access-pdf-request-contact"></dd></div><div class="request-sidebar-group"><dt>Organization</dt><dd id="access-pdf-request-organization"></dd></div><div class="request-sidebar-group"><dt>Message / reason</dt><dd id="access-pdf-request-reason"></dd></div></dl><hr class="request-sidebar-divider"><p class="sidebar-section-label">Request details</p><dl><div class="request-sidebar-group"><dt>Request type</dt><dd id="access-pdf-request-type"></dd></div><div class="request-sidebar-group"><dt>Submitted</dt><dd id="access-pdf-request-date"></dd></div><div class="request-sidebar-group"><dt>Document version</dt><dd id="access-pdf-request-version"></dd></div><div class="request-sidebar-group"><dt>IP address</dt><dd id="access-pdf-request-ip"></dd></div></dl>{% endif %}
       {% if viewer_show_verification %}
       <p class="sidebar-section-label">Document Info</p>
       <div class="meta-list audit-meta-list">

@@ -454,6 +454,7 @@ def upload_contract(request):
             vector_cf = generate_vector_fingerprint(final_pdf_path)
             _process_log('initial_encryption', 'sealed_fingerprint_generated', contract=contract, request=request)
             contract.fingerprint = sealed_cf
+            contract.vector_fingerprint = vector_cf
             contract.original_fingerprint = original_cf
             contract.encrypted_cf = encrypted
             contract.hmac_value = hmac_value
@@ -1956,85 +1957,8 @@ def public_verify(request):
         write_pdf(temp_path, uploaded_file.read())
         request.session['verify_preview_token'] = preview_token
 
-        filename_lower = uploaded_file.name.lower()
-
-        if 'authentic' in filename_lower or 'original' in filename_lower or 'legit' in filename_lower:
-            filename_hint = 'authentic'
-        elif any(kw in filename_lower for kw in ['tampered', 'fake', 'incorrect', 'modified', 'altered', 'forged']):
-            filename_hint = 'tampered'
-        elif 'unknown' in filename_lower:
-            filename_hint = 'unknown'
-
-        if filename_hint == 'authentic':
-            debug_log.append("Demo simulation enabled by filename; cryptographic checks were not executed")
-            debug_log.append("Verification pipeline initialized")
-            debug_log.append(f"Input accepted: PDF upload ({uploaded_file.size} bytes)")
-            debug_log.append("Footer check: Barangay footer detected")
-            debug_log.append("Metadata check: SEALGUARD signature found in PDF metadata")
-            debug_log.append("Encrypted canonical fingerprint extracted from metadata")
-            debug_log.append("SHA-256 fingerprint generated from document contents")
-            debug_log.append("Comparing fingerprint against database records...")
-            debug_log.append("Match found — document fingerprint verified")
-            elapsed_ms = round((time.perf_counter() - started_at) * 1000)
-            debug_log.append(f"Verification completed in {elapsed_ms} ms")
-            _process_log('verification_demo', 'authentic_result', request=request, duration_ms=elapsed_ms)
-            _log_public_verification(
-                request, uploaded_file, 'authentic',
-                note=f"Public verification: authentic ({uploaded_file.name})",
-                debug_log=debug_log,
-            )
-            request.session['verify_result'] = 'authentic'
-            request.session['verify_debug_log'] = debug_log
-            request.session['verify_filename_hint'] = filename_hint
-            return redirect(reverse('public_verify'))
-
-        elif filename_hint == 'tampered':
-            debug_log.append("Demo simulation enabled by filename; cryptographic checks were not executed")
-            debug_log.append("Verification pipeline initialized")
-            debug_log.append(f"Input accepted: PDF upload ({uploaded_file.size} bytes)")
-            debug_log.append("Footer check: Barangay footer detected")
-            debug_log.append("Metadata check: SEALGUARD signature found in PDF metadata")
-            debug_log.append("Encrypted canonical fingerprint extracted from metadata")
-            debug_log.append("SHA-256 fingerprint generated from document contents")
-            debug_log.append("Comparing fingerprint against database records...")
-            debug_log.append("No matching contract found — document fingerprint mismatch")
-            elapsed_ms = round((time.perf_counter() - started_at) * 1000)
-            debug_log.append(f"Verification completed in {elapsed_ms} ms")
-            _process_log('verification_demo', 'tampered_result', request=request, duration_ms=elapsed_ms)
-            tampering_log = _log_public_verification(
-                request, uploaded_file, 'tampered',
-                note=f"Public verification: tampered ({uploaded_file.name}); fingerprint mismatch",
-                debug_log=debug_log,
-            )
-            _attach_verification_evidence(tampering_log, temp_path, uploaded_file.name)
-            request.session['verify_result'] = 'tampered'
-            request.session['verify_debug_log'] = debug_log
-            request.session['verify_filename_hint'] = filename_hint
-            return redirect(reverse('public_verify'))
-
-        elif filename_hint == 'unknown':
-            debug_log.append("Demo simulation enabled by filename; cryptographic checks were not executed")
-            debug_log.append("Verification pipeline initialized")
-            debug_log.append(f"Input accepted: PDF upload ({uploaded_file.size} bytes)")
-            debug_log.append("Footer check: No barangay footer found in document")
-            debug_log.append("Metadata check: No SEALGUARD signature found in PDF metadata")
-            debug_log.append("Document structure does not match any known contract format")
-            debug_log.append("Cross-referencing against all database records...")
-            debug_log.append("No records matched — document origin could not be determined")
-            elapsed_ms = round((time.perf_counter() - started_at) * 1000)
-            debug_log.append(f"Verification completed in {elapsed_ms} ms")
-            _process_log('verification_demo', 'unknown_result', request=request, duration_ms=elapsed_ms)
-            _log_public_verification(
-                request, uploaded_file, 'error',
-                note=f"Public verification: unknown origin ({uploaded_file.name}); no official record matched",
-                debug_log=debug_log,
-            )
-            request.session['verify_result'] = 'error'
-            request.session['verify_debug_log'] = debug_log
-            request.session['verify_filename_hint'] = 'unknown'
-            return redirect(reverse('public_verify'))
-
-        # ── Real verification pipeline ──
+        # Filenames are display labels only, never evidence of authenticity.
+        # Every ordinary PDF submission must execute the real verification pipeline.
         debug_log.append(f"[INFO] File received: {uploaded_file.name} ({uploaded_file.size} bytes)")
         debug_log.append("[INFO] Verification mode: full cryptographic pipeline")
         _process_log('verification', 'file_received', request=request, size_bytes=uploaded_file.size)

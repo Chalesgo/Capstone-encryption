@@ -393,6 +393,20 @@
       transition: transform 0.25s ease;
     }
     .mobile-contract-edit-sheet.open { transform: translateY(0); }
+    /* Seven edit actions do not fit one row on a phone; use a 4-column grid
+       with wrapping labels so no label runs into its neighbour. */
+    .mobile-contract-edit-sheet .mobile-sheet-actions {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 4px;
+    }
+    .mobile-contract-edit-sheet .mobile-sheet-action {
+      padding: 10px 4px;
+      font-size: 11px;
+      line-height: 1.25;
+      text-align: center;
+      white-space: normal;
+    }
     .mobile-sheet-header {
       display: flex;
       align-items: center;
@@ -1165,7 +1179,7 @@
   </div>
   <div class="mobile-sheet-actions">
     <button type="button" class="mobile-sheet-action" onclick="window.location.href='/contract/' + mobileContractEditId + '/compare/'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="7" height="16" rx="1"/><rect x="14" y="4" width="7" height="16" rx="1"/></svg><span>Compare revisions</span></button>
-    <button type="button" class="mobile-sheet-action" id="mobile-edit-qr" onclick="downloadAccessSheet(mobileContractEditId)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><path d="M14 14h2v2h-2zM18 14h2v6h-6v-2h4zM14 18h2v2h-2z"/></svg><span>Download QR access sheet</span></button>
+    <button type="button" class="mobile-sheet-action" id="mobile-edit-qr" onclick="downloadAccessSheet(mobileContractEditId)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><path d="M14 14h2v2h-2zM18 14h2v6h-6v-2h4zM14 18h2v2h-2z"/></svg><span>QR access sheet</span></button>
     <button type="button" class="mobile-sheet-action" id="mobile-edit-access" onclick="openContractAccess(mobileContractEditId)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="7" r="4"/><path d="M2 21v-3a7 7 0 0 1 14 0v3M20 8v6M17 11h6"/></svg><span>Manage access</span></button>
     <button type="button" class="mobile-sheet-action" onclick="mobileEditRename()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>

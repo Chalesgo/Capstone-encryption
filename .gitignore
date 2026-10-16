@@ -27,3 +27,19 @@ tools/
 *.log
 performance/fixtures/*.pdf
 performance/fixtures/manifest.json
+
+# Capstone paperwork, defense material and evidence runs (not part of the system)
+Manuscript/
+Presentation Needs/
+pdfs/
+output/*
+!output/SealGuard_Alpha_Test_Reports/
+!output/pdf/
+
+# One-off evidence and demo-document generators
+scripts/adviser_evidence.py
+scripts/adviser_regression.py
+scripts/compile_adviser_evidence.py
+scripts/export_evidence_audit_logs.py
+scripts/finalize_adviser_evidence.py
+scripts/demo_contracts/
