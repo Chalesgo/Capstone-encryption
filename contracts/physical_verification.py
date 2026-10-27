@@ -18,6 +18,15 @@ RENDER_DPI = 120
 TEXT_DIFFERENCE_THRESHOLD = 0.90
 VISUAL_DIFFERENCE_THRESHOLD = 0.82
 MANUAL_REVIEW_MINIMUM = 0.55
+# Page QR codes use error-correction level H, which still decodes with about
+# 30% of the symbol damaged, so a phone scanner accepts a code someone has
+# drawn over. The submitted page is therefore read again on the server and the
+# share of error-correction capacity the decode needed is measured. In testing,
+# clean prints and photos needed 0%, a short pen mark 17-27%, and a cross drawn
+# inside the code 50-83%; a cross through the corner markers made it unreadable.
+QR_REVIEW_MINIMUM = 0.10
+QR_ALTERED_MINIMUM = 0.40
+QR_RENDER_LONG_SIDE = 3000
 
 
 def canonical_json(value):
@@ -158,3 +167,30 @@ def compare_page(scan_page, official_page, expected_text):
     else:
         state = 'verified'
     return {'state': state, 'text_similarity': text_similarity, 'visual_similarity': visual_similarity}
+
+
+def inspect_page_qr(scan_page, expected_token):
+    """Read a submitted page's QR again and classify its physical condition.
+
+    Returns (state, damage). state is 'intact', 'damaged', 'altered',
+    'unreadable', or 'mismatch' (the page carries another SealGuard page code);
+    damage is the share of error-correction capacity used, or None.
+    """
+    import zxingcpp
+
+    zoom = QR_RENDER_LONG_SIDE / max(scan_page.rect.width, scan_page.rect.height)
+    pixmap = scan_page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), colorspace=fitz.csGRAY, alpha=False)
+    image = Image.frombytes('L', (pixmap.width, pixmap.height), pixmap.samples)
+    other_page_code = False
+    for barcode in zxingcpp.read_barcodes(image, formats=zxingcpp.BarcodeFormat.QRCode):
+        if barcode.text == expected_token:
+            unused = (barcode.extra or {}).get('UEC', 1.0)
+            damage = round(1.0 - float(unused), 2)
+            if damage >= QR_ALTERED_MINIMUM:
+                return 'altered', damage
+            if damage >= QR_REVIEW_MINIMUM:
+                return 'damaged', damage
+            return 'intact', damage
+        if barcode.text.startswith(TOKEN_PREFIX):
+            other_page_code = True
+    return ('mismatch' if other_page_code else 'unreadable'), None

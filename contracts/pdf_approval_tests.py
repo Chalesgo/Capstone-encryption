@@ -42,6 +42,7 @@ class EncryptedPDFApprovalTests(TestCase):
 
     def setUp(self):
         self.staff = User.objects.create_user('reviewer', is_staff=True)
+        self.admin = User.objects.create_user('approver', is_staff=True, is_superuser=True)
         self.other = User.objects.create_user('reader')
         with fitz.open() as pdf:
             pdf.new_page().insert_text((72, 72), 'Confidential contract content')
@@ -116,9 +117,9 @@ class EncryptedPDFApprovalTests(TestCase):
 
     def approve(self, entry):
         reviewer = Client()
-        reviewer.force_login(self.staff)
+        reviewer.force_login(self.admin)
         self.assertContains(reviewer.get(reverse('document_approval_queue')), 'guest@example.com')
-        response = reviewer.post(reverse('review_document_request', args=[entry.pk]), {'action': 'approve', 'hours': '24'})
+        response = reviewer.post(reverse('review_document_request', args=[entry.pk]), {'action': 'approve', 'note': 'Checked requester details', 'duration': '24', 'unit': 'hours'})
         self.assertEqual(response.status_code, 302)
         entry.refresh_from_db()
         return reviewer
@@ -188,26 +189,26 @@ class EncryptedPDFApprovalTests(TestCase):
         self.assertEqual(self.client.get(self.view_url).status_code, 404)
         entry.expires_at = timezone.now() + timedelta(hours=1)
         entry.save()
-        reviewer.post(reverse('review_document_request', args=[entry.pk]), {'action': 'revoke'})
+        reviewer.post(reverse('review_document_request', args=[entry.pk]), {'action': 'revoke', 'note': 'Checked requester details'})
         self.assertEqual(self.client.get(self.view_url).status_code, 404)
 
     def test_approver_is_kept_after_another_staff_member_revokes(self):
         entry = self.request_and_verify()
         self.approve(entry)
-        self.assertEqual(entry.approved_by, self.staff)
+        self.assertEqual(entry.approved_by, self.admin)
         self.assertIsNotNone(entry.approved_at)
 
-        second = User.objects.create_user('second-reviewer', is_staff=True)
+        second = User.objects.create_user('second-reviewer', is_staff=True, is_superuser=True)
         revoker = Client()
         revoker.force_login(second)
-        revoker.post(reverse('review_document_request', args=[entry.pk]), {'action': 'revoke'})
+        revoker.post(reverse('review_document_request', args=[entry.pk]), {'action': 'revoke', 'note': 'Checked requester details'})
         entry.refresh_from_db()
         self.assertEqual(entry.status, 'revoked')
-        self.assertEqual(entry.approved_by, self.staff)
+        self.assertEqual(entry.approved_by, self.admin)
         self.assertEqual(entry.reviewed_by, second)
 
         queue = revoker.get(reverse('document_approval_queue'), {'status': 'revoked'})
-        self.assertContains(queue, 'Approved by <strong>reviewer</strong>')
+        self.assertContains(queue, 'Approved by <strong>approver</strong>')
         self.assertContains(queue, 'Revoked by <strong>second-reviewer</strong>')
 
     def test_approval_does_not_expose_future_revision(self):
@@ -224,17 +225,68 @@ class EncryptedPDFApprovalTests(TestCase):
         reader.force_login(self.other)
         for url in [reverse('document_approval_queue'), reverse('document_access_sheet', args=[self.contract.pk])]:
             self.assertEqual(reader.get(url).status_code, 404)
-        self.assertEqual(reader.post(reverse('review_document_request', args=[entry.pk]), {'action': 'approve'}).status_code, 404)
+        self.assertEqual(reader.post(reverse('review_document_request', args=[entry.pk]), {'action': 'approve', 'note': 'Checked requester details'}).status_code, 404)
 
     def test_reviewer_can_approve_submitted_request_and_get_is_read_only(self):
         entry = self.request_and_verify()
         reviewer = Client()
-        reviewer.force_login(self.staff)
+        reviewer.force_login(self.admin)
         url = reverse('review_document_request', args=[entry.pk])
         self.assertEqual(reviewer.get(url).status_code, 405)
-        self.assertEqual(reviewer.post(url, {'action': 'approve'}).status_code, 302)
+        self.assertEqual(reviewer.post(url, {'action': 'approve', 'note': 'Checked requester details'}).status_code, 302)
         entry.refresh_from_db()
         self.assertEqual(entry.status, 'approved')
+
+    def test_staff_can_read_queue_but_only_admin_decides(self):
+        entry = self.request_and_verify()
+        staff = Client()
+        staff.force_login(self.staff)
+        queue = staff.get(reverse('document_approval_queue'))
+        self.assertContains(queue, 'guest@example.com')
+        self.assertContains(queue, 'Only an administrator can approve')
+        self.assertNotContains(queue, 'Approve viewing')
+        url = reverse('review_document_request', args=[entry.pk])
+        for action in ('approve', 'reject'):
+            self.assertEqual(staff.post(url, {'action': action, 'note': 'Looks fine', 'duration': '24', 'unit': 'hours'}).status_code, 403)
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, 'pending')
+
+    def test_decision_requires_a_reason(self):
+        entry = self.request_and_verify()
+        reviewer = Client()
+        reviewer.force_login(self.admin)
+        url = reverse('review_document_request', args=[entry.pk])
+        for note in ('', '   '):
+            response = reviewer.post(url, {'action': 'approve', 'note': note, 'duration': '24', 'unit': 'hours'}, follow=True)
+            self.assertContains(response, 'Add a note explaining your decision')
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, 'pending')
+        reviewer.post(url, {'action': 'reject', 'note': 'Requester could not be identified'})
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, 'rejected')
+        self.assertEqual(entry.review_note, 'Requester could not be identified')
+        self.assertContains(self.client.get(self.url), 'Requester could not be identified')
+
+    def test_admin_sets_any_duration_within_bounds(self):
+        entry = self.request_and_verify()
+        reviewer = Client()
+        reviewer.force_login(self.admin)
+        url = reverse('review_document_request', args=[entry.pk])
+        queue = reviewer.get(reverse('document_approval_queue'))
+        self.assertContains(queue, 'name="duration"')
+        self.assertContains(queue, 'data-duration="15" data-unit="minutes"')
+        rejected = [('10', 'minutes'), ('4', 'days'), ('0', 'hours'), ('-5', 'hours'), ('abc', 'hours'),
+                    ('2', 'weeks'), ('99999999999999', 'days')]
+        for duration, unit in rejected:
+            response = reviewer.post(url, {'action': 'approve', 'note': 'Checked', 'duration': duration, 'unit': unit}, follow=True)
+            self.assertContains(response, 'between 15 minutes and 3 days')
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, 'pending')
+        before = timezone.now()
+        reviewer.post(url, {'action': 'approve', 'note': 'Checked', 'duration': '90', 'unit': 'minutes'})
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, 'approved')
+        self.assertAlmostEqual((entry.expires_at - before).total_seconds(), 90 * 60, delta=30)
 
     def test_submission_preserves_single_use_qr(self):
         data = {'action': 'request', 'name': 'Guest', 'email': 'guest@example.com', 'reason': 'Review'}
@@ -266,8 +318,8 @@ class EncryptedPDFApprovalTests(TestCase):
     def test_rejection_does_not_grant_access(self):
         entry = self.request_and_verify()
         reviewer = Client()
-        reviewer.force_login(self.staff)
-        reviewer.post(reverse('review_document_request', args=[entry.pk]), {'action': 'reject'})
+        reviewer.force_login(self.admin)
+        reviewer.post(reverse('review_document_request', args=[entry.pk]), {'action': 'reject', 'note': 'Checked requester details'})
         entry.refresh_from_db()
         self.assertEqual(entry.status, 'rejected')
         self.assertEqual(self.client.get(self.view_url).status_code, 404)
@@ -277,7 +329,7 @@ class EncryptedPDFApprovalTests(TestCase):
         self.assertEqual(strict.post(self.url, {'action': 'request'}).status_code, 403)
         entry = self.request_and_verify()
         strict.force_login(self.staff)
-        self.assertEqual(strict.post(reverse('review_document_request', args=[entry.pk]), {'action': 'approve'}).status_code, 403)
+        self.assertEqual(strict.post(reverse('review_document_request', args=[entry.pk]), {'action': 'approve', 'note': 'Checked requester details'}).status_code, 403)
 
     def test_submission_does_not_depend_on_email_delivery(self):
         from unittest.mock import patch
@@ -368,7 +420,7 @@ class EncryptedPDFApprovalTests(TestCase):
             return self.client.post(reverse('open_encrypted_document'), {
                 'document': SimpleUploadedFile('guest.sgpdf', package)})
         self.assertEqual(reopen().status_code, 200)
-        reviewer.post(reverse('review_document_request', args=[entry.pk]), {'action': 'revoke'})
+        reviewer.post(reverse('review_document_request', args=[entry.pk]), {'action': 'revoke', 'note': 'Checked requester details'})
         self.assertContains(reopen(), 'Unable to open this file')
         self.assertEqual(self.client.get(self.view_url + '?download=encrypted').status_code, 404)
 
@@ -423,7 +475,7 @@ class EncryptedPDFApprovalTests(TestCase):
         reader.force_login(self.other)
         self.assertEqual(reader.get(preview).status_code, 404)
         reviewer = Client()
-        reviewer.force_login(self.staff)
+        reviewer.force_login(self.admin)
         response = reviewer.get(preview)
         self.assertEqual(b''.join(response.streaming_content), self.pdf)
         self.assertContains(reviewer.get(reverse('document_approval_queue')), 'SGPDF decryption request')
@@ -431,7 +483,7 @@ class EncryptedPDFApprovalTests(TestCase):
         # A later revision must not replace the version the guest requested.
         self.contract.file.save('later.pdf', ContentFile(self.pdf))
         ContractVersion.objects.create(contract=self.contract, version_number=2, file=self.contract.file.name)
-        reviewer.post(reverse('review_document_request', args=[entry.pk]), {'action': 'approve', 'hours': '1'})
+        reviewer.post(reverse('review_document_request', args=[entry.pk]), {'action': 'approve', 'note': 'Checked requester details', 'duration': '1', 'unit': 'hours'})
         entry.refresh_from_db()
         self.assertEqual(entry.approved_version_id, self.version.pk)
         view = reverse('approved_document_pdf', args=[entry.link.token])
@@ -439,20 +491,20 @@ class EncryptedPDFApprovalTests(TestCase):
         self.assertEqual(Client().get(view).status_code, 404)
         self.assertTrue(AuditLog.objects.filter(action='approved', note__contains=str(entry.pk)).exists())
         self.assertTrue(AuditLog.objects.filter(action='viewed', note__contains=str(entry.pk)).count() >= 2)
-        reviewer.post(reverse('review_document_request', args=[entry.pk]), {'action': 'revoke'})
+        reviewer.post(reverse('review_document_request', args=[entry.pk]), {'action': 'revoke', 'note': 'Checked requester details'})
         self.assertEqual(self.client.get(view).status_code, 404)
 
     def test_sgpdf_rejection_and_modified_ciphertext_block_access(self):
         from .models import AuditLog
         entry = self.sgpdf_request()
         reviewer = Client()
-        reviewer.force_login(self.staff)
+        reviewer.force_login(self.admin)
         preview = reverse('review_request_pdf', args=[entry.pk])
         Path(self.version.file.path).write_bytes(b'damaged ciphertext')
         self.assertEqual(reviewer.get(preview).status_code, 404)
         review = reverse('review_document_request', args=[entry.pk])
-        self.assertEqual(reviewer.post(review, {'action': 'approve'}).status_code, 404)
-        self.assertEqual(reviewer.post(review, {'action': 'reject'}).status_code, 302)
+        self.assertEqual(reviewer.post(review, {'action': 'approve', 'note': 'Checked requester details'}).status_code, 404)
+        self.assertEqual(reviewer.post(review, {'action': 'reject', 'note': 'Checked requester details'}).status_code, 302)
         self.assertTrue(AuditLog.objects.filter(action='rejected', note__contains=str(entry.pk)).exists())
         self.assertEqual(self.client.get(reverse('approved_document_pdf', args=[entry.link.token])).status_code, 404)
 

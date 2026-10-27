@@ -33,7 +33,7 @@
     {% if details.duplicate_pages %}<p>Duplicate pages: {{ details.duplicate_pages|join:', ' }}</p>{% endif %}
     {% if details.submitted_order != details.expected_order %}<p>Submitted order: {{ details.submitted_order|join:', ' }}. Expected: {{ details.expected_order|join:', ' }}.</p>{% endif %}
     {% if details.review_url %}<p><a class="btn btn-outline" href="{{ details.review_url }}">Compare submitted and registered pages</a></p>{% endif %}
-    {% for comparison in details.comparisons %}<div class="page-result">Page {{ comparison.page_number }}: {{ comparison.state|title }}{% if comparison.text_similarity != None %} | Text {{ comparison.text_similarity|floatformat:2 }}{% endif %} | Visual {{ comparison.visual_similarity|floatformat:2 }}</div>{% endfor %}
+    {% for comparison in details.comparisons %}<div class="page-result">Page {{ comparison.page_number }}: {{ comparison.state|title }}{% if comparison.text_similarity != None %} | Text {{ comparison.text_similarity|floatformat:2 }}{% endif %} | Visual {{ comparison.visual_similarity|floatformat:2 }} | QR {% if comparison.qr_state == 'intact' %}intact{% elif comparison.qr_state == 'damaged' %}partly damaged{% elif comparison.qr_state == 'altered' %}defaced{% elif comparison.qr_state == 'mismatch' %}does not match{% else %}unreadable{% endif %}</div>{% endfor %}
   </section>{% endif %}
   <div class="physical-grid">
     <section class="scanner-panel">

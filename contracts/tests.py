@@ -40,6 +40,7 @@ from .utils import (
     generate_canonical_fingerprint,
     generate_file_hash,
     generate_hmac,
+    generate_qr_code,
     generate_vector_fingerprint,
     log_activity,
     stamp_seal_on_pdf,
@@ -2490,9 +2491,29 @@ class PhysicalVerificationTests(TestCase):
             version=version, manifest_id=manifest['manifest_id'], manifest=manifest,
             signature=sign_manifest(manifest, self.private_key_path),
         )
-        pdf_bytes = path.read_bytes()
+        # Print each page's QR the way issued copies carry it.
+        with fitz.open(path) as document:
+            for page, token in zip(document, tokens):
+                qr_path = media_root / f'{filename}_p{page.number + 1}.png'
+                generate_qr_code(token, str(qr_path))
+                page.insert_image(self.QR_RECT, filename=str(qr_path))
+            pdf_bytes = document.tobytes()
         write_pdf(path, pdf_bytes)
         return contract, version, tokens, pdf_bytes
+
+    QR_RECT = fitz.Rect(500, 750, 578, 828)
+
+    def mark_qr(self, page_index, lines, width):
+        """Draw marker strokes given as fractions of the page QR's box."""
+        def draw(document):
+            box = self.QR_RECT
+            for x0, y0, x1, y1 in lines:
+                document[page_index].draw_line(
+                    fitz.Point(box.x0 + box.width * x0, box.y0 + box.height * y0),
+                    fitz.Point(box.x0 + box.width * x1, box.y0 + box.height * y1),
+                    color=(0.08, 0.08, 0.08), width=width,
+                )
+        return self.mutate_pdf(draw)
 
     def verify(self, tokens=None, pdf_bytes=None):
         upload = SimpleUploadedFile(
@@ -2588,6 +2609,43 @@ class PhysicalVerificationTests(TestCase):
     def test_all_pages_from_correct_contract_are_verified_in_order(self):
         response = self.verify()
         self.assertEqual(response.context['result'], 'verified')
+        self.assertEqual({c['qr_state'] for c in response.context['details']['comparisons']}, {'intact'})
+
+    def test_qr_with_cross_drawn_inside_is_rejected_although_it_still_decodes(self):
+        marked = self.mark_qr(1, [(.3, .3, .7, .7), (.7, .3, .3, .7)], width=4)
+        response = self.verify(pdf_bytes=marked)
+        self.assertEqual(response.context['result'], 'invalid')
+        comparisons = response.context['details']['comparisons']
+        self.assertEqual([c['qr_state'] for c in comparisons], ['intact', 'altered', 'intact'])
+        self.assertGreaterEqual(comparisons[1]['qr_damage'], 0.40)
+        self.assertIn('QR code on page 2 has been drawn on or defaced', response.context['details']['message'])
+        self.assertTrue(AuditLog.objects.filter(action='reported_tampering', note__contains='p2=altered').exists())
+
+    def test_qr_crossed_through_its_corners_is_reported_unreadable(self):
+        marked = self.mark_qr(0, [(0, 0, 1, 1), (1, 0, 0, 1)], width=4)
+        response = self.verify(pdf_bytes=marked)
+        self.assertEqual(response.context['result'], 'invalid')
+        self.assertEqual(response.context['details']['comparisons'][0]['qr_state'], 'unreadable')
+        self.assertIn('QR code on page 1 could not be read', response.context['details']['message'])
+
+    def test_small_mark_on_qr_requires_manual_review(self):
+        marked = self.mark_qr(2, [(.55, .55, .7, .62)], width=2.4)
+        response = self.verify(pdf_bytes=marked)
+        self.assertEqual(response.context['result'], 'manual_review')
+        comparison = response.context['details']['comparisons'][2]
+        self.assertEqual((comparison['qr_state'], comparison['state']), ('damaged', 'manual_review'))
+
+    def test_page_carrying_another_pages_qr_is_rejected(self):
+        media_root = Path(self.media_directory.name)
+        other_qr = media_root / 'page3.png'
+        generate_qr_code(self.tokens[2], str(other_qr))
+
+        def swap(document):
+            document[1].draw_rect(self.QR_RECT, color=(1, 1, 1), fill=(1, 1, 1))
+            document[1].insert_image(self.QR_RECT, filename=str(other_qr))
+        response = self.verify(pdf_bytes=self.mutate_pdf(swap))
+        self.assertEqual(response.context['result'], 'invalid')
+        self.assertEqual(response.context['details']['comparisons'][1]['qr_state'], 'mismatch')
 
     def test_page_from_another_contract_is_invalid(self):
         _contract, _version, other_tokens, _data = self.issue_document(
@@ -2642,7 +2700,8 @@ class PhysicalVerificationTests(TestCase):
     def test_copied_valid_qr_on_altered_page_detects_differences(self):
         def alter(document):
             page = document[0]
-            page.add_redact_annot(page.rect, fill=(1, 1, 1))
+            # Replace the content but keep the genuine page QR.
+            page.add_redact_annot(fitz.Rect(0, 0, page.rect.width, self.QR_RECT.y0 - 10), fill=(1, 1, 1))
             page.apply_redactions()
             page.insert_text((72, 90), 'FORGED PAGE amount PHP 1,500', fontsize=16)
         response = self.verify(pdf_bytes=self.mutate_pdf(alter))
@@ -2669,9 +2728,12 @@ class PhysicalVerificationTests(TestCase):
         self.assertEqual(response.context['result'], 'verified')
 
     def test_image_only_poor_scan_requires_manual_review(self):
+        # No readable text, but each page's QR is present and intact.
         document = fitz.open()
-        for _index in range(3):
-            document.new_page()
+        for index, token in enumerate(self.tokens):
+            qr_path = Path(self.media_directory.name) / f'poor_scan_{index}.png'
+            generate_qr_code(token, str(qr_path))
+            document.new_page().insert_image(self.QR_RECT, filename=str(qr_path))
         poor_scan = document.tobytes()
         document.close()
         response = self.verify(pdf_bytes=poor_scan)

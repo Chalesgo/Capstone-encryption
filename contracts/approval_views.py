@@ -5,7 +5,9 @@ from datetime import timedelta
 
 from django import forms
 from django.conf import settings
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.db import transaction, OperationalError
 from django.db.models import Q, F
 from django.http import FileResponse, Http404
@@ -209,6 +211,38 @@ def _require_reviewer(request):
         raise Http404
 
 
+# The administrator sets each approval window to fit the request (a quick
+# check of one page versus reviewing a contract over a working day) instead of
+# choosing from fixed presets. The bounds keep a grant from outliving its use.
+ACCESS_MINIMUM_MINUTES = 15
+ACCESS_MAXIMUM_MINUTES = 3 * 24 * 60
+ACCESS_UNIT_MINUTES = {'minutes': 1, 'hours': 60, 'days': 24 * 60}
+ACCESS_DURATION_HINT = 'Choose an access duration between 15 minutes and 3 days.'
+
+
+def _requested_duration(post):
+    """Return the approval window, or None when it is missing or out of range."""
+    try:
+        amount = int(post.get('duration', '24'))
+    except ValueError:
+        return None
+    unit_minutes = ACCESS_UNIT_MINUTES.get(post.get('unit', 'hours'))
+    if unit_minutes is None:
+        return None
+    minutes = amount * unit_minutes
+    if not ACCESS_MINIMUM_MINUTES <= minutes <= ACCESS_MAXIMUM_MINUTES:
+        return None
+    return timedelta(minutes=minutes)
+
+
+def _require_approver(request):
+    # Granting access to a private PDF is a security decision, so only
+    # administrators decide requests. Staff can still read the queue.
+    _require_reviewer(request)
+    if not is_admin(request.user):
+        raise PermissionDenied
+
+
 @login_required
 @never_cache
 def approval_queue(request):
@@ -228,13 +262,31 @@ def approval_queue(request):
         status = entry.status
         entries = DocumentAccessRequest.objects.filter(pk=entry.pk).select_related('link__contract', 'link__requested_version', 'reviewed_by', 'approved_by', 'approved_version')
     log_activity(request, 'viewed', note=f'PDF access request queue viewed; status={status}')
-    return render(request, 'access/queue.html', {'entries': Paginator(entries, 25).get_page(request.GET.get('page')), 'status': status})
+    return render(request, 'access/queue.html', {
+        'entries': Paginator(entries, 25).get_page(request.GET.get('page')), 'status': status,
+        'can_decide': is_admin(request.user),
+        'access_minimum_minutes': ACCESS_MINIMUM_MINUTES,
+        'access_maximum_minutes': ACCESS_MAXIMUM_MINUTES,
+        'access_duration_hint': ACCESS_DURATION_HINT,
+    })
 
 
 @login_required
 @require_POST
 def review_request(request, request_id):
-    _require_reviewer(request)
+    _require_approver(request)
+    # The requester is unknown to the barangay, so every decision must
+    # record why it was made. The note is shown to the requester and logged.
+    note = request.POST.get('note', '').strip()[:500]
+    if not note:
+        messages.error(request, 'Add a note explaining your decision before you approve, reject, or revoke access.')
+        return redirect(reverse('document_approval_queue') + f'?request_id={request_id}')
+    duration = None
+    if request.POST.get('action') == 'approve':
+        duration = _requested_duration(request.POST)
+        if duration is None:
+            messages.error(request, ACCESS_DURATION_HINT)
+            return redirect(reverse('document_approval_queue') + f'?request_id={request_id}')
     with transaction.atomic():
         # Acquire the SQLite write lock before reading the review state.
         DocumentAccessRequest.objects.filter(pk=request_id).update(status=F('status'))
@@ -245,12 +297,6 @@ def review_request(request, request_id):
             raise Http404
         if action in ('approve', 'reject') and entry.status == 'pending':
             if action == 'approve':
-                try:
-                    hours = int(request.POST.get('hours', '24'))
-                except ValueError:
-                    raise Http404
-                if hours not in (1, 24, 72):
-                    raise Http404
                 if entry.link.category == 'sgpdf':
                     _requested_file(entry.link)
                     version = entry.link.requested_version
@@ -260,7 +306,7 @@ def review_request(request, request_id):
                     raise Http404
                 entry.approved_version = version
                 entry.approved_file = version.file.name if version else contract.file.name
-                entry.expires_at = timezone.now() + timedelta(hours=hours)
+                entry.expires_at = timezone.now() + duration
                 entry.status = 'approved'
                 entry.approved_by = request.user
                 entry.approved_at = timezone.now()
@@ -273,10 +319,10 @@ def review_request(request, request_id):
             raise Http404
         entry.reviewed_by = request.user
         entry.reviewed_at = timezone.now()
-        entry.review_note = request.POST.get('note', '')[:500]
+        entry.review_note = note
         entry.save()
         log_activity(request, {'approved': 'approved', 'rejected': 'rejected'}.get(entry.status, 'edited'), contract=contract,
-                     note=f'PDF access {entry.status}; request={entry.pk}; expires={entry.expires_at or "none"}')
+                     note=f'PDF access {entry.status}; request={entry.pk}; expires={entry.expires_at or "none"}; reason={note}')
     return redirect('document_approval_queue')
 
 

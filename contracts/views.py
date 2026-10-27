@@ -59,7 +59,7 @@ from .messaging import issue_challenge, check_challenge, notify_account, valid_c
 from django.core.exceptions import ValidationError
 from django.utils.dateparse import parse_date
 from .physical_verification import (
-    build_manifest, compare_page, decode_page_token, sign_manifest,
+    build_manifest, compare_page, decode_page_token, inspect_page_qr, sign_manifest,
     validate_token_membership, verify_manifest_signature,
 )
 
@@ -1186,8 +1186,8 @@ def verify_physical_qr(request):
         'thumbnail': 'data:image/png;base64,' + base64.b64encode(thumbnail).decode('ascii'),
         'page_pdf_url': reverse('verify_physical_page') + '?' + urlencode({'qr_token': token}),
         'message': (
-            f'Registered QR confirmed: page {page_number} of {total_pages}. '
-            'Compare it with your printed page, then capture the complete page to finish verification.'
+            f'Registered QR recognized: page {page_number} of {total_pages}. A matching QR identifies the page only; '
+            'compare it with your printed page, then capture the complete page to finish verification.'
         ),
     })
     response['Cache-Control'] = 'private, no-store'
@@ -1207,9 +1207,23 @@ def verify_physical_page(request):
     return FileResponse(io.BytesIO(data), content_type='application/pdf', filename='registered-page.pdf')
 
 
+QR_PROBLEM_MESSAGES = {
+    'mismatch': 'The QR code printed on {pages} is not the code that was scanned for that page.',
+    'altered': (
+        'The QR code on {pages} has been drawn on or defaced. A marked code cannot be '
+        'trusted, even if a phone can still read it; request a clean copy from the barangay.'
+    ),
+    'unreadable': (
+        'The QR code on {pages} could not be read from the captured page. It may be covered, '
+        'damaged, or cut off; retake the photo with the whole code visible or request a clean copy.'
+    ),
+}
+
+
 def verify_physical(request):
     result = None
     details = {}
+    qr_tampered = False
     if request.method == 'POST':
         uploaded_files = request.FILES.getlist('physical_file')
         uploaded_file = uploaded_files[0] if uploaded_files else None
@@ -1288,11 +1302,30 @@ def verify_physical(request):
                                     scan_document[index], official_document[page_number - 1],
                                     official_document[page_number - 1].get_text('text'),
                                 )
-                                comparison['page_number'] = page_number
+                                # The browser sends the scanned tokens; confirm each one
+                                # is physically printed, undamaged, on the submitted page.
+                                qr_state, qr_damage = inspect_page_qr(scan_document[index], tokens[index])
+                                if qr_state == 'damaged' and comparison['state'] == 'verified':
+                                    comparison['state'] = 'manual_review'
+                                comparison.update(page_number=page_number, qr_state=qr_state, qr_damage=qr_damage)
                                 comparisons.append(comparison)
                         details['comparisons'] = comparisons
                         states = {comparison['state'] for comparison in comparisons}
-                        if 'differences' in states:
+                        qr_problems = {
+                            state: [c['page_number'] for c in comparisons if c['qr_state'] == state]
+                            for state in QR_PROBLEM_MESSAGES
+                        }
+                        qr_problems = {state: pages for state, pages in qr_problems.items() if pages}
+                        qr_tampered = bool({'altered', 'mismatch'} & set(qr_problems))
+                        if qr_problems:
+                            result = 'invalid'
+                            details['message'] = ' '.join(
+                                QR_PROBLEM_MESSAGES[state].format(
+                                    pages=('page ' if len(pages) == 1 else 'pages ') + ', '.join(map(str, pages))
+                                )
+                                for state, pages in qr_problems.items()
+                            )
+                        elif 'differences' in states:
                             result = 'differences'
                             details['message'] = 'Valid page identities were found, but content differences were detected.'
                         elif 'manual_review' in states:
@@ -1304,14 +1337,18 @@ def verify_physical(request):
 
                 action = (
                     'viewed' if result == 'verified'
-                    else 'reported_tampering' if result == 'differences'
+                    else 'reported_tampering' if result == 'differences' or qr_tampered
                     else 'verification'
+                )
+                qr_note = ', '.join(
+                    f'p{c["page_number"]}={c["qr_state"]}' for c in details.get('comparisons', [])
                 )
                 verification_log = log_activity(
                     request, action, contract=contract,
-                    note=f'Physical verification: {result}; version={manifest["version_number"]}',
+                    note=f'Physical verification: {result}; version={manifest["version_number"]}'
+                         + (f'; qr={qr_note}' if qr_note else ''),
                 )
-                if result in {'differences', 'manual_review'}:
+                if result in {'differences', 'manual_review'} or qr_tampered:
                     _attach_verification_evidence(verification_log, temp_path, uploaded_file.name)
                     if request.user.is_authenticated:
                         details['review_url'] = reverse(
