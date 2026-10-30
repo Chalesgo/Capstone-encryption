@@ -78,7 +78,7 @@ class EncryptedPDFApprovalTests(TestCase):
                 response = self.client.get(self.url)
                 if public:
                     self.assertContains(response, 'This is a public document')
-                    self.assertContains(response, 'No account, sign-in, or access request is needed')
+                    self.assertContains(response, 'No access request is needed')
                     self.assertContains(response, 'id="approved-view-button"')
                     self.assertNotContains(response, 'Submit access request')
                 else:

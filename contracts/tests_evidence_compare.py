@@ -96,7 +96,7 @@ class ReportedCopyTests(TestCase):
         result, debug_log = self.verify(self.reexport_with_new_amount(sealed))
 
         self.assertEqual(result, 'tampered', debug_log)
-        self.assertTrue(any('Page QR code links to active contract' in line for line in debug_log), debug_log)
+        self.assertTrue(any('Page QR code links to active document' in line for line in debug_log), debug_log)
         report = AuditLog.objects.get(action='reported_tampering')
         self.assertEqual(report.contract, contract)
         self.assertTrue(report.evidence_file)

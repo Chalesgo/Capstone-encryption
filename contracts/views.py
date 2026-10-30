@@ -2,6 +2,7 @@ from .pdf_storage import open_pdf, read_pdf, write_pdf, pdf_storage
 #views.py
 from django.shortcuts import render, redirect, get_object_or_404
 from .access import (can_view, can_download, can_share, can_manage, is_admin, is_read_only_user,
+                     is_published, is_resident, RESIDENT_GROUP,
                      managed_contracts, viewable_contracts,
                      visible_logs, document_access, view_document_access, bulk_document_access, workspace_access,
                      workspace_mutation)
@@ -10,7 +11,7 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.cache import never_cache
 from django.conf import settings
 from .models import Contract, Folder, ContractVersion, PhysicalVerificationManifest, Tutorial, AccountSecurity, PasswordResetRequest, StaffInvitation
-from .forms import (ContractForm, TutorialForm, StaffRegistrationForm, StaffPasswordChangeForm,
+from .forms import (ContractForm, TutorialForm, StaffRegistrationForm, StaffPasswordChangeForm, ResidentRegistrationForm,
                     PasswordResetRequestForm, ApprovedPasswordResetForm, sanitize_tutorial_html)
 from .utils import (
     generate_file_hash,
@@ -55,12 +56,13 @@ from django.db.models.functions import Lower
 from django.core.files import File
 from django.contrib.auth.models import User
 from django.contrib.auth import login
+from django.contrib.auth.hashers import make_password
 from .messaging import issue_challenge, check_challenge, notify_account, valid_code, reset_contact_valid
 from django.core.exceptions import ValidationError
 from django.utils.dateparse import parse_date
 from .physical_verification import (
-    build_manifest, compare_page, decode_page_token, inspect_page_qr, sign_manifest,
-    validate_token_membership, verify_manifest_signature,
+    build_manifest, compare_page, decode_page_token, inspect_page_qr, read_qr_condition,
+    sign_manifest, validate_token_membership, verify_manifest_signature,
 )
 
 TRASH_RETENTION_DAYS = 15
@@ -307,52 +309,53 @@ def check_duplicate_upload(request):
     if existing:
         return JsonResponse({'success': True, 'already_authenticated': existing, 'duplicates': []})
 
-    same_name = _same_name_contract(uploaded_file.name, request.POST.get('title', ''), request.user)
-    if same_name:
-        latest = same_name.versions.order_by('-version_number').first()
-        return JsonResponse({
-            'success': True,
-            'duplicates': [{
-                'id': same_name.id,
-                'title': same_name.title,
-                'filename': os.path.basename(same_name.file.name),
-                'match_type': 'same_name',
-                'next_version': (latest.version_number + 1) if latest else 1,
-            }],
-        })
-
-    temp_path = os.path.join(
-        settings.MEDIA_ROOT, 'temp', 'duplicate-check', f'{uuid.uuid4().hex}.pdf'
-    )
-    os.makedirs(os.path.dirname(temp_path), exist_ok=True)
     try:
-        write_pdf(temp_path, uploaded_file.read())
-        original_cf = generate_canonical_fingerprint(temp_path)
-        duplicates = managed_contracts(request.user).filter(
-            original_fingerprint=original_cf,
-            is_trashed=False,
-        ).order_by('id')
-        return JsonResponse({
-            'success': True,
-            'duplicates': [
-                {
-                    'id': contract.id,
-                    'title': contract.title,
-                    'filename': os.path.basename(contract.file.name),
-                    'match_type': 'same_content',
-                    'next_version': (
-                        (contract.versions.order_by('-version_number').first().version_number + 1)
-                        if contract.versions.exists() else 1
-                    ),
-                }
-                for contract in duplicates
-            ],
-        })
+        duplicates = _existing_document_matches(uploaded_file, request.POST.get('title', ''), request.user)
     except Exception:
         return JsonResponse({'success': False, 'error': 'unable_to_check_file'}, status=400)
+    return JsonResponse({'success': True, 'duplicates': duplicates})
+
+
+def _document_match(contract, match_type):
+    latest = contract.versions.order_by('-version_number').first()
+    return {
+        'id': contract.id,
+        'title': contract.title,
+        'filename': os.path.basename(contract.file.name),
+        'match_type': match_type,
+        'current_version': latest.version_number if latest else 1,
+        'next_version': (latest.version_number + 1) if latest else 1,
+        'current_preview_url': (
+            reverse('preview_contract_version', args=[latest.pk]) if latest
+            else reverse('preview_contract', args=[contract.pk])
+        ),
+    }
+
+
+def _existing_document_matches(uploaded_file, title, user):
+    """Find documents an upload may repeat, compared by content before name.
+
+    Identical content (the canonical fingerprint of a document's current
+    version) means the file is already in SealGuard. A shared file name or
+    title only suggests that the upload might be a new version; the uploader
+    compares both first pages and decides.
+    """
+    temp_path = os.path.join(settings.MEDIA_ROOT, 'temp', 'duplicate-check', f'{uuid.uuid4().hex}.pdf')
+    os.makedirs(os.path.dirname(temp_path), exist_ok=True)
+    try:
+        uploaded_file.seek(0)
+        write_pdf(temp_path, uploaded_file.read())
+        uploaded_cf = generate_canonical_fingerprint(temp_path)
     finally:
+        uploaded_file.seek(0)
         if os.path.isfile(temp_path):
             os.remove(temp_path)
+    same_content = managed_contracts(user).filter(original_fingerprint=uploaded_cf, is_trashed=False).order_by('id')
+    matches = [_document_match(contract, 'same_content') for contract in same_content]
+    same_name = _same_name_contract(uploaded_file.name, title, user)
+    if same_name and all(match['id'] != same_name.id for match in matches):
+        matches.append(_document_match(same_name, 'same_name'))
+    return matches
 
 
 @login_required
@@ -364,12 +367,16 @@ def upload_contract(request):
             existing = _existing_sealed_upload(request.FILES['file'], request.user)
             if existing:
                 return render(request, 'upload.html', {'form': form, 'already_authenticated': existing})
-            existing_name_match = _same_name_contract(
-                request.FILES['file'].name,
-                request.POST.get('title', ''), request.user,
-            )
-            if existing_name_match and request.POST.get('force_new') != '1':
-                return add_revision(request, existing_name_match.id)
+            if request.POST.get('force_new') != '1':
+                # A revision is only recorded when the uploader chooses it on
+                # the comparison prompt; a matching name never decides it.
+                matches = _existing_document_matches(request.FILES['file'], request.POST.get('title', ''), request.user)
+                if matches:
+                    match = matches[0]
+                    return render(request, 'upload.html', {'form': form, 'pdf_error': (
+                        f'This file matches “{match["title"]}” (version {match["current_version"]}). '
+                        'Choose the file again to compare it and decide whether it is a new version or a separate document.'
+                    )})
 
             started_at = time.perf_counter()
             contract = form.save(commit=False)
@@ -609,6 +616,7 @@ def add_revision(request, contract_id):
         if existing:
             return render(request, 'upload.html', {
                 'is_revision': True, 'contract': contract, 'already_authenticated': existing,
+                'revision_target': _document_match(contract, 'revision'),
             })
 
         # ── Validate it's actually a PDF (mirrors validate_pdf_signature) ──
@@ -618,6 +626,7 @@ def add_revision(request, contract_id):
             return render(request, 'upload.html', {
                 'is_revision': True,
                 'contract': contract,
+                'revision_target': _document_match(contract, 'revision'),
                 'pdf_error': 'This file is not a valid PDF.',
             })
 
@@ -710,13 +719,15 @@ def add_revision(request, contract_id):
         )
         return redirect('contract_list')
 
-    return render(request, 'upload.html', {'is_revision': True, 'contract': contract})
+    return render(request, 'upload.html', {
+        'is_revision': True, 'contract': contract, 'revision_target': _document_match(contract, 'revision'),
+    })
 
 
 @login_required
 @workspace_access
 def contract_list(request):
-    contracts = viewable_contracts(request.user).filter(is_trashed=False).order_by('-modified_at', '-id')
+    contracts = viewable_contracts(request.user).filter(is_trashed=False).select_related('folder').order_by('-modified_at', '-id')
     search_query = request.GET.get('q', '').strip()
     if search_query:
         contracts = contracts.filter(
@@ -827,18 +838,44 @@ def delete_contract(request, contract_id):
     contract = get_object_or_404(Contract, id=contract_id)
 
     if request.method == 'POST':
-        if contract.is_public:
-            # Public contracts must be unpublished before they can be trashed.
-            # (Blocked client-side too, but enforce it server-side either way.)
+        if contract.is_public or contract.status == 'final':
+            # A Final copy is an official record; it must be returned to Draft
+            # before it can be trashed. (Blocked client-side too.)
+            return redirect('contract_list')
+        reason = _trash_reason(request)
+        if not reason:
             return redirect('contract_list')
 
-        contract.is_trashed = True
-        contract.trashed_at = timezone.now()
-        contract.save()
-
-        log_activity(request, 'deleted', contract=contract, note=f'Moved to trash: {contract.title}')
+        _move_to_trash(request, contract, reason)
         return redirect('contract_list')
     return render(request, 'confirm_delete.html', {'contract': contract})
+
+
+# Trash is for records that should not have been uploaded. Each removal names
+# one of these reasons; Final copies are never trashed.
+TRASH_REASONS = {
+    'duplicate': 'Duplicate upload',
+    'wrong_file': 'Wrong file uploaded',
+    'test_upload': 'Test or practice upload',
+    'superseded': 'Draft replaced by a newer document',
+}
+
+
+def _trash_reason(request):
+    """Return the submitted trash reason text, or '' when none was chosen."""
+    label = TRASH_REASONS.get(request.POST.get('reason', ''))
+    if not label:
+        return ''
+    details = request.POST.get('reason_details', '').strip()
+    return f'{label}: {details}'[:300] if details else label
+
+
+def _move_to_trash(request, contract, reason):
+    contract.is_trashed = True
+    contract.trashed_at = timezone.now()
+    contract.trash_reason = reason
+    contract.save(update_fields=['is_trashed', 'trashed_at', 'trash_reason', 'modified_at'])
+    log_activity(request, 'deleted', contract=contract, note=f'Moved to trash: {contract.title}; reason: {reason}')
 
 @login_required
 @bulk_document_access
@@ -847,17 +884,17 @@ def bulk_delete_contracts(request):
         return JsonResponse({'success': False, 'error': 'invalid_method'}, status=405)
 
     ids = request.POST.getlist('ids')
+    reason = _trash_reason(request)
+    if ids and not reason:
+        return JsonResponse({'success': False, 'error': 'reason_required'}, status=400)
     contracts = Contract.objects.filter(id__in=ids, is_trashed=False)
     moved = 0
     skipped_public = 0
     for contract in contracts:
-        if contract.is_public:
+        if contract.is_public or contract.status == 'final':
             skipped_public += 1
             continue
-        contract.is_trashed = True
-        contract.trashed_at = timezone.now()
-        contract.save(update_fields=['is_trashed', 'trashed_at', 'modified_at'])
-        log_activity(request, 'deleted', contract=contract, note=f'Moved to trash: {contract.title}')
+        _move_to_trash(request, contract, reason)
         moved += 1
     return JsonResponse({'success': True, 'moved': moved, 'skipped_public': skipped_public})
 
@@ -921,16 +958,18 @@ def bulk_update_status(request):
     contracts = Contract.objects.filter(id__in=ids, is_trashed=False)
     updated = 0
     for contract in contracts:
-        if contract.status == status and (status != 'final' or contract.is_public):
+        # Only a Final copy is published; a Draft is never public.
+        is_public = status == 'final'
+        if contract.status == status and contract.is_public == is_public:
             continue
         contract.status = status
-        if status == 'final':
-            contract.is_public = True
+        contract.is_public = is_public
         contract.save(update_fields=['status', 'is_public', 'modified_at'])
         action = 'approved' if status == 'final' else 'edited'
         log_activity(
             request, action, contract=contract,
-            note=f'Status changed to {status_labels[status]}',
+            note=f'Status changed to {status_labels[status]}'
+                 + ('' if is_public else '; removed from public verified documents'),
         )
         updated += 1
     return JsonResponse({'success': True, 'updated': updated, 'requested': len(ids)})
@@ -998,7 +1037,7 @@ def bulk_download_contracts(request):
                     latest_version if latest_version and latest_version.file.name == contract.file.name else None))
                 log_activity(
                     request, 'downloaded', contract=contract,
-                    note='Downloaded current contract PDF in bulk ZIP',
+                    note='Downloaded current document PDF in bulk ZIP',
                     version_number=version_number,
                 )
                 added += 1
@@ -1040,6 +1079,7 @@ def restore_contract(request, contract_id):
         contract = get_object_or_404(Contract, id=contract_id, is_trashed=True)
         contract.is_trashed = False
         contract.trashed_at = None
+        contract.trash_reason = ''
         contract.save()
         log_activity(request, 'edited', contract=contract, note=f'Restored from trash: {contract.title}')
         return JsonResponse({'success': True})
@@ -1159,6 +1199,39 @@ def _registered_page_pdf(manifest_record, page_number, thumbnail_width=None):
     return (data, thumbnail) if thumbnail_width else data
 
 
+QR_FRAME_MAX_BYTES = 8 * 1024 * 1024
+QR_FRAME_MAX_PIXELS = 16_000_000
+QR_SCAN_TAMPERED_MESSAGE = (
+    'This QR code has been drawn on or damaged, so it cannot be trusted and its page will not be shown. '
+    'Ask the barangay for a clean copy.'
+)
+QR_SCAN_RETRY_MESSAGE = (
+    'Hold the phone steady with the whole QR code in view so SealGuard can check that it has not been drawn on.'
+)
+
+
+def _scanned_qr_condition(frame, token):
+    """Measure damage on the printed QR from the camera frame the phone scanned.
+
+    The browser only sends the decoded text, and a phone still decodes a code
+    that has been drawn over, so the frame is re-read here. Returns 'unknown'
+    when there is no usable frame or the code cannot be re-read from it.
+    """
+    if not frame or frame.size > QR_FRAME_MAX_BYTES:
+        return 'unknown'
+    try:
+        with Image.open(frame) as image:
+            if image.width * image.height > QR_FRAME_MAX_PIXELS:
+                return 'unknown'
+            state, _damage = read_qr_condition(image.convert('L'), token)
+    except ImportError:
+        logger.warning('zxing-cpp is not installed; scanned QR condition skipped')
+        return 'unknown'
+    except (OSError, ValueError, Image.DecompressionBombError):
+        return 'unknown'
+    return state if state in {'intact', 'damaged', 'altered'} else 'unknown'
+
+
 def verify_physical_qr(request):
     """Validate a scanned page token before the full physical-page comparison."""
     if request.method != 'POST':
@@ -1168,6 +1241,17 @@ def verify_physical_qr(request):
     manifest_record, payload, error = _resolve_physical_page(token)
     if error:
         return error
+    # A phone still decodes a code that has been drawn over, so the page is shown
+    # only after the printed code itself has been confirmed clean.
+    qr_condition = _scanned_qr_condition(request.FILES.get('qr_frame'), token)
+    if qr_condition in {'damaged', 'altered'}:
+        log_activity(
+            request, 'reported_tampering', contract=manifest_record.version.contract,
+            note=f'Scanned page QR rejected: page {payload["p"]}; condition={qr_condition}',
+        )
+        return JsonResponse({'valid': False, 'tampered': True, 'message': QR_SCAN_TAMPERED_MESSAGE}, status=422)
+    if qr_condition != 'intact':
+        return JsonResponse({'valid': False, 'retry': True, 'message': QR_SCAN_RETRY_MESSAGE})
 
     page_number = int(payload['p'])
     total_pages = int(payload['n'])
@@ -1189,6 +1273,7 @@ def verify_physical_qr(request):
             f'Registered QR recognized: page {page_number} of {total_pages}. A matching QR identifies the page only; '
             'compare it with your printed page, then capture the complete page to finish verification.'
         ),
+        'qr_condition': qr_condition,
     })
     response['Cache-Control'] = 'private, no-store'
     return response
@@ -1269,30 +1354,37 @@ def verify_physical(request):
                 token_membership_valid = all(
                     validate_token_membership(payload, manifest) for payload in payloads
                 )
+                # Residents may check only the pages they care about, such as the
+                # amounts or signature page of a long contract. Each scanned code is
+                # paired with the captured page in the same position, and the page's
+                # printed QR is re-read below, so the order of pages does not matter.
                 page_numbers = [int(payload['p']) for payload in payloads]
-                expected_numbers = list(range(1, manifest['total_pages'] + 1))
                 duplicates = sorted({number for number in page_numbers if page_numbers.count(number) > 1})
-                missing = sorted(set(expected_numbers) - set(page_numbers))
+                unchecked = sorted(set(range(1, manifest['total_pages'] + 1)) - set(page_numbers))
                 mixed = any(payload['m'] != manifest['manifest_id'] for payload in payloads)
                 details.update({
                     'contract': contract,
                     'version': manifest['version_number'],
-                    'missing_pages': missing,
+                    'total_pages': manifest['total_pages'],
+                    'checked_pages': sorted(page_numbers),
+                    'unchecked_pages': unchecked,
                     'duplicate_pages': duplicates,
                     'submitted_order': page_numbers,
-                    'expected_order': expected_numbers,
                 })
 
                 with open_pdf(temp_path) as scan_document:
-                    page_count_matches = scan_document.page_count == manifest['total_pages']
                     token_count_matches = len(payloads) == scan_document.page_count
                     structure_valid = (
-                        token_membership_valid and not mixed and not duplicates and not missing
-                        and page_numbers == expected_numbers and page_count_matches and token_count_matches
+                        token_membership_valid and not mixed and not duplicates and token_count_matches
                     )
                     if not structure_valid:
                         result = 'invalid'
-                        details['message'] = 'The submitted pages do not match the registered document structure.'
+                        details['message'] = (
+                            f'{scan_document.page_count} page(s) were captured for {len(payloads)} scanned QR code(s). '
+                            'Capture exactly one complete page for each QR code you scanned, in the same order.'
+                            if token_membership_valid and not mixed and not duplicates
+                            else 'The submitted pages do not match the registered document structure.'
+                        )
                     else:
                         comparisons = []
                         with open_pdf(manifest_record.version.file.path) as official_document:
@@ -1333,7 +1425,11 @@ def verify_physical(request):
                             details['message'] = 'Page identity is valid, but scan quality requires staff review.'
                         else:
                             result = 'verified'
-                            details['message'] = 'Every page and its registered content passed verification.'
+                            details['message'] = (
+                                f'The {len(page_numbers)} checked page(s) matched the registered document. '
+                                f'The other {len(unchecked)} page(s) were not checked.'
+                                if unchecked else 'Every page and its registered content passed verification.'
+                            )
 
                 action = (
                     'viewed' if result == 'verified'
@@ -1346,6 +1442,7 @@ def verify_physical(request):
                 verification_log = log_activity(
                     request, action, contract=contract,
                     note=f'Physical verification: {result}; version={manifest["version_number"]}'
+                         + f'; pages checked={len(page_numbers)}/{manifest["total_pages"]}'
                          + (f'; qr={qr_note}' if qr_note else ''),
                 )
                 if result in {'differences', 'manual_review'} or qr_tampered:
@@ -1880,6 +1977,62 @@ def staff_register(request):
     return render(request, 'registration/register.html', context)
 
 
+@never_cache
+def resident_register(request):
+    """Resident self-registration. The email is confirmed before the account exists."""
+    if request.user.is_authenticated:
+        return redirect('public_verify')
+    if not request.session.session_key:
+        request.session.create()
+    pending_key = f'sealguard:resident-registration:{request.session.session_key}'
+    pending = cache.get(pending_key)
+    form = ResidentRegistrationForm(request.POST or None)
+    context = {'form': form, 'resident': True, 'otp_sent': bool(pending), 'channel': 'email',
+               'recipient': pending.get('recipient', '') if pending else ''}
+    if request.method == 'POST' and request.POST.get('action') == 'restart':
+        cache.delete(pending_key)
+        return redirect(request.path)
+    if request.method == 'POST' and request.POST.get('otp'):
+        verified = check_challenge(pending_key, request.POST.get('otp', '').strip())
+        if not verified:
+            context.update(otp_sent=bool(cache.get(pending_key)), error='That code is invalid or expired. Codes allow five attempts; request a new code if needed.')
+            return render(request, 'registration/register.html', context)
+        email = verified['email']
+        from django.contrib.auth.models import Group
+        from django.db import IntegrityError, transaction
+        try:
+            with transaction.atomic():
+                if User.objects.filter(Q(email__iexact=email) | Q(username__iexact=email)).exists():
+                    raise IntegrityError('Email already registered')
+                user = User(username=email, email=email, first_name=verified['first_name'],
+                            last_name=verified['last_name'], password=verified['password_hash'])
+                user.save()
+                user.groups.add(Group.objects.get_or_create(name=RESIDENT_GROUP)[0])
+                AccountSecurity.objects.create(user=user, email_verified=True)
+        except IntegrityError:
+            cache.delete(pending_key)
+            context.update(otp_sent=False, error='An account with this email already exists. Sign in instead.')
+            return render(request, 'registration/register.html', context)
+        cache.delete(pending_key)
+        logger.info('resident registration completed; user_id=%s', user.pk)
+        login(request, user)
+        return redirect('public_verify')
+    if request.method == 'POST' and form.is_valid():
+        email = form.cleaned_data['email']
+        try:
+            # Only the password hash is held while the code is pending.
+            issue_challenge(pending_key, 'email', email, 'SealGuard resident account verification code', {
+                'email': email,
+                'first_name': form.cleaned_data['first_name'].strip(),
+                'last_name': form.cleaned_data['last_name'].strip(),
+                'password_hash': make_password(form.cleaned_data['password1']),
+            })
+            context.update(otp_sent=True, recipient=email)
+        except ValidationError as exc:
+            context['error'] = exc.messages[0]
+    return render(request, 'registration/register.html', context)
+
+
 @login_required
 def password_change_required(request):
     security = getattr(request.user, 'account_security', None)
@@ -1893,6 +2046,47 @@ def password_change_required(request):
         security.save(update_fields=['must_change_password', 'password_changed_at'])
         return redirect('contract_list')
     return render(request, 'registration/password_change_required.html', {'form': form})
+
+
+def _start_resident_password_reset(request, reset_form, user):
+    """Email a reset code to a resident straight away.
+
+    Administrator approval protects staff accounts. Residents can only verify
+    documents and read published ones, so approving each of their resets would
+    only add work for the barangay; the emailed code proves ownership.
+    """
+    from .messaging import code_digest, send_message
+    session_request_id = request.session.get('password_reset_request_id')
+    reset = PasswordResetRequest.objects.filter(
+        pk=session_request_id, user=user, channel='email', status='approved',
+        expires_at__gte=timezone.now(),
+    ).first() if session_request_id else None
+    throttle = 'sealguard:reset-request:' + code_digest(str(user.pk))
+    if not cache.add(throttle, True, 60):
+        if reset:
+            return render(request, 'registration/password_reset.html', {
+                'reset_form': reset_form, 'reset': reset, 'step': 'verify', 'code_sent': True,
+            })
+        return render(request, 'registration/password_reset.html', {
+            'reset_form': reset_form, 'step': 'email',
+            'error': 'Please wait one minute before requesting another code.',
+        })
+    code = f'{secrets.randbelow(1000000):06d}'
+    now = timezone.now()
+    reset = reset or PasswordResetRequest(user=user, email=user.email, channel='email')
+    reset.status = 'approved'
+    reset.otp = code_digest(code)
+    reset.attempts = 0
+    reset.approved_at = now
+    reset.expires_at = now + timedelta(minutes=10)
+    reset.save()
+    request.session['password_reset_request_id'] = reset.pk
+    delivered = send_message('email', user.email, 'SealGuard password reset verification code',
+                             f'Your SealGuard password reset verification code is {code}. It expires in 10 minutes.')
+    logger.info('resident password reset code sent; reset_id=%s user_id=%s delivered=%s', reset.pk, user.pk, delivered)
+    return render(request, 'registration/password_reset.html', {
+        'reset_form': reset_form, 'reset': reset, 'step': 'verify', 'code_sent': True,
+    })
 
 
 @never_cache
@@ -1982,6 +2176,14 @@ def password_reset_request(request):
                 logger.info('password reset admin notification attempted; reset_id=%s admin_user_id=%s channel=%s delivered=%s',
                             reset.pk, admin_user.pk, getattr(getattr(admin_user, 'account_security', None), 'preferred_channel', 'email'), admin_notified)
             return render(request, 'registration/password_reset.html', {'reset_form': reset_form, 'pending': True, 'step': 'email'})
+        if channel == 'email':
+            resident = User.objects.filter(
+                is_active=True, email__iexact=identifier, groups__name=RESIDENT_GROUP,
+            ).exclude(account_security__email_verified=False).first()
+            if resident and is_resident(resident):
+                return _start_resident_password_reset(request, reset_form, resident)
+        # Unknown emails get the same response as staff requests so that staff
+        # accounts cannot be discovered here.
         logger.info('password reset identifier did not match an eligible account; channel=%s', channel)
         return render(request, 'registration/password_reset.html', {'reset_form': reset_form, 'pending': True, 'step': 'email'})
     return render(request, 'registration/password_reset.html', {'reset_form': reset_form, 'reset': reset, 'step': step})
@@ -2060,7 +2262,7 @@ def public_verify(request):
                 fingerprint=current_cf,
                 is_trashed=False,
             ).first()
-            debug_log.append("[INFO] Active contract fingerprint lookup completed")
+            debug_log.append("[INFO] Active document fingerprint lookup completed")
 
             expected_vector_cf = ''
             if matched_contract:
@@ -2099,14 +2301,14 @@ def public_verify(request):
                 # Only look for a page QR when the marker cannot identify the record.
                 qr_manifest = None if marker_owner else _manifest_from_page_qr(temp_path)
                 if marker_owner:
-                    debug_log.append("[FAIL] Sealed PDF fingerprint does not match the contract identified by its marker")
+                    debug_log.append("[FAIL] Sealed PDF fingerprint does not match the document identified by its marker")
                     failure_reason = 'sealed fingerprint mismatch'
                     # Link the report to its official record so staff can compare the two.
                     matched_contract = marker_owner
                     result = 'tampered'
                 elif qr_manifest:
                     matched_contract = qr_manifest.version.contract
-                    debug_log.append(f"[FAIL] Page QR code links to active contract [{matched_contract.id}], but the document content differs")
+                    debug_log.append(f"[FAIL] Page QR code links to active document [{matched_contract.id}], but the document content differs")
                     debug_log.append(
                         "[WARN] The PDF may have been edited or re-exported, which removed its metadata marker."
                     )
@@ -2122,7 +2324,7 @@ def public_verify(request):
                     filename_hint = 'unlinked_modification'
                     result = 'tampered'
                 else:
-                    debug_log.append("[FAIL] No active contract matches the sealed fingerprint or encrypted marker")
+                    debug_log.append("[FAIL] No active document matches the sealed fingerprint or encrypted marker")
                     failure_reason = 'no active database record matched'
                     filename_hint = 'unknown'
                     result = 'not_found'
@@ -2146,7 +2348,7 @@ def public_verify(request):
                 failure_reason = 'metadata marker malformed'
                 result = 'tampered'
             elif not compare_digest(extracted_encrypted, matched_contract.encrypted_cf):
-                debug_log.append("[FAIL] Metadata marker does not belong to the matched contract")
+                debug_log.append("[FAIL] Metadata marker does not belong to the matched document")
                 failure_reason = 'metadata marker ownership mismatch'
                 result = 'tampered'
             elif not embedded_lsb_matches and not enrollment_seal_lsb_matches:
@@ -2159,12 +2361,12 @@ def public_verify(request):
                 matched_contract.hmac_value,
                 matched_contract.original_fingerprint,
             ]):
-                debug_log.append("[ERROR] Matched contract is missing required cryptographic enrollment data")
+                debug_log.append("[ERROR] Matched document is missing required cryptographic enrollment data")
                 failure_reason = 'incomplete cryptographic enrollment data'
                 result = 'error'
             else:
-                debug_log.append(f"[PASS] Sealed fingerprint matched active contract [{matched_contract.id}]")
-                debug_log.append("[PASS] Metadata marker belongs to the matched contract")
+                debug_log.append(f"[PASS] Sealed fingerprint matched active document [{matched_contract.id}]")
+                debug_log.append("[PASS] Metadata marker belongs to the matched document")
                 if embedded_lsb_matches:
                     debug_log.append("[PASS] Digital seal LSB marker recovered from the PDF")
                 else:
@@ -2195,7 +2397,7 @@ def public_verify(request):
                     debug_log.append("[PASS] Original fingerprint decrypted with AES-256-CBC and HMAC-SHA256 verified")
 
                     if not compare_digest(decrypted_original_cf, matched_contract.original_fingerprint):
-                        debug_log.append("[FAIL] Decrypted source fingerprint does not match the contract enrollment record")
+                        debug_log.append("[FAIL] Decrypted source fingerprint does not match the document enrollment record")
                         failure_reason = 'original fingerprint mismatch'
                         result = 'tampered'
                     else:
@@ -2288,16 +2490,45 @@ def _contract_file_access(request, contract):
     return allowed
 
 
+def _published_document_gate(request, contract):
+    """Apply the account rules for Public Verified Documents.
+
+    Viewing or downloading a published document needs a signed-in account so
+    each access is attributed in the audit log. Residents may open nothing
+    else. Returns a redirect for anonymous visitors, otherwise None.
+    """
+    if not request.user.is_authenticated:
+        if is_published(contract):
+            return redirect(f"{reverse('login')}?next={reverse('public_verify')}")
+        return None
+    if is_resident(request.user) and not is_published(contract):
+        raise Http404
+    return None
+
+
+def _log_resident_view(request, contract, version_number):
+    from .middleware import is_pdf_navigation
+    # A direct navigation is redirected to the viewer, which fetches the PDF
+    # again; log only the fetch that delivers the document.
+    if is_resident(request.user) and not is_pdf_navigation(request):
+        log_activity(request, 'viewed', contract=contract, version_number=version_number,
+                     note='Resident viewed published document')
+
+
 @never_cache
 def preview_contract(request, contract_id):
     started_at = time.perf_counter()
     contract = get_object_or_404(Contract, pk=contract_id, is_trashed=False)
+    gate = _published_document_gate(request, contract)
+    if gate:
+        return gate
     if not _contract_file_access(request, contract):
         return redirect(f"{reverse('login')}?next={request.path}")
     if not contract.file:
         raise Http404
     latest_version = contract.versions.order_by('-version_number').first()
     version_number = latest_version.version_number if latest_version else 1
+    _log_resident_view(request, contract, version_number)
     _process_log(
         'pdf_view', 'current_pdf_response_started', contract=contract, request=request,
         version=version_number, lookup_ms=round((time.perf_counter() - started_at) * 1000),
@@ -2320,10 +2551,14 @@ def preview_contract_version(request, version_id):
         pk=version_id,
         contract__is_trashed=False,
     )
+    gate = _published_document_gate(request, version.contract)
+    if gate:
+        return gate
     if not _contract_file_access(request, version.contract):
         return redirect(f"{reverse('login')}?next={request.path}")
     if not version.file:
         raise Http404
+    _log_resident_view(request, version.contract, version.version_number)
     _process_log(
         'pdf_view', 'version_pdf_response_started', contract=version.contract, request=request,
         version=version.version_number, version_id=version.id,
@@ -2345,21 +2580,25 @@ def download_contract(request, contract_id):
         raise Http404
     if not request.user.is_authenticated:
         contract = Contract.objects.filter(pk=contract_id, is_trashed=False).first()
-        if not contract or not contract.is_public:
+        if not contract or not is_published(contract):
             return redirect(f"{reverse('login')}?next={request.path}")
     else:
         contract = get_object_or_404(Contract, pk=contract_id, is_trashed=False)
-    if not can_download(request.user, contract):
+    gate = _published_document_gate(request, contract)
+    if gate:
+        return gate
+    resident = is_resident(request.user)
+    if not resident and not can_download(request.user, contract):
         return redirect(f"{reverse('login')}?next={request.path}")
     if not contract.file:
         raise Http404
     latest_version = contract.versions.order_by('-version_number').first()
     log_activity(
         request, 'downloaded', contract=contract,
-        note='Downloaded current contract PDF',
+        note='Resident downloaded published document' if resident else 'Downloaded current document PDF',
         version_number=latest_version.version_number if latest_version else None,
     )
-    if request.GET.get('format') == 'pdf' or (contract.is_public and (not request.user.is_authenticated or request.GET.get('public') == '1')):
+    if request.GET.get('format') == 'pdf' or resident or (contract.is_public and request.GET.get('public') == '1'):
         document = pdf_storage.open(contract.file.name, 'rb')
         response = FileResponse(
             document,
@@ -2578,11 +2817,14 @@ def update_status(request, pk):
         if status not in {'pending', 'final'}:
             return redirect('contract_list')
         contract.status = status
-        if status == 'final':
-            contract.is_public = True
+        # Only a Final copy is published; returning to Draft unpublishes it.
+        contract.is_public = status == 'final'
         contract.save()
         if status == 'final':
             log_activity(request, 'approved', contract=contract)
+        else:
+            log_activity(request, 'edited', contract=contract,
+                         note='Returned to Draft; removed from public verified documents')
     return redirect('contract_list')
 
 @login_required
@@ -2594,17 +2836,43 @@ def publish_contract(request, pk):
         contract = get_object_or_404(Contract, pk=pk)
         data = json.loads(request.body)
         make_public = data.get('is_public', False)
+        if make_public and contract.status != 'final':
+            return JsonResponse({'success': False, 'error': 'final_copy_required'}, status=400)
 
         contract.is_public = make_public
         contract.save()
 
         log_activity(
             request, 'edited', contract=contract,
-            note='Added to public verified contracts' if make_public else 'Removed from public verified contracts'
+            note='Added to Public Verified Documents' if make_public else 'Removed from Public Verified Documents'
         )
         return JsonResponse({'success': True, 'is_public': contract.is_public})
     return JsonResponse({'success': False}, status=400)
 from django.db.models import Count, Q
+
+
+RESIDENT_ACTIVITY_DAYS = 30
+
+
+def _resident_activity_stats():
+    """How residents use Public Verified Documents, from the audit log."""
+    since = timezone.now() - timedelta(days=RESIDENT_ACTIVITY_DAYS)
+    activity = AuditLog.objects.filter(
+        user__groups__name=RESIDENT_GROUP, action__in=['viewed', 'downloaded'], timestamp__gte=since,
+    )
+    most_viewed = (
+        activity.filter(contract__isnull=False).values('contract__title')
+        .annotate(total=Count('id')).order_by('-total', 'contract__title').first()
+    )
+    return {
+        'days': RESIDENT_ACTIVITY_DAYS,
+        'accounts': User.objects.filter(groups__name=RESIDENT_GROUP, is_active=True).count(),
+        'new_accounts': User.objects.filter(groups__name=RESIDENT_GROUP, date_joined__gte=since).count(),
+        'views': activity.filter(action='viewed').count(),
+        'downloads': activity.filter(action='downloaded').count(),
+        'most_viewed_title': most_viewed['contract__title'] if most_viewed else '',
+        'most_viewed_total': most_viewed['total'] if most_viewed else 0,
+    }
 
 
 @login_required
@@ -2613,6 +2881,7 @@ def dashboard(request):
     total_documents = viewable_contracts(request.user).filter(is_trashed=False).count()
     verified_documents = viewable_contracts(request.user).filter(is_trashed=False, encrypted_cf__gt='').count()
     flagged_documents = visible_logs(request.user).filter(action='reported_tampering').count()
+    resident_stats = _resident_activity_stats() if is_admin(request.user) else None
 
     valid_activity_filters = ['viewed', 'downloaded', 'added', 'encrypted', 'edited', 'approved', 'rejected', 'deleted', 'reported_tampering', 'verification', 'failed_login', 'login', 'logout', 'locked_out']
     requested_activity_filters = [
@@ -2692,6 +2961,7 @@ def dashboard(request):
         'total_documents': total_documents,
         'verified_documents': verified_documents,
         'flagged_documents': flagged_documents,
+        'resident_stats': resident_stats,
         'recent_logs': page_obj,
         'page_obj': page_obj,
         'activity_filter': activity_filter,

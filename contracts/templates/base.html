@@ -750,8 +750,8 @@
             </svg>
         </a>
 
-        {% if user.is_authenticated %}
-        <a href="/contracts/" class="sidebar-icon-link" data-tooltip="Contracts">
+        {% if workspace_user %}
+        <a href="/contracts/" class="sidebar-icon-link" data-tooltip="Procurement Documents">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/>
                 <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
@@ -805,7 +805,7 @@
             {% csrf_token %}
         </form>
         {% else %}
-        <a href="/accounts/login/" class="sidebar-icon-link" data-tooltip="Staff Login">
+        <a href="/accounts/login/" class="sidebar-icon-link" data-tooltip="Sign in">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
                 <path d="M10 17l5-5-5-5"/>
@@ -816,7 +816,7 @@
     </div>
 </aside>
 
-{% if user.is_authenticated %}
+{% if workspace_user %}
 <header class="topbar">
     <nav class="mobile-nav" aria-label="Mobile navigation">
         <a href="/verify/" class="mobile-nav-link{% if request.path == '/verify/' %} active{% endif %}" title="Verify Document" aria-label="Verify Document">
@@ -835,7 +835,7 @@
                 <path d="M14 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><rect x="8" y="13" width="8" height="6" rx="1"/><path d="M10 13v-2a2 2 0 0 1 4 0v2"/>
             </svg>
         </a>
-        <a href="/contracts/" class="mobile-nav-link{% if request.path == '/contracts/' %} active{% endif %}" title="Contracts" aria-label="Contracts">
+        <a href="/contracts/" class="mobile-nav-link{% if request.path == '/contracts/' %} active{% endif %}" title="Procurement Documents" aria-label="Procurement Documents">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/>
             </svg>
@@ -959,11 +959,19 @@
                 <path d="M14 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><rect x="8" y="13" width="8" height="6" rx="1"/><path d="M10 13v-2a2 2 0 0 1 4 0v2"/>
             </svg>
         </a>
-        <a href="/accounts/login/" class="mobile-nav-link" title="Staff Login" aria-label="Staff Login">
+        {% if is_resident %}
+        <a href="#" class="mobile-nav-link" title="Logout" aria-label="Logout" onclick="document.getElementById('logout-form').submit(); return false;">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>
+            </svg>
+        </a>
+        {% else %}
+        <a href="/accounts/login/" class="mobile-nav-link" title="Sign in" aria-label="Sign in">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/>
             </svg>
         </a>
+        {% endif %}
     </nav>
     {% block public_mobile_topbar_extra %}{% endblock %}
 </header>
@@ -986,7 +994,7 @@
         </div>
 
         <p style="font-size:12px; color:#99aabb; margin-bottom:14px; line-height:1.7;">
-            Official Procurement Contract Authentication System<br>
+            Official Procurement Document Authentication System<br>
             Barangay Sto. Niño, Biñan City, Laguna
         </p>
 
@@ -995,7 +1003,7 @@
                     gap:6px 18px; margin-bottom:16px;">
             <a href="/verify/" style="font-size:12px; color:#778899; text-decoration:none;">Verify Document</a>
             <span style="color:#dde1e8;">|</span>
-            <a href="/contracts/" style="font-size:12px; color:#778899; text-decoration:none;">Contracts</a>
+            <a href="/contracts/" style="font-size:12px; color:#778899; text-decoration:none;">Procurement Documents</a>
             <span style="color:#dde1e8;">|</span>
             <a href="/accounts/login/" style="font-size:12px; color:#778899; text-decoration:none;">Staff Login</a>
         </div>

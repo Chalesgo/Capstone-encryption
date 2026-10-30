@@ -58,6 +58,12 @@ class MemoryDiagnosticsMiddleware(MiddlewareMixin):
         return response
 
 
+def is_pdf_navigation(request):
+    """A browser opening a PDF URL directly; it is redirected to the viewer."""
+    return (request.META.get('HTTP_SEC_FETCH_MODE') == 'navigate'
+            or 'text/html' in request.META.get('HTTP_ACCEPT', ''))
+
+
 class InternalPDFViewerMiddleware:
     """Route browser PDF navigation through the SealGuard canvas viewer.
 
@@ -74,8 +80,7 @@ class InternalPDFViewerMiddleware:
                 and 'attachment' not in response.get('Content-Disposition', '')):
             response['Cache-Control'] = 'private, no-store'
             response['X-Content-Type-Options'] = 'nosniff'
-            if (request.META.get('HTTP_SEC_FETCH_MODE') == 'navigate'
-                    or 'text/html' in request.META.get('HTTP_ACCEPT', '')):
+            if is_pdf_navigation(request):
                 from urllib.parse import urlencode
                 from django.templatetags.static import static
                 response.close()
@@ -139,3 +144,45 @@ class RequiredPasswordChangeMiddleware:
             }:
                 return redirect('password_change_required')
         return self.get_response(request)
+
+
+# Resident accounts exist only to verify documents and read published ones.
+# This is an allowlist so that a page added later stays closed to residents
+# until it is deliberately listed here. Document views still check that the
+# requested document is published (contracts.access.is_published).
+RESIDENT_URL_NAMES = frozenset({
+    'public_verify', 'verification_preview',
+    'verify_physical', 'verify_physical_qr', 'verify_physical_page',
+    'open_encrypted_document', 'request_document_access', 'approved_document_pdf',
+    'preview_contract', 'preview_contract_version', 'download_contract',
+    'login', 'logout', 'password_change', 'password_change_done',
+    'resident_register', 'health_check',
+})
+
+
+class ResidentAccessMiddleware:
+    """Keep resident accounts out of the staff workspace and admin."""
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        from .access import is_resident
+        user = getattr(request, 'user', None)
+        if user and is_resident(user) and not self._allowed(request):
+            if request.method in ('GET', 'HEAD'):
+                return redirect('public_verify')
+            from django.http import HttpResponseForbidden
+            return HttpResponseForbidden('Resident accounts can only verify documents and view published documents.')
+        return self.get_response(request)
+
+    @staticmethod
+    def _allowed(request):
+        from django.conf import settings
+        from django.urls import Resolver404, resolve
+        path = request.path_info
+        if path == '/' or path.startswith((settings.STATIC_URL, settings.MEDIA_URL)):
+            return True
+        try:
+            return resolve(path).url_name in RESIDENT_URL_NAMES
+        except Resolver404:
+            return False

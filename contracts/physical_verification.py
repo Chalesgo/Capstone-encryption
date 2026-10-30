@@ -176,11 +176,16 @@ def inspect_page_qr(scan_page, expected_token):
     'unreadable', or 'mismatch' (the page carries another SealGuard page code);
     damage is the share of error-correction capacity used, or None.
     """
-    import zxingcpp
-
     zoom = QR_RENDER_LONG_SIDE / max(scan_page.rect.width, scan_page.rect.height)
     pixmap = scan_page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), colorspace=fitz.csGRAY, alpha=False)
     image = Image.frombytes('L', (pixmap.width, pixmap.height), pixmap.samples)
+    return read_qr_condition(image, expected_token)
+
+
+def read_qr_condition(image, expected_token):
+    """Classify the expected QR in a grayscale image; see inspect_page_qr."""
+    import zxingcpp
+
     other_page_code = False
     for barcode in zxingcpp.read_barcodes(image, formats=zxingcpp.BarcodeFormat.QRCode):
         if barcode.text == expected_token:

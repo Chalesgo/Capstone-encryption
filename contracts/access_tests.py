@@ -121,10 +121,19 @@ class DocumentAccessTests(TestCase):
         self.assertEqual(self.client.post(reverse('rename_contract', args=[self.contract.pk]),
                                          data={'title': 'stolen'}, content_type='application/json').status_code, 404)
 
-    def test_public_download_is_a_regular_pdf_for_anonymous_verify_visitors(self):
+    def test_published_download_needs_sign_in_and_is_a_regular_pdf_for_residents(self):
+        from django.contrib.auth.models import Group
+        from .access import RESIDENT_GROUP
+        self.contract.status = 'final'
         self.contract.is_public = True
         self.contract.save()
-        response = self.client.get(reverse('download_contract', args=[self.contract.pk]))
+        url = reverse('download_contract', args=[self.contract.pk])
+        self.assertRedirects(self.client.get(url), f"{reverse('login')}?next={reverse('public_verify')}",
+                             fetch_redirect_response=False)
+        resident = User.objects.create_user('resident@example.com', 'resident@example.com')
+        resident.groups.add(Group.objects.get_or_create(name=RESIDENT_GROUP)[0])
+        self.client.force_login(resident)
+        response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/pdf')
         self.assertIn('attachment', response['Content-Disposition'])
@@ -289,7 +298,7 @@ class DocumentAccessTests(TestCase):
 
     def test_collaborator_can_trash_and_restore_owned_document(self):
         self.login(self.editor)
-        self.assertEqual(self.client.post(reverse('delete_contract', args=[self.contract.pk])).status_code, 302)
+        self.assertEqual(self.client.post(reverse('delete_contract', args=[self.contract.pk]), {'reason': 'duplicate'}).status_code, 302)
         self.contract.refresh_from_db()
         self.assertTrue(self.contract.is_trashed)
         self.assertEqual(self.client.post(reverse('restore_contract', args=[self.contract.pk])).status_code, 200)

@@ -124,9 +124,11 @@ def issue_challenge(key, channel, recipient, subject, payload=None):
     pending = dict(payload or {}, digest=code_digest(code), channel=channel, recipient=recipient,
                    expires=time.time() + 600, attempts=0)
     cache.set(key, pending, 600)
+    # n8n can rate-limit or time out even when the email still arrives, so an
+    # unconfirmed delivery keeps the code active instead of showing an error.
+    # Administrators can read the message in the Admin outgoing inbox.
     if not send_message(channel, recipient, subject, f'Your SealGuard verification code is {code}. It expires in 10 minutes.'):
-        cache.delete(key)
-        raise ValidationError('Delivery failed. Please try again in one minute.')
+        logger.warning('verification code delivery not confirmed; kept active; channel=%s', channel)
     return pending
 
 

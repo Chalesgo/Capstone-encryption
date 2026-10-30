@@ -79,7 +79,7 @@ class SealGuardUserAdmin(UserAdmin):
     def sealguard_access(self, obj):
         if obj.is_superuser:
             capabilities = (
-                'Open the Admin Portal', 'Manage users, groups, tutorials, and contracts',
+                'Open the Admin Portal', 'Manage users, groups, tutorials, and procurement documents',
                 'Manage all documents and access',
             )
         elif obj.is_staff:

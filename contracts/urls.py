@@ -39,6 +39,7 @@ urlpatterns = [
     path('status/<int:pk>/',  views.update_status,   name='update_status'),
     path('dashboard/', views.dashboard, name='dashboard'),
     path('accounts/register/', views.staff_register, name='staff_register'),
+    path('accounts/resident/register/', views.resident_register, name='resident_register'),
     path('accounts/register/invitation/', views.create_staff_invitation, name='create_staff_invitation'),
     path('accounts/password-change-required/', views.password_change_required, name='password_change_required'),
     path('accounts/password-reset/', views.password_reset_request, name='password_reset_request'),

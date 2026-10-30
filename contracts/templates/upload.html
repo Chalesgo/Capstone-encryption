@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
-{% block title %}Upload Contract{% endblock %}
+{% load static %}
+{% block title %}Upload Document{% endblock %}
 
 {% block content %}
 <style>
@@ -203,12 +204,12 @@
 
 <div style="max-width: 580px; margin: 0 auto;">
     <div class="page-header">
-        <h1>{% if is_revision %}Add Revision{% else %}Upload Contract{% endif %}</h1>
+        <h1>{% if is_revision %}Add Revision{% else %}Upload Procurement Document{% endif %}</h1>
         <p>
             {% if is_revision %}
                 Upload a new version of "{{ contract.title }}" — it will be chained to the previous version's fingerprint.
             {% else %}
-                Upload a procurement contract PDF to encrypt and authenticate it with a digital seal
+                Upload a procurement document PDF, such as a contract, purchase order, or notice of award, to encrypt and authenticate it with a digital seal
             {% endif %}
         </p>
     </div>
@@ -287,7 +288,7 @@
 
             <!-- Custom file upload zone -->
             <div class="form-field-group">
-                <label>Contract PDF File</label>
+                <label>Procurement Document PDF</label>
                 <div class="upload-zone" id="upload-zone">
                     <input type="file" name="file" id="contract-file" accept=".pdf" required>
                     <div class="upload-zone-icon">
@@ -359,7 +360,7 @@
                 </svg>
                 <span id="upload-process-info">After uploading, the system will automatically generate a SHA-256 canonical fingerprint,
                 encrypt it with AES-256-CBC, embed it into the digital seal via LSB steganography,
-                and stamp the authenticated seal onto your contract. The complete PDF is also encrypted in storage and only decrypted for authorized viewing.</span>
+                and stamp the authenticated seal onto your document. The complete PDF is also encrypted in storage and only decrypted for authorized viewing.</span>
             </div>
 
             <div style="display:flex; gap:10px;">
@@ -389,19 +390,32 @@
 
 <div class="duplicate-modal{% if already_authenticated %} open{% endif %}" id="authenticated-modal" aria-hidden="{% if already_authenticated %}false{% else %}true{% endif %}">
     <div class="duplicate-modal-card" role="dialog" aria-modal="true" aria-labelledby="authenticated-title">
-        <h2 id="authenticated-title">Already authenticated</h2>
-        <p id="authenticated-message">This document is already authenticated as {{ already_authenticated.title }}, version {{ already_authenticated.version }}.</p>
+        <h2 id="authenticated-title">This is a copy SealGuard already issued</h2>
+        <p id="authenticated-message">This file is an unchanged copy of &ldquo;{{ already_authenticated.title }}&rdquo;, version {{ already_authenticated.version }}. Its SealGuard marker and its contents match the stored copy exactly, so adding it would create a revision with no changes.</p>
+        <p class="authenticated-hint">To record changes, upload the edited PDF. For a printed copy that was signed by hand, use <strong>Register Signed Scan</strong> on the existing document.</p>
         <div class="duplicate-modal-actions">
             <button type="button" class="btn btn-outline" id="authenticated-cancel">Cancel</button>
             <a class="btn btn-primary" id="authenticated-view" href="{{ already_authenticated.url }}" target="_blank" rel="noopener">View existing document</a>
         </div>
     </div>
 </div>
+{% if revision_target %}{{ revision_target|json_script:"revision-target" }}{% endif %}
 <div class="duplicate-modal" id="duplicate-modal" aria-hidden="true">
-    <div class="duplicate-modal-card" role="dialog" aria-modal="true" aria-labelledby="duplicate-modal-title">
-        <h2 id="duplicate-modal-title">Possible duplicate document</h2>
+    <div class="duplicate-modal-card duplicate-compare-card" role="dialog" aria-modal="true" aria-labelledby="duplicate-modal-title">
+        <h2 id="duplicate-modal-title">Is this a new version of an existing document?</h2>
         <p id="duplicate-modal-message"></p>
+        <div class="duplicate-compare">
+            <figure>
+                <figcaption id="duplicate-current-label">Current version</figcaption>
+                <div class="duplicate-page"><canvas id="duplicate-current-canvas" aria-label="First page of the current version"></canvas><span class="duplicate-page-status" id="duplicate-current-status">Loading preview…</span></div>
+            </figure>
+            <figure>
+                <figcaption id="duplicate-incoming-label">Incoming file</figcaption>
+                <div class="duplicate-page"><canvas id="duplicate-incoming-canvas" aria-label="First page of the incoming file"></canvas><span class="duplicate-page-status" id="duplicate-incoming-status">Loading preview…</span></div>
+            </figure>
+        </div>
         <div class="duplicate-modal-actions">
+            <button type="button" class="btn btn-outline" id="duplicate-cancel-btn">Cancel</button>
             <button type="button" class="btn btn-outline" id="duplicate-new-btn">Add as new document</button>
             <button type="button" class="btn btn-primary" id="duplicate-revision-btn">Add as revision</button>
         </div>
@@ -415,7 +429,17 @@
     .duplicate-modal.open .duplicate-modal-card { animation: sealguard-modal-panel-in .18s ease-out both; }
     .duplicate-modal-card h2 { margin:0 0 8px; color:#1a1a2e; font-size:19px; }
     .duplicate-modal-card p { color:#667788; line-height:1.6; font-size:14px; }
-    .duplicate-modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; }
+    .duplicate-modal-actions { display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap; margin-top:20px; }
+    .duplicate-compare-card { width:min(760px, 100%); max-height:calc(100dvh - 40px); overflow-y:auto; }
+    .duplicate-compare { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
+    .duplicate-compare figure { margin:0; display:grid; gap:6px; min-width:0; }
+    .duplicate-compare figcaption { font-size:12px; font-weight:600; color:#445566; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .duplicate-page { position:relative; display:grid; place-items:center; min-height:220px; padding:10px; border:1px solid #e5e7eb; border-radius:10px; background:#f3f4f6; }
+    .duplicate-page canvas { max-width:100%; height:auto; box-shadow:0 1px 6px rgba(15,23,42,.18); background:#fff; }
+    .duplicate-page canvas:not(.ready) { display:none; }
+    .duplicate-page-status { font-size:12px; color:#889aab; }
+    .duplicate-page canvas.ready + .duplicate-page-status { display:none; }
+    @media (max-width:560px) { .duplicate-compare { grid-template-columns:1fr; } }
 </style>
 
 <script>
@@ -474,10 +498,12 @@
     }
 
     function autofillTitle(file) {
-        const titleInput = document.querySelector('#upload-form input[type="text"]');
-        if (titleInput) {
-            const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '');
-            titleInput.value = nameWithoutExt;
+        // Suggest the file name only while the title is empty or still holds
+        // an earlier suggestion; a title the user typed is never replaced.
+        const titleInput = document.querySelector('#upload-form input[name="title"]');
+        if (titleInput && (!titleInput.value.trim() || titleInput.dataset.autofilled === titleInput.value)) {
+            titleInput.value = file.name.replace(/\.[^/.]+$/, '');
+            titleInput.dataset.autofilled = titleInput.value;
         }
     }
 
@@ -587,7 +613,7 @@
                 if (!response.ok || !result.success) throw new Error('duplicate check failed');
                 if (result.already_authenticated) {
                     const existing = result.already_authenticated;
-                    document.getElementById('authenticated-message').textContent = `This document is already authenticated as ${existing.title}, version ${existing.version}.`;
+                    document.getElementById('authenticated-message').textContent = `This file is an unchanged copy of “${existing.title}”, version ${existing.version}. Its SealGuard marker and its contents match the stored copy exactly, so adding it would create a revision with no changes.`;
                     document.getElementById('authenticated-view').href = existing.url;
                     const modal = document.getElementById('authenticated-modal');
                     modal.classList.add('open');
@@ -597,20 +623,24 @@
                     return;
                 }
                 if (uploadForm.dataset.isRevision === 'true') {
+                    // Show the current and incoming first pages before the revision is recorded.
+                    const targetData = document.getElementById('revision-target');
+                    const target = targetData ? JSON.parse(targetData.textContent) : null;
+                    if (target) {
+                        const unchanged = (result.duplicates || []).find(match => match.id === target.id && match.match_type === 'same_content');
+                        duplicateContracts = [unchanged || target];
+                        openVersionComparison(duplicateContracts[0], file);
+                        uploadBtn.disabled = false;
+                        updateUploadModeLabel();
+                        return;
+                    }
                     duplicateCheckComplete = true;
                     submitUpload();
                     return;
                 }
                 duplicateContracts = result.duplicates || [];
                 if (duplicateContracts.length) {
-                    const duplicate = duplicateContracts[0];
-                    if (duplicate.match_type === 'same_name') {
-                        duplicateMessage.textContent = `This document has been detected as a duplicate of ${duplicate.title || duplicate.filename}. Add it as a new document or add it as revision v${duplicate.next_version}?`;
-                    } else {
-                        duplicateMessage.textContent = `${file.name} appears to be a duplicate of ${duplicate.filename || duplicate.title}. Add it as a new document or add it as a revision?`;
-                    }
-                    duplicateModal.classList.add('open');
-                    duplicateModal.setAttribute('aria-hidden', 'false');
+                    openVersionComparison(duplicateContracts[0], file);
                     uploadBtn.disabled = false;
                     updateUploadModeLabel();
                     return;
@@ -634,6 +664,69 @@
         duplicateModal.classList.remove('open');
         duplicateModal.setAttribute('aria-hidden', 'true');
     }
+
+    // Content is compared first: identical content means the file is already
+    // stored, so only a separate document is offered. A shared name is only a
+    // hint, so the uploader compares the first pages and decides.
+    function openVersionComparison(duplicate, file) {
+        const sameContent = duplicate.match_type === 'same_content';
+        const revisionPage = uploadForm.dataset.isRevision === 'true';
+        const name = duplicate.title || duplicate.filename;
+        document.getElementById('duplicate-modal-title').textContent = sameContent
+            ? 'This file is already uploaded'
+            : revisionPage ? 'Confirm the new version' : 'Is this a new version of an existing document?';
+        if (sameContent) {
+            duplicateMessage.textContent = `Its content is identical to “${name}” (current version v${duplicate.current_version}), so a revision would record no changes.`
+                + (revisionPage ? '' : ' Add it as a separate document only if it is a different record.');
+        } else if (revisionPage) {
+            duplicateMessage.textContent = `Compare the first page of the current version with the file you are about to add as revision v${duplicate.next_version} of “${name}”.`;
+        } else {
+            duplicateMessage.textContent = `A document named “${name}” already exists (current version v${duplicate.current_version}), and this file's content is different. Compare the first pages, then add it as revision v${duplicate.next_version} if it updates that document, or as a new document if it is a separate record.`;
+        }
+        const revisionButton = document.getElementById('duplicate-revision-btn');
+        revisionButton.hidden = sameContent;
+        revisionButton.textContent = `Add as revision v${duplicate.next_version}`;
+        const newButton = document.getElementById('duplicate-new-btn');
+        newButton.hidden = revisionPage;
+        newButton.textContent = sameContent ? 'Add as separate document' : 'Add as new document';
+        document.getElementById('duplicate-current-label').textContent = `Current: ${name} (v${duplicate.current_version})`;
+        document.getElementById('duplicate-incoming-label').textContent = `Incoming: ${file.name}`;
+        duplicateModal.classList.add('open');
+        duplicateModal.setAttribute('aria-hidden', 'false');
+        renderFirstPage(fetch(duplicate.current_preview_url, {credentials: 'same-origin'}).then(response => {
+            if (!response.ok) throw new Error('preview unavailable');
+            return response.arrayBuffer();
+        }), 'duplicate-current');
+        renderFirstPage(file.arrayBuffer(), 'duplicate-incoming');
+    }
+
+    let pdfjsModule = null;
+    async function renderFirstPage(bytesPromise, prefix) {
+        const canvas = document.getElementById(prefix + '-canvas');
+        const status = document.getElementById(prefix + '-status');
+        canvas.classList.remove('ready');
+        status.textContent = 'Loading preview…';
+        try {
+            pdfjsModule = pdfjsModule || await import('{% static "contracts/pdfjs/pdf.mjs" %}');
+            pdfjsModule.GlobalWorkerOptions.workerSrc = '{% static "contracts/pdfjs/pdf.worker.mjs" %}';
+            const pdf = await pdfjsModule.getDocument({data: new Uint8Array(await bytesPromise), isEvalSupported: false}).promise;
+            const page = await pdf.getPage(1);
+            const baseViewport = page.getViewport({scale: 1});
+            const viewport = page.getViewport({scale: 320 / baseViewport.width * (window.devicePixelRatio || 1)});
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            canvas.style.width = '320px';
+            await page.render({canvasContext: canvas.getContext('2d'), viewport}).promise;
+            canvas.classList.add('ready');
+        } catch (error) {
+            status.textContent = 'Preview unavailable';
+        }
+    }
+
+    document.getElementById('duplicate-cancel-btn').addEventListener('click', function() {
+        closeDuplicateModal();
+        duplicateCheckComplete = false;
+    });
 
     document.getElementById('authenticated-cancel').addEventListener('click', function() {
         const modal = document.getElementById('authenticated-modal');

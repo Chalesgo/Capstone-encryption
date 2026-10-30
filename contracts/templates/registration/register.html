@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}Create Staff Account{% endblock %}
+{% block title %}{% if resident %}Create Resident Account{% else %}Create Staff Account{% endif %}{% endblock %}
 
 {% block content %}
 <style>
@@ -255,8 +255,8 @@
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                 </svg>
             </span>
-            <h2>{% if not otp_sent %}Let's get your staff account set up.{% else %}Almost there.{% endif %}</h2>
-            <p>{% if not otp_sent %}We'll confirm your email address before your SealGuard account is created.{% else %}Enter the code we just sent to finish creating your account.{% endif %}</p>
+            <h2>{% if otp_sent %}Almost there.{% elif resident %}View published barangay documents.{% else %}Let's get your staff account set up.{% endif %}</h2>
+            <p>{% if otp_sent %}Enter the code we just sent to finish creating your account.{% elif resident %}A resident account lets you view and download documents published by the barangay. Verifying a document never needs one.{% else %}We'll confirm your email address before your SealGuard account is created.{% endif %}</p>
 
             <div class="auth-progress">
                 <div class="auth-progress-step {% if not otp_sent %}current{% else %}done{% endif %}">
@@ -266,7 +266,7 @@
                 <span class="auth-progress-line"></span>
                 <div class="auth-progress-step {% if otp_sent %}current{% endif %}">
                     <span class="auth-progress-dot">2</span>
-                    <span>Verify contact</span>
+                    <span>{% if resident %}Verify email{% else %}Verify contact{% endif %}</span>
                 </div>
             </div>
         </div>
@@ -278,15 +278,20 @@
             <div class="auth-heading"><h1>Invitation required</h1><p>This registration link is missing, expired, or has already been used. Ask an Admin for a new invitation.</p></div>
         {% elif not otp_sent %}
             <div class="auth-heading">
+                {% if resident %}
+                <h1>Create Resident Account</h1>
+                <p>We'll send a 6-digit code to your email to confirm it belongs to you.</p>
+                {% else %}
                 <h1>Create Staff Account</h1>
                 <p>Add your email and mobile number, then choose where to receive your verification code.</p>
+                {% endif %}
             </div>
 
             {% if error %}<div class="auth-error">{{ error }}</div>{% endif %}
 
             <form method="post" class="auth-form">
                 {% csrf_token %}
-                <input type="hidden" name="invite" value="{{ invite }}">
+                {% if not resident %}<input type="hidden" name="invite" value="{{ invite }}">{% endif %}
                 {% for field in form %}
                     {% if field.name == 'channel' %}
                     <div class="form-group channel-field">
@@ -314,9 +319,11 @@
 
             <form method="post" class="auth-form">
                 {% csrf_token %}
+                {% if not resident %}
                 <input type="hidden" name="username" value="{{ form.username.value|default:'' }}">
                 <input type="hidden" name="email" value="{{ email|default:form.email.value }}">
                 <input type="hidden" name="invite" value="{{ invite }}">
+                {% endif %}
                 <div class="form-group">
                     <label for="id_otp">Verification code</label>
                     <input class="otp-input" id="id_otp" name="otp" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="one-time-code" placeholder="&middot;&middot;&middot;&middot;&middot;&middot;">
@@ -324,7 +331,7 @@
                 <p class="otp-sent-to">Code requested for <strong>{{ recipient }}</strong></p>
                 <button class="btn btn-primary auth-submit" type="submit">Verify and create account</button>
             </form>
-            <form method="post" style="margin-top:1rem">{% csrf_token %}<input type="hidden" name="invite" value="{{ invite }}"><button class="btn btn-outline" name="action" value="restart">Change details or request another code</button></form>
+            <form method="post" style="margin-top:1rem">{% csrf_token %}{% if not resident %}<input type="hidden" name="invite" value="{{ invite }}">{% endif %}<button class="btn btn-outline" name="action" value="restart">Change details or request another code</button></form>
         {% endif %}
 
         <p class="auth-footnote">Already have an account? <a href="{% url 'login' %}">Back to sign in</a></p>

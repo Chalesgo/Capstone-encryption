@@ -6,7 +6,7 @@
   <p style="color:#667788">{{ contract.title }}</p>
   <form method="post" enctype="multipart/form-data" class="card" style="display:flex;flex-direction:column;gap:14px">
     {% csrf_token %}
-    <label for="scanned-file">Signed contract PDF</label>
+    <label for="scanned-file">Signed document PDF</label>
     <input id="scanned-file" name="scanned_file" type="file" accept="application/pdf" required>
     <button class="btn btn-primary" type="submit">Register signed version</button>
   </form>

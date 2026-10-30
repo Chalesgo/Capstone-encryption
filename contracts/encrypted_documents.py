@@ -12,7 +12,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods
 
 from .utils import log_activity
-from .access import can_view
+from .access import can_view, is_published, is_resident
 from .models import Contract, ContractVersion, DocumentAccessRequest, DocumentAccessLink
 from .pdf_storage import MAGIC, decrypt_pdf_bytes, PDFDecryptionError
 
@@ -64,7 +64,16 @@ def open_encrypted_document(request):
             if hashlib.sha256(Path(file.path).read_bytes()).hexdigest() != metadata['sha256']:
                 raise ValueError('This document version has changed.')
             target = None
-            if can_view(request.user, contract):
+            if not request.user.is_authenticated and is_published(contract):
+                # Published documents are opened with an account so the view is attributed.
+                return render(request, 'access/open_encrypted.html', {
+                    'error': 'This is a published document. Sign in or create a free resident account to open it.',
+                    'sign_in_required': True,
+                })
+            # Residents read only published documents directly; anything else
+            # needs an approved access request, as for any other requester.
+            resident_blocked = is_resident(request.user) and not is_published(contract)
+            if can_view(request.user, contract) and not resident_blocked:
                 target = reverse('preview_contract_version', args=[version.pk]) if version else reverse('preview_contract', args=[contract.pk])
             else:
                 from .approval_views import _approved, _verified_in_session

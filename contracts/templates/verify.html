@@ -690,65 +690,140 @@
     top: 56px;
     left: 72px;
     bottom: 0;
-    width: 220px;
+    width: 264px;
     background: #f7f6f4;
     border-right: 1px solid #e8e6e2;
-    padding: 24px 16px;
+    padding: 20px 14px 0;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 14px;
     overflow-y: auto;
     z-index: 300;
   }
-  .doc-panel .panel-heading {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: #888;
-    margin-bottom: 8px;
+  .doc-panel-header { display: flex; align-items: flex-start; gap: 10px; padding: 0 2px; }
+  .doc-panel-mark {
+    display: grid; place-items: center; flex-shrink: 0;
+    width: 34px; height: 34px; border-radius: 10px;
+    background: #e8f4ee; color: #1f7a4d;
   }
-  .doc-panel .panel-list { list-style: none; display: flex; flex-direction: column; gap: 2px; }
+  .doc-panel-mark svg { width: 18px; height: 18px; }
+  .doc-panel-heading { min-width: 0; flex: 1; }
+  .doc-panel .panel-heading {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 14px; font-weight: 700; color: #1a1a2e; margin: 0;
+  }
+  .doc-panel-count {
+    padding: 1px 8px; border-radius: 999px;
+    background: #fff; border: 1px solid #e3dfd8;
+    font-size: 11px; font-weight: 600; color: #667788;
+  }
+  .doc-panel-subtitle { margin: 3px 0 0; font-size: 11.5px; line-height: 1.45; color: #8a94a6; }
+  .doc-panel-search { position: relative; display: block; }
+  .doc-panel-search svg {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    width: 14px; height: 14px; color: #99a3b3; pointer-events: none;
+  }
+  .doc-panel-search input {
+    width: 100%; padding: 8px 10px 8px 30px;
+    border: 1px solid #e3dfd8; border-radius: 9px; background: #fff;
+    font: 12.5px 'Segoe UI', system-ui, sans-serif; color: #1a1a2e;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .doc-panel-search input:focus { outline: none; border-color: #f4a34d; box-shadow: 0 0 0 3px rgba(244,163,77,.18); }
+  .doc-panel-sr-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .doc-panel .panel-list { list-style: none; display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; }
   .doc-panel .panel-item {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
-    border-radius: 8px;
-    font-size: 13px;
-    color: #444;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px;
+    border: 1px solid #ebe8e3;
+    border-radius: 10px;
+    background: #fff;
     cursor: pointer;
-    transition: background 0.15s;
+    transition: border-color .15s, box-shadow .15s, transform .15s;
   }
-  .doc-panel .panel-item:hover { background: #eceae6; }
+  .doc-panel .panel-item[hidden] { display: none; }
+  .doc-panel .panel-item:hover { border-color: #d9d3c9; box-shadow: 0 2px 8px rgba(30,40,50,.07); transform: translateY(-1px); }
+  .doc-panel .panel-item:focus-visible { outline: none; border-color: #f4a34d; box-shadow: 0 0 0 3px rgba(244,163,77,.22); }
+  .doc-panel .panel-item.active { border-color: #f4a34d; background: #fff8f0; box-shadow: 0 1px 4px rgba(244,163,77,.22); }
   .doc-panel .panel-list .panel-item {
     content-visibility: auto;
-    contain-intrinsic-size: 32px;
+    contain-intrinsic-size: 62px;
   }
-  .doc-panel .panel-item svg { width: 16px; height: 16px; flex-shrink: 0; color: #889aab; }
+  .doc-panel .panel-item-icon {
+    display: grid; place-items: center; flex-shrink: 0;
+    width: 30px; height: 30px; border-radius: 8px;
+    background: #f1f4f8; color: #2057a0;
+  }
+  .doc-panel .panel-item.active .panel-item-icon { background: #f4a34d; color: #fff; }
+  .doc-panel .panel-item svg { width: 15px; height: 15px; flex-shrink: 0; }
+  .doc-panel .panel-item-body { min-width: 0; flex: 1; display: grid; gap: 4px; }
   .doc-panel .panel-item-title {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size: 12.5px; font-weight: 600; line-height: 1.35; color: #1a1a2e;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; overflow-wrap: anywhere;
   }
-  .doc-panel-empty { font-size: 12.5px; color: #aabbcc; padding: 8px 10px; }
+  .doc-panel .panel-item-meta { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8a94a6; }
+  .doc-panel .panel-item-version {
+    padding: 0 6px; border-radius: 5px; background: #e8f4ee;
+    color: #1f7a4d; font-weight: 700; font-size: 10.5px;
+  }
+  .doc-panel-empty {
+    display: grid; justify-items: center; gap: 6px; text-align: center;
+    padding: 22px 12px; border: 1px dashed #dcd7cf; border-radius: 10px;
+    font-size: 12px; line-height: 1.5; color: #8a94a6;
+  }
+  .doc-panel-empty svg { width: 22px; height: 22px; color: #b3bbc7; }
+  .doc-panel-no-match { display: none; }
+  .doc-panel-no-match.show { display: grid; }
+  .doc-panel-account {
+    position: sticky; bottom: 0; margin: auto -14px 0; padding: 12px 14px 16px;
+    background: linear-gradient(to bottom, rgba(247,246,244,0), #f7f6f4 18px);
+  }
+  .doc-panel-account-card {
+    display: grid; gap: 8px; padding: 12px;
+    border: 1px solid #ebe8e3; border-radius: 12px; background: #fff;
+    box-shadow: 0 1px 4px rgba(30,40,50,.05);
+  }
+  .doc-panel-account-card p { margin: 0; font-size: 11.5px; line-height: 1.5; color: #667788; }
+  .doc-panel-account-card strong { color: #1a1a2e; font-size: 12.5px; }
+  .doc-panel-account-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .doc-panel-account-actions a {
+    display: inline-flex; justify-content: center; align-items: center;
+    padding: 7px 8px; border-radius: 8px; border: 1px solid #e3dfd8;
+    font-size: 12px; font-weight: 600; text-decoration: none; color: #1a1a2e; background: #fff;
+  }
+  .doc-panel-account-actions a.primary { background: #1a1a2e; border-color: #1a1a2e; color: #fff; }
+  .doc-panel-resident { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .doc-panel-avatar {
+    display: grid; place-items: center; flex-shrink: 0;
+    width: 32px; height: 32px; border-radius: 50%;
+    background: #f4a34d; color: #fff; font-size: 12px; font-weight: 700;
+  }
+  .doc-panel-resident-text { min-width: 0; }
+  .doc-panel-resident-text strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .doc-panel-resident-text small { display: block; font-size: 11px; color: #8a94a6; }
   .public-doc-pagination {
     display: flex;
+    align-items: center;
     justify-content: space-between;
     gap: 8px;
-    margin-top: 12px;
-    padding: 0 4px;
     color: #889aab;
     font-size: 11px;
   }
-  .public-doc-pagination a { color: #556270; text-decoration: none; font-weight: 600; }
+  .public-doc-pagination a {
+    padding: 5px 10px; border: 1px solid #e3dfd8; border-radius: 8px; background: #fff;
+    color: #445566; text-decoration: none; font-weight: 600;
+  }
+  .public-doc-pagination a:hover { border-color: #d3cabb; }
 
   .mobile-doc-toggle,
   .mobile-doc-overlay {
     display: none;
   }
 
-  .verify-page-wrap { margin-left: 240px; min-width: 0; }
+  .verify-page-wrap { margin-left: 284px; min-width: 0; }
   .verify-page-header,
   #upload-card,
   #results-section,
@@ -946,8 +1021,23 @@
 
 <div class="mobile-doc-overlay" id="mobile-doc-overlay" aria-hidden="true" onclick="closePublicDocsDrawer()"></div>
 
-<aside class="doc-panel" id="public-doc-panel">
-  <p class="panel-heading">Verified Contracts</p>
+<aside class="doc-panel" id="public-doc-panel" aria-label="Verified procurement documents">
+  <div class="doc-panel-header">
+    <span class="doc-panel-mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+    </span>
+    <div class="doc-panel-heading">
+      <p class="panel-heading">Verified Documents <span class="doc-panel-count">{{ public_page_obj.paginator.count }}</span></p>
+      <p class="doc-panel-subtitle">Final procurement documents published by Barangay Sto. Ni&ntilde;o</p>
+    </div>
+  </div>
+  {% if public_contracts %}
+  <label class="doc-panel-search">
+    <span class="doc-panel-sr-label">Filter verified documents</span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input type="search" id="public-doc-filter" placeholder="Filter by title" autocomplete="off" oninput="filterPublicDocs(this.value)">
+  </label>
+  {% endif %}
   <ul class="panel-list">
     {% for item in public_contracts %}
     <li class="panel-item" data-contract-id="{{ item.contract.id }}"
@@ -958,22 +1048,51 @@
         data-encrypted="{% if item.meta.encrypted %}{{ item.meta.encrypted|date:'M j, Y' }}{% else %}—{% endif %}"
         data-verified="{% if item.meta.verified %}{{ item.meta.verified|date:'M j, Y' }}{% else %}Not yet verified{% endif %}"
         data-version="v{{ item.meta.version }}"
-        onclick="openPublicPdfPreview(this)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-        <polyline points="14 2 14 8 20 8"/>
-      </svg>
-      <span class="panel-item-title">{{ item.contract.title }}</span>
+        role="button" tabindex="0"
+        onclick="openPublicPdfPreview(this)"
+        onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openPublicPdfPreview(this); }">
+      <span class="panel-item-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+          <polyline points="14 2 14 8 20 8"/><path d="m9 15 2 2 4-4"/>
+        </svg>
+      </span>
+      <span class="panel-item-body">
+        <span class="panel-item-title">{{ item.contract.title }}</span>
+        <span class="panel-item-meta"><span class="panel-item-version">v{{ item.meta.version }}</span><span>{% if item.meta.encrypted %}{{ item.meta.encrypted|date:'M j, Y' }}{% else %}{{ item.meta.created|date:'M j, Y' }}{% endif %}</span></span>
+      </span>
     </li>
     {% empty %}
-    <li class="doc-panel-empty">No verified contracts published yet.</li>
+    <li class="doc-panel-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+      No verified documents published yet.
+    </li>
     {% endfor %}
+    <li class="doc-panel-empty doc-panel-no-match" id="public-doc-no-match">No titles on this page match your filter.</li>
   </ul>
   {% if public_page_obj.paginator.count > 20 %}
   <div class="public-doc-pagination">
-    {% if public_page_obj.has_previous %}<a href="?page={{ public_page_obj.previous_page_number }}">Previous</a>{% endif %}
+    {% if public_page_obj.has_previous %}<a href="?page={{ public_page_obj.previous_page_number }}">Previous</a>{% else %}<span></span>{% endif %}
     <span>Page {{ public_page_obj.number }} of {{ public_page_obj.paginator.num_pages }}</span>
-    {% if public_page_obj.has_next %}<a href="?page={{ public_page_obj.next_page_number }}">Next</a>{% endif %}
+    {% if public_page_obj.has_next %}<a href="?page={{ public_page_obj.next_page_number }}">Next</a>{% else %}<span></span>{% endif %}
+  </div>
+  {% endif %}
+  {% if not user.is_authenticated or is_resident %}
+  <div class="doc-panel-account">
+    <div class="doc-panel-account-card">
+      {% if is_resident %}
+      <div class="doc-panel-resident">
+        <span class="doc-panel-avatar" aria-hidden="true">{% if user.first_name %}{{ user.first_name|slice:":1"|upper }}{{ user.last_name|slice:":1"|upper }}{% else %}{{ user.email|slice:":2"|upper }}{% endif %}</span>
+        <span class="doc-panel-resident-text"><strong>Signed in as {{ user.get_full_name|default:user.email }}</strong><small>Resident account</small></span>
+      </div>
+      {% else %}
+      <p><strong>View the documents</strong><br>Viewing and downloading published documents needs a free account. Verifying a document never needs one.</p>
+      <div class="doc-panel-account-actions">
+        <a class="primary" href="{% url 'login' %}?next={% url 'public_verify' %}">Sign in</a>
+        <a href="{% url 'resident_register' %}">Create account</a>
+      </div>
+      {% endif %}
+    </div>
   </div>
   {% endif %}
 </aside>
@@ -1001,7 +1120,7 @@
       <iframe class="pdf-frame" id="public-pdf-frame" src=""></iframe>
     </div>
     <div class="pdf-sidebar">
-      <p class="pdf-sidebar-title" id="public-pdf-title">Contract</p>
+      <p class="pdf-sidebar-title" id="public-pdf-title">Document</p>
       <p class="sidebar-section-label">Document Info</p>
       <div class="meta-list">
         <div class="meta-row"><span class="meta-row-label">Created</span><span class="meta-row-value" id="public-pdf-created">—</span></div>
@@ -1016,7 +1135,7 @@
             <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
             <line x1="1" y1="1" x2="23" y2="23"/>
           </svg>
-          Remove from Public Verified Contracts
+          Remove from Public Verified Documents
         </button>
       </div>
       {% endif %}
@@ -1043,7 +1162,7 @@
             </svg>
         </div>
         <h1>SealGuard</h1>
-        <p>Verify the authenticity of a Barangay Sto. Niño procurement contract</p>
+        <p>Verify the authenticity of a Barangay Sto. Niño procurement document</p>
     </div>
 
     <!-- Upload Card -->
@@ -1053,7 +1172,7 @@
             {% csrf_token %}
 
             <div class="upload-area" id="upload-area" role="button" tabindex="0"
-                 aria-label="Choose a PDF contract to verify">
+                 aria-label="Choose a PDF document to verify">
                 <div class="upload-icon">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
                          stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1064,7 +1183,7 @@
                     </svg>
                 </div>
                 <div class="upload-label">Click to upload PDF</div>
-                <div class="upload-sub">or drag and drop your contract here</div>
+                <div class="upload-sub">or drag and drop your document here</div>
                 <span class="upload-hint">PDF only</span>
                 <input type="file" name="pdf_file" id="pdf_file" accept="application/pdf,.pdf" required>
             </div>
@@ -1101,7 +1220,7 @@
     <div id="loading-screen" style="display:none;">
         <div class="verify-layout">
 
-            <!-- Document preview (the uploaded "working contract") -->
+            <!-- Document preview (the uploaded "working copy") -->
             <div class="doc-preview-panel">
                 <div class="doc-preview-header">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
@@ -1378,7 +1497,7 @@
         </div>
         <div>
             <div class="scan-option-title">Have a physical copy?</div>
-            <div class="scan-option-sub">Scan the QR code on the contract instead</div>
+            <div class="scan-option-sub">Scan the QR code on the printed document instead</div>
         </div>
         <svg class="scan-option-chevron" width="16" height="16"
              viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -1484,8 +1603,15 @@ function cancelVerification() {
 let currentPublicContractId = null;
 
 function openPublicPdfPreview(el) {
+  {% if not user.is_authenticated %}
+  // Published documents are viewed with an account so each view is attributed.
+  location.href = '{% url 'login' %}?next={% url 'public_verify' %}';
+  return;
+  {% endif %}
   closePublicDocsDrawer();
   currentPublicContractId = el.dataset.contractId;
+  document.querySelectorAll('.doc-panel .panel-item.active').forEach(item => item.classList.remove('active'));
+  el.classList.add('active');
   if (openPdfInMobileViewer(el.dataset.url)) return;
   const publicViewerUrl = new URL(sealGuardPdfFrameUrl(el.dataset.url), location.href);
   publicViewerUrl.searchParams.set('hide_sidebar', '1');
@@ -1508,6 +1634,18 @@ function closePublicPdfPreview() {
   document.getElementById('public-pdf-overlay').setAttribute('aria-hidden', 'true');
   document.getElementById('public-pdf-frame').src = '';
   currentPublicContractId = null;
+  document.querySelectorAll('.doc-panel .panel-item.active').forEach(item => item.classList.remove('active'));
+}
+
+function filterPublicDocs(query) {
+  const needle = query.trim().toLowerCase();
+  let shown = 0;
+  document.querySelectorAll('.doc-panel .panel-item').forEach(item => {
+    const match = !needle || item.querySelector('.panel-item-title').textContent.toLowerCase().includes(needle);
+    item.hidden = !match;
+    if (match) shown += 1;
+  });
+  document.getElementById('public-doc-no-match').classList.toggle('show', shown === 0 && needle !== '');
 }
 
 document.addEventListener('keydown', function(event) {
@@ -1561,9 +1699,17 @@ function removeFromPublicVerify() {
       const item = document.querySelector('.panel-item[data-contract-id="' + currentPublicContractId + '"]');
       if (item) item.remove();
 
+      const count = document.querySelector('.doc-panel-count');
+      if (count) count.textContent = Math.max(0, Number(count.textContent) - 1);
       const list = document.querySelector('.doc-panel .panel-list');
-      if (list && list.children.length === 0) {
-        list.innerHTML = '<li class="doc-panel-empty">No verified contracts published yet.</li>';
+      if (list && !list.querySelector('.panel-item')) {
+        const empty = document.createElement('li');
+        empty.className = 'doc-panel-empty';
+        empty.textContent = 'No verified documents published yet.';
+        list.prepend(empty);
+        const filter = document.querySelector('.doc-panel-search');
+        if (filter) filter.remove();
+        document.getElementById('public-doc-no-match').classList.remove('show');
       }
 
       closePublicPdfPreview();
@@ -1668,7 +1814,7 @@ document.getElementById('verify-form').addEventListener('submit', function(e) {
                 "Redacting cryptographic values from the verification log...",
                 "Comparing extracted fingerprint against database records...",
                 "Cross-referencing document metadata with stored signatures...",
-                "Checking that the matched contract is active and not in trash...",
+                "Checking that the matched document is active and not in trash...",
                 "Removing the temporary verification file...",
                 "Finalizing authenticity determination...",
             ];

@@ -242,6 +242,7 @@ class Contract(models.Model):
     base_filename = models.CharField(max_length=200, blank=True, help_text="Original filename (no extension), reused across versions")
     is_trashed = models.BooleanField(default=False)
     trashed_at = models.DateTimeField(null=True, blank=True)
+    trash_reason = models.CharField(max_length=300, blank=True)
 
     def tag_list(self):
         return [t.strip() for t in self.tags.split(',') if t.strip()]

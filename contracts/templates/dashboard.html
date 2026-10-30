@@ -56,6 +56,11 @@
     color: #889aab;
     margin-top: 4px;
   }
+  .resident-top-title {
+    font-size: 16px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
   .stat-card-top svg {
     width: 16px;
     height: 16px;
@@ -695,6 +700,25 @@
     <div class="stat-card-sub">Requires review</div>
   </div>
 </div>
+{% if resident_stats %}
+<div class="stat-cards resident-stats" aria-label="Resident activity">
+  <div class="stat-card">
+    <div class="stat-card-top"><span>Resident Accounts</span></div>
+    <div class="stat-card-value">{{ resident_stats.accounts }}</div>
+    <div class="stat-card-sub">{{ resident_stats.new_accounts }} new in the last {{ resident_stats.days }} days</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-top"><span>Resident Views / Downloads</span></div>
+    <div class="stat-card-value">{{ resident_stats.views }} / {{ resident_stats.downloads }}</div>
+    <div class="stat-card-sub">Published documents, last {{ resident_stats.days }} days</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-top"><span>Most Viewed by Residents</span></div>
+    <div class="stat-card-value resident-top-title">{% if resident_stats.most_viewed_title %}{{ resident_stats.most_viewed_title }}{% else %}&mdash;{% endif %}</div>
+    <div class="stat-card-sub">{% if resident_stats.most_viewed_title %}{{ resident_stats.most_viewed_total }} views and downloads{% else %}No resident activity yet{% endif %}</div>
+  </div>
+</div>
+{% endif %}
 <div class="audit-panel">
   <div class="audit-panel-header">
     <div class="audit-panel-heading" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
@@ -1119,7 +1143,7 @@ function loadAuditVersions(contractId, selectedVersion) {
   const list = document.getElementById('audit-pdf-version-list');
   if (!list) return;
   if (!contractId) {
-    list.innerHTML = '<div class="audit-version-loading">No contract is linked to this activity.</div>';
+    list.innerHTML = '<div class="audit-version-loading">No document is linked to this activity.</div>';
     return;
   }
   list.innerHTML = '<div class="audit-version-loading">Loading versions...</div>';

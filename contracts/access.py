@@ -22,6 +22,25 @@ def is_read_only_user(user):
     return user.is_authenticated and user.is_active and not user.is_staff and not user.is_superuser
 
 
+RESIDENT_GROUP = 'SealGuard Resident'
+
+
+def is_resident(user):
+    """Self-registered resident: verification pages and published documents only."""
+    if not (user.is_authenticated and user.is_active) or user.is_staff or user.is_superuser:
+        return False
+    cached = getattr(user, '_sealguard_is_resident', None)
+    if cached is None:
+        cached = user.groups.filter(name=RESIDENT_GROUP).exists()
+        user._sealguard_is_resident = cached
+    return cached
+
+
+def is_published(contract):
+    """Listed in Public Verified Documents: a Final copy that is public."""
+    return contract.is_public and contract.status == 'final' and not contract.is_trashed
+
+
 def managed_contracts(user):
     if user is None or not user.is_authenticated or not user.is_active:
         return Contract.objects.none()

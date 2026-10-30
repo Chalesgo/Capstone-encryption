@@ -546,7 +546,7 @@ class AuditLogTests(TestCase):
         self.assertContains(response, '<nav class="mobile-nav" aria-label="Mobile navigation">')
         self.assertContains(response, '.sidebar { display: none; }')
         self.assertContains(response, 'body { padding-left: 0; }')
-        self.assertContains(response, 'title="Contracts" aria-label="Contracts"')
+        self.assertContains(response, 'title="Procurement Documents" aria-label="Procurement Documents"')
         self.assertContains(response, 'id="contracts-doc-toggle"')
         self.assertContains(response, 'id="profile-trigger"')
         self.assertNotContains(response, 'title="Logout" aria-label="Logout"')
@@ -810,7 +810,7 @@ class AuthenticationMatrixTests(TestCase):
             username=self.clerk.username,
             password=self.password,
         ))
-        denied = clerk_client.post(reverse('delete_contract', args=[contract.id]))
+        denied = clerk_client.post(reverse('delete_contract', args=[contract.id]), {'reason': 'duplicate'})
         self.assertEqual(denied.status_code, 302)
         contract.refresh_from_db()
         self.assertFalse(contract.is_trashed)
@@ -821,7 +821,7 @@ class AuthenticationMatrixTests(TestCase):
             username=self.clerk.username,
             password=self.password,
         ))
-        allowed = clerk_client.post(reverse('delete_contract', args=[contract.id]))
+        allowed = clerk_client.post(reverse('delete_contract', args=[contract.id]), {'reason': 'duplicate'})
         self.assertEqual(allowed.status_code, 302)
         contract.refresh_from_db()
         self.assertTrue(contract.is_trashed)
@@ -1192,7 +1192,7 @@ class DocumentManagementTests(TestCase):
         for number in range(10):
             contract = self.make_contract(number, self.staff)
             with self.subTest(contract=contract.id):
-                archived = self.client.post(reverse('delete_contract', args=[contract.id]))
+                archived = self.client.post(reverse('delete_contract', args=[contract.id]), {'reason': 'duplicate'})
                 self.assertEqual(archived.status_code, 302)
                 contract.refresh_from_db()
                 self.assertTrue(contract.is_trashed)
@@ -1202,7 +1202,7 @@ class DocumentManagementTests(TestCase):
                 contract.refresh_from_db()
                 self.assertFalse(contract.is_trashed)
 
-                archived_again = self.client.post(reverse('delete_contract', args=[contract.id]))
+                archived_again = self.client.post(reverse('delete_contract', args=[contract.id]), {'reason': 'duplicate'})
                 self.assertEqual(archived_again.status_code, 302)
                 contract.refresh_from_db()
                 self.assertTrue(contract.is_trashed)
@@ -1296,58 +1296,77 @@ class DocumentManagementTests(TestCase):
                 self.assertEqual(response.json()['duplicates'][0]['match_type'], 'same_content')
         self.assertEqual(Contract.objects.count(), 1)
 
-    def test_same_filename_is_detected_before_content_and_becomes_revision(self):
-        existing = self.make_contract(60, self.staff)
-        existing.title = '06_blank_page_contract'
-        existing.base_filename = '06_blank_page_contract'
-        existing.save(update_fields=['title', 'base_filename'])
+    def make_named_contract(self, number, name):
+        contract = self.make_contract(number, self.staff)
+        contract.title = name
+        contract.base_filename = name
+        contract.save(update_fields=['title', 'base_filename'])
         ContractVersion.objects.create(
-            contract=existing,
-            version_number=1,
-            source='upload',
-            file=existing.file.name,
-            created_by=self.staff,
+            contract=contract, version_number=1, source='upload',
+            file=contract.file.name, created_by=self.staff,
         )
+        return contract
 
-        changed_document = fitz.open()
-        changed_document.new_page().insert_text((72, 72), 'Changed revision contents')
-        changed_pdf = changed_document.tobytes()
-        changed_document.close()
+    @staticmethod
+    def pdf_with_text(text):
+        document = fitz.open()
+        document.new_page().insert_text((72, 72), text)
+        data = document.tobytes()
+        document.close()
+        return data
 
-        duplicate_check = self.client.post(
-            reverse('check_duplicate_upload'),
-            {
-                'title': '06_blank_page_contract',
-                'file': SimpleUploadedFile(
-                    '06_blank_page_contract.pdf', changed_pdf, content_type='application/pdf'
-                ),
-            },
-        )
+    def test_same_name_is_only_a_suggestion_and_never_creates_a_revision(self):
+        existing = self.make_named_contract(60, '06_blank_page_contract')
+        changed_pdf = self.pdf_with_text('Changed revision contents')
+
+        duplicate_check = self.client.post(reverse('check_duplicate_upload'), {
+            'title': '06_blank_page_contract',
+            'file': SimpleUploadedFile('06_blank_page_contract.pdf', changed_pdf, content_type='application/pdf'),
+        })
         match = duplicate_check.json()['duplicates'][0]
-        self.assertEqual(match['id'], existing.id)
-        self.assertEqual(match['match_type'], 'same_name')
-        self.assertEqual(match['next_version'], 2)
+        self.assertEqual((match['id'], match['match_type']), (existing.id, 'same_name'))
+        self.assertEqual((match['current_version'], match['next_version']), (1, 2))
+        self.assertEqual(match['current_preview_url'],
+                         reverse('preview_contract_version', args=[existing.versions.get().pk]))
 
-        with patch('contracts.views.add_revision', return_value=HttpResponse(status=204)) as revision:
-            response = self.client.post(
-                reverse('upload_contract'),
-                {
-                    'title': '06_blank_page_contract',
-                    'file': SimpleUploadedFile(
-                        '06_blank_page_contract.pdf', changed_pdf, content_type='application/pdf'
-                    ),
-                },
-            )
-
-        self.assertEqual(response.status_code, 204)
-        revision.assert_called_once()
-        self.assertEqual(revision.call_args.args[1], existing.id)
+        with patch('contracts.views.add_revision') as revision:
+            response = self.client.post(reverse('upload_contract'), {
+                'title': '06_blank_page_contract',
+                'file': SimpleUploadedFile('06_blank_page_contract.pdf', changed_pdf, content_type='application/pdf'),
+            })
+        revision.assert_not_called()
+        self.assertContains(response, 'This file matches')
         self.assertEqual(Contract.objects.count(), 1)
+        self.assertEqual(existing.versions.count(), 1)
 
         upload_page = self.client.get(reverse('upload_contract'))
-        self.assertContains(upload_page, 'Add it as a new document or add it as revision')
-        self.assertContains(upload_page, 'id="duplicate-new-btn"')
-        self.assertContains(upload_page, 'id="duplicate-revision-btn"')
+        for marker in ('id="duplicate-current-canvas"', 'id="duplicate-incoming-canvas"',
+                       'id="duplicate-new-btn"', 'id="duplicate-revision-btn"', 'contracts/pdfjs/pdf.mjs'):
+            self.assertContains(upload_page, marker)
+
+    def test_identical_content_is_reported_before_a_shared_name(self):
+        pdf_bytes = self.pdf_with_text('Identical content fixture')
+        pdf_path = Path(self.media_directory.name) / 'identical.pdf'
+        pdf_path.write_bytes(pdf_bytes)
+        same_content = self.make_named_contract(61, 'Supply agreement')
+        same_content.original_fingerprint = generate_canonical_fingerprint(pdf_path)
+        same_content.save(update_fields=['original_fingerprint'])
+        same_name = self.make_named_contract(62, 'renamed_copy')
+
+        response = self.client.post(reverse('check_duplicate_upload'), {
+            'title': 'renamed_copy',
+            'file': SimpleUploadedFile('renamed_copy.pdf', pdf_bytes, content_type='application/pdf'),
+        })
+        matches = response.json()['duplicates']
+        self.assertEqual([(m['id'], m['match_type']) for m in matches],
+                         [(same_content.id, 'same_content'), (same_name.id, 'same_name')])
+
+    def test_revision_page_compares_against_the_current_version(self):
+        existing = self.make_named_contract(63, 'Road repair contract')
+        page = self.client.get(reverse('add_revision', args=[existing.id]))
+        self.assertContains(page, 'id="revision-target"')
+        self.assertContains(page, reverse('preview_contract_version', args=[existing.versions.get().pk]))
+        self.assertContains(page, 'Confirm the new version')
 
     def test_doc12_report_filter_and_export_matrix(self):
         contract = self.make_contract(1, self.staff)
@@ -1428,6 +1447,47 @@ class DocumentManagementTests(TestCase):
         self.assertEqual(encrypted.json()['encrypted'], 1)
         self.assertEqual(encrypted.json()['already_encrypted'], 1)
         encrypt.assert_called_once()
+
+    def assert_publicly_listed(self, contract, listed):
+        public_page = Client().get(reverse('public_verify'))
+        public_ids = {item['contract'].id for item in public_page.context['public_contracts']}
+        self.assertEqual(contract.id in public_ids, listed)
+
+    def test_returning_final_copy_to_draft_removes_it_from_public_view(self):
+        contract = self.make_contract(301, self.admin)
+        self.client.post(reverse('update_status', args=[contract.id]), {'status': 'final'})
+        contract.refresh_from_db()
+        self.assertTrue(contract.is_public)
+        self.assert_publicly_listed(contract, True)
+
+        self.client.post(reverse('update_status', args=[contract.id]), {'status': 'pending'})
+        contract.refresh_from_db()
+        self.assertEqual((contract.status, contract.is_public), ('pending', False))
+        self.assert_publicly_listed(contract, False)
+        self.assertTrue(AuditLog.objects.filter(
+            contract=contract, note__contains='removed from public verified documents',
+        ).exists())
+
+    def test_bulk_return_to_draft_removes_documents_from_public_view(self):
+        first = self.make_contract(302, self.admin)
+        second = self.make_contract(303, self.admin)
+        ids = [first.id, second.id]
+        self.client.post(reverse('bulk_update_status'), {'ids': ids, 'status': 'final'})
+        response = self.client.post(reverse('bulk_update_status'), {'ids': ids, 'status': 'pending'})
+        self.assertEqual(response.json()['updated'], 2)
+        self.assertFalse(Contract.objects.filter(pk__in=ids, is_public=True).exists())
+        self.assert_publicly_listed(first, False)
+
+    def test_draft_cannot_be_made_public_directly(self):
+        contract = self.make_contract(304, self.admin)
+        response = self.client.post(
+            reverse('publish_contract', args=[contract.id]),
+            data=json.dumps({'is_public': True}), content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()['error'], 'final_copy_required')
+        contract.refresh_from_db()
+        self.assertFalse(contract.is_public)
 
     def test_bulk_toolbar_allows_document_administrators(self):
         self.make_contract(203, self.staff)
@@ -1936,7 +1996,7 @@ class PublicVerificationCryptoTests(TestCase):
         result, debug_log = self.verify()
 
         self.assertEqual(result, 'authentic', debug_log)
-        self.assertIn('[PASS] Metadata marker belongs to the matched contract', debug_log)
+        self.assertIn('[PASS] Metadata marker belongs to the matched document', debug_log)
         self.assertIn('[PASS] Original fingerprint decrypted with AES-256-CBC and HMAC-SHA256 verified', debug_log)
         self.assertEqual(AuditLog.objects.get(action='viewed').contract, self.contract)
 
@@ -2219,8 +2279,11 @@ class PublicVerificationCryptoTests(TestCase):
         enrolled = []
         for number in range(30):
             raw = build_pdf(number, profiles[number % len(profiles)])
+            # Several controls share identical content on purpose, so each is
+            # enrolled as a separate document, as the uploader would choose.
             response = self.client.post(reverse('upload_contract'), {
                 'title': f'Accuracy control {number}',
+                'force_new': '1',
                 'file': SimpleUploadedFile(
                     f'accuracy-control-{number}.pdf', raw,
                     content_type='application/pdf',
@@ -2550,10 +2613,15 @@ class PhysicalVerificationTests(TestCase):
         self.assertContains(response, 'class="fab-icon"')
         self.assertNotContains(response, '&#128247;')
 
-    def test_physical_qr_check_confirms_registered_page_before_full_verification(self):
-        response = self.client.post(reverse('verify_physical_qr'), {
-            'qr_token': self.tokens[0],
+    def scan_qr(self, page_index, pdf_bytes=None):
+        """Post a page QR together with the camera frame it was read from."""
+        return self.client.post(reverse('verify_physical_qr'), {
+            'qr_token': self.tokens[page_index],
+            'qr_frame': self.scan_frame(pdf_bytes or self.pdf_bytes, page_index),
         })
+
+    def test_physical_qr_check_confirms_registered_page_before_full_verification(self):
+        response = self.scan_qr(0)
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertTrue(payload['valid'])
@@ -2573,7 +2641,7 @@ class PhysicalVerificationTests(TestCase):
     def test_physical_qr_preview_contains_only_the_scanned_version_page(self):
         # A newer version must not replace the page identified by the old QR.
         self.issue_document('New revision', ['Different newer page'], contract=self.contract, version_number=2)
-        response = self.client.post(reverse('verify_physical_qr'), {'qr_token': self.tokens[1]})
+        response = self.scan_qr(1)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Cache-Control'], 'private, no-store')
         data = response.json()
@@ -2666,16 +2734,70 @@ class PhysicalVerificationTests(TestCase):
         self.assertEqual(response.context['result'], 'invalid')
         self.assertEqual(response.context['details']['submitted_order'], [1, 3, 2])
 
-    def test_missing_page_is_reported(self):
+    def test_captured_pages_must_match_the_scanned_codes(self):
         response = self.verify(self.tokens[:2])
         self.assertEqual(response.context['result'], 'invalid')
-        self.assertEqual(response.context['details']['missing_pages'], [3])
+        self.assertIn('3 page(s) were captured for 2 scanned QR code(s)', response.context['details']['message'])
 
-    def test_duplicate_page_and_missing_page_are_reported(self):
+    def test_only_the_scanned_pages_need_to_be_captured(self):
+        def keep_pages_three_and_one(document):
+            document.select([2, 0])
+        response = self.verify(
+            [self.tokens[2], self.tokens[0]], pdf_bytes=self.mutate_pdf(keep_pages_three_and_one)
+        )
+        details = response.context['details']
+        self.assertEqual(response.context['result'], 'verified')
+        self.assertEqual((details['checked_pages'], details['unchecked_pages']), ([1, 3], [2]))
+        self.assertIn('The other 1 page(s) were not checked', details['message'])
+        self.assertContains(response, 'Pages checked: 1, 3 of 3 (1 not checked)')
+        self.assertTrue(AuditLog.objects.filter(note__contains='pages checked=2/3').exists())
+
+    def test_duplicate_page_is_reported(self):
         response = self.verify([self.tokens[0], self.tokens[1], self.tokens[1]])
         self.assertEqual(response.context['result'], 'invalid')
         self.assertEqual(response.context['details']['duplicate_pages'], [2])
-        self.assertEqual(response.context['details']['missing_pages'], [3])
+
+    def scan_frame(self, pdf_bytes, page_index):
+        """Render one page the way a phone camera frame shows it."""
+        with fitz.open(stream=pdf_bytes, filetype='pdf') as document:
+            png = document[page_index].get_pixmap(dpi=200).tobytes('png')
+        return SimpleUploadedFile('qr-frame.png', png, content_type='image/png')
+
+    def test_scanned_qr_that_was_drawn_on_is_rejected_without_showing_the_page(self):
+        # The code still decodes, but the page must not open for a defaced QR.
+        marked = self.mark_qr(1, [(.3, .3, .7, .7), (.7, .3, .3, .7)], width=4)
+        response = self.scan_qr(1, marked)
+        payload = response.json()
+        self.assertEqual(response.status_code, 422)
+        self.assertFalse(payload['valid'])
+        self.assertTrue(payload['tampered'])
+        self.assertIn('has been drawn on or damaged', payload['message'])
+        self.assertNotIn('page_pdf_url', payload)
+        self.assertNotIn('thumbnail', payload)
+        self.assertTrue(AuditLog.objects.filter(
+            action='reported_tampering', note__contains='page 2; condition=altered',
+        ).exists())
+
+    def test_scanned_qr_with_a_small_mark_is_rejected(self):
+        marked = self.mark_qr(2, [(.55, .55, .7, .62)], width=2.4)
+        payload = self.scan_qr(2, marked).json()
+        self.assertTrue(payload['tampered'])
+
+    def test_clean_scanned_qr_opens_its_page(self):
+        payload = self.scan_qr(0).json()
+        self.assertTrue(payload['valid'])
+        self.assertEqual(payload['qr_condition'], 'intact')
+        self.assertIn('page_pdf_url', payload)
+
+    def test_scanned_qr_is_held_until_its_condition_can_be_checked(self):
+        for frame in (None, SimpleUploadedFile('qr-frame.jpg', b'not an image', content_type='image/jpeg')):
+            data = {'qr_token': self.tokens[0]}
+            if frame:
+                data['qr_frame'] = frame
+            payload = self.client.post(reverse('verify_physical_qr'), data).json()
+            self.assertEqual((payload['valid'], payload.get('retry')), (False, True))
+            self.assertNotIn('page_pdf_url', payload)
+        self.assertFalse(AuditLog.objects.filter(action='reported_tampering').exists())
 
     def test_incorrect_total_page_information_is_invalid(self):
         payload = json.loads(base64.urlsafe_b64decode(

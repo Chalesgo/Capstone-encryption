@@ -8,6 +8,10 @@
       <button type="button" class="btn btn-primary" id="registered-page-close" autofocus>Continue</button>
     </header>
     <p class="registered-page-note">Compare this registered page with your printed copy. A matching QR identifies the page; it does not verify the printed contents.</p>
+    <div class="registered-page-actions" id="registered-page-actions" hidden>
+      <span id="registered-page-progress"></span>
+      <button type="button" class="btn btn-outline" id="check-scanned-pages">Check scanned pages now</button>
+    </div>
     <iframe id="registered-page-frame" title="Registered page corresponding to the scanned QR code"></iframe>
   </dialog>
   <header class="physical-header">
@@ -22,16 +26,15 @@
       Printed Copy Check
     </span>
     <h1>Physical Document Verification</h1>
-    <p>Scan each page QR in page order, then upload one PDF containing the same scanned pages.</p>
+    <p>Scan the QR code of each page you want to check, then capture or upload those same pages in the same order. You do not need to scan every page.</p>
   </header>
   {% if result %}<section class="result result-{{ result }}" id="result-sheet" role="status" aria-live="polite">
     <button type="button" class="sheet-close" id="result-close" aria-label="Close">&times;</button>
     <strong>{% if result == 'verified' %}Verified{% elif result == 'differences' %}Differences Detected{% elif result == 'manual_review' %}Manual Review Required{% elif result == 'invalid' %}Incomplete / Invalid Document{% else %}Verification Error{% endif %}</strong>
     <p>{{ details.message }}</p>
     {% if details.contract %}<p>{{ details.contract.title }} | Version {{ details.version }}</p>{% endif %}
-    {% if details.missing_pages %}<p>Missing pages: {{ details.missing_pages|join:', ' }}</p>{% endif %}
+    {% if details.checked_pages %}<p>Pages checked: {{ details.checked_pages|join:', ' }} of {{ details.total_pages }}{% if details.unchecked_pages %} ({{ details.unchecked_pages|length }} not checked){% endif %}</p>{% endif %}
     {% if details.duplicate_pages %}<p>Duplicate pages: {{ details.duplicate_pages|join:', ' }}</p>{% endif %}
-    {% if details.submitted_order != details.expected_order %}<p>Submitted order: {{ details.submitted_order|join:', ' }}. Expected: {{ details.expected_order|join:', ' }}.</p>{% endif %}
     {% if details.review_url %}<p><a class="btn btn-outline" href="{{ details.review_url }}">Compare submitted and registered pages</a></p>{% endif %}
     {% for comparison in details.comparisons %}<div class="page-result">Page {{ comparison.page_number }}: {{ comparison.state|title }}{% if comparison.text_similarity != None %} | Text {{ comparison.text_similarity|floatformat:2 }}{% endif %} | Visual {{ comparison.visual_similarity|floatformat:2 }} | QR {% if comparison.qr_state == 'intact' %}intact{% elif comparison.qr_state == 'damaged' %}partly damaged{% elif comparison.qr_state == 'altered' %}defaced{% elif comparison.qr_state == 'mismatch' %}does not match{% else %}unreadable{% endif %}</div>{% endfor %}
   </section>{% endif %}
@@ -122,6 +125,9 @@
 #registered-page-dialog p { margin: 0; font-size: 12.5px; line-height: 1.5; color: #667788; }
 #registered-page-dialog #registered-page-label { margin-top: 3px; color: #889aab; }
 #registered-page-dialog .registered-page-note { flex: 0 0 auto; padding: 9px 16px; background: #fdf8ef; border-bottom: 1px solid #f0e0c6; color: #92400e; }
+.registered-page-actions[hidden] { display: none; }
+.registered-page-actions { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 9px 16px; border-bottom: 1px solid #e6ebf0; font-size: 12.5px; color: #667788; }
+.registered-page-actions .btn { margin: 0; }
 #registered-page-frame { flex: 1 1 auto; min-height: 0; width: 100%; border: 0; background: #e9edf2; }
 @media (max-width: 760px) {
   #registered-page-dialog { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; }
@@ -569,7 +575,7 @@ body.camera-view-active { overflow: hidden; }
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 210;
+    z-index: 230;
     display: flex;
     flex-direction: column;
     max-height: 70dvh;
@@ -629,7 +635,8 @@ body.camera-view-active { overflow: hidden; }
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 210;
+    /* Above the floating camera buttons (220) so the result text stays readable. */
+    z-index: 230;
     max-height: 80dvh;
     overflow: auto;
     margin: 0;
@@ -858,6 +865,19 @@ let scannerBusy = false;
 let nativeQrDetector = null;
 let awaitingPageCapture = false;
 let capturedPageFiles = [];
+// Set when the resident stops scanning early to check only the pages scanned so far.
+let readyToCheck = false;
+// Codes the server found drawn on are not sent again, so one scan logs one report.
+const rejectedTokens = new Map();
+const retryCounts = new Map();
+
+function allPagesScanned() {
+  return Boolean(expectedTotal) && tokens.length >= expectedTotal;
+}
+
+function readyForPages() {
+  return tokens.length > 0 && (readyToCheck || allPagesScanned());
+}
 
 if ('BarcodeDetector' in window) {
   try { nativeQrDetector = new BarcodeDetector({formats: ['qr_code']}); } catch (error) { nativeQrDetector = null; }
@@ -939,10 +959,27 @@ function openRegisteredPage(result) {
   viewer.searchParams.set('hide_sidebar', '1');
   viewer.searchParams.set('hide_close', '1');
   document.getElementById('registered-page-frame').src = viewer.href;
+  const actions = document.getElementById('registered-page-actions');
+  actions.hidden = allPagesScanned() || readyToCheck;
+  document.getElementById('registered-page-progress').textContent =
+    `${tokens.length} of ${expectedTotal} page(s) scanned. Tap Continue to scan another page, or check these now.`;
   document.getElementById('registered-page-dialog').showModal();
 }
 
-async function validateScannedCode(value) {
+// Captures the camera frame at full resolution so the server can measure
+// whether the printed QR has been drawn on; the decoder only returns its text.
+function captureScanFrame() {
+  return new Promise(resolve => {
+    if (video.readyState !== video.HAVE_ENOUGH_DATA) { resolve(null); return; }
+    const frame = document.createElement('canvas');
+    frame.width = video.videoWidth;
+    frame.height = video.videoHeight;
+    frame.getContext('2d').drawImage(video, 0, 0, frame.width, frame.height);
+    frame.toBlob(blob => resolve(blob), 'image/jpeg', 0.95);
+  });
+}
+
+async function validateScannedCode(value, frame) {
   if (tokens.includes(value)) {
     const known = scannedPages.get(value);
     statusNode.textContent = 'This page QR code has already been scanned.';
@@ -950,11 +987,13 @@ async function validateScannedCode(value) {
     return;
   }
   showQrLoading();
-  const body = new URLSearchParams({qr_token: value, csrfmiddlewaretoken: csrfToken});
+  const body = new FormData();
+  body.append('qr_token', value);
+  body.append('csrfmiddlewaretoken', csrfToken);
+  if (frame) body.append('qr_frame', frame, 'qr-frame.jpg');
   try {
     const request = fetch(qrCheckUrl, {
       method: 'POST',
-      headers: {'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'},
       body,
       credentials: 'same-origin',
     });
@@ -962,8 +1001,15 @@ async function validateScannedCode(value) {
     const result = await response.json();
     hideQrLoading();
     if (!result.valid) {
-      statusNode.textContent = result.message || 'This QR code could not be verified.';
-      setQrResult(false, statusNode.textContent);
+      let message = result.message || 'This QR code could not be verified.';
+      if (result.tampered) rejectedTokens.set(value, message);
+      if (result.retry) {
+        const attempts = (retryCounts.get(value) || 0) + 1;
+        retryCounts.set(value, attempts);
+        if (attempts >= 3) message += ' If the code is drawn on, damaged or covered, ask the barangay for a clean copy.';
+      }
+      statusNode.textContent = message;
+      setQrResult(false, message);
       return;
     }
     expectedTotal = Number(result.total_pages);
@@ -982,18 +1028,28 @@ async function validateScannedCode(value) {
 
 function maybeAutoSubmit() {
   if (document.getElementById('registered-page-dialog').open) return;
-  if (!submitted && expectedTotal && tokens.length >= expectedTotal && physicalFile.files.length) {
+  if (!submitted && readyForPages() && physicalFile.files.length) {
     statusNode.textContent = 'QR codes and complete pages captured. Starting verification...';
     window.setTimeout(() => physicalForm.requestSubmit(), 250);
-  } else if (expectedTotal && tokens.length >= expectedTotal && !physicalFile.files.length) {
+  } else if (readyForPages() && !physicalFile.files.length) {
     if (window.matchMedia('(max-width: 760px)').matches) {
       enterPageCaptureMode();
     } else {
-      statusNode.textContent = 'QR identity confirmed. Choose the complete scanned PDF or page photographs.';
+      statusNode.textContent = `QR identity confirmed. Choose a scanned PDF or photos of the ${tokens.length} scanned page(s), in the order you scanned them.`;
       physicalForm.scrollIntoView({behavior: 'smooth', block: 'nearest'});
     }
   }
 }
+
+function nextPageToCapture() {
+  const record = scannedPages.get(tokens[capturedPageFiles.length]);
+  return `page ${record ? record.page : capturedPageFiles.length + 1} (${capturedPageFiles.length + 1} of ${tokens.length})`;
+}
+
+document.getElementById('check-scanned-pages').addEventListener('click', () => {
+  readyToCheck = true;
+  document.getElementById('registered-page-dialog').close();
+});
 
 function enterPageCaptureMode() {
   if (awaitingPageCapture) return;
@@ -1002,7 +1058,7 @@ function enterPageCaptureMode() {
   pageCaptureGuide.hidden = false;
   fabCapture.hidden = false;
   qrResult.hidden = true;
-  statusNode.textContent = `QR identity confirmed. Frame the complete page ${capturedPageFiles.length + 1} of ${expectedTotal}.`;
+  statusNode.textContent = `QR identity confirmed. Frame the complete ${nextPageToCapture()}.`;
 }
 
 function leavePageCaptureMode() {
@@ -1038,12 +1094,12 @@ function captureCompletePage() {
     const pageNumber = capturedPageFiles.length + 1;
     capturedPageFiles.push(new File([blob], `physical-page-${pageNumber}.jpg`, {type: 'image/jpeg'}));
     assignCapturedFiles();
-    if (capturedPageFiles.length >= expectedTotal) {
+    if (capturedPageFiles.length >= tokens.length) {
       leavePageCaptureMode();
       statusNode.textContent = 'All complete pages captured. Starting verification...';
       maybeAutoSubmit();
     } else {
-      statusNode.textContent = `Page ${pageNumber} captured. Frame complete page ${pageNumber + 1} of ${expectedTotal}.`;
+      statusNode.textContent = `Captured. Frame the complete ${nextPageToCapture()}.`;
     }
   }, 'image/jpeg', 0.92);
 }
@@ -1051,6 +1107,7 @@ function captureCompletePage() {
 removeButton.addEventListener('click', () => {
   scannedPages.delete(tokens.pop());
   if (!tokens.length) expectedTotal = null;
+  readyToCheck = false;
   capturedPageFiles = [];
   physicalFile.value = '';
   leavePageCaptureMode();
@@ -1149,7 +1206,7 @@ document.getElementById('registered-page-dialog').addEventListener('close', () =
 });
 async function scanFrame(now) {
   if (document.getElementById('registered-page-dialog').open) { requestAnimationFrame(scanFrame); return; }
-  if (!submitted && !awaitingPageCapture && (!expectedTotal || tokens.length < expectedTotal) && !scannerBusy && now - lastFrameAt >= 220 && video.readyState === video.HAVE_ENOUGH_DATA) {
+  if (!submitted && !awaitingPageCapture && !readyToCheck && !allPagesScanned() && !scannerBusy && now - lastFrameAt >= 220 && video.readyState === video.HAVE_ENOUGH_DATA) {
     scannerBusy = true;
     lastFrameAt = now;
     const scale = Math.min(1, 960 / video.videoWidth);
@@ -1164,8 +1221,11 @@ async function scanFrame(now) {
         if (!value.startsWith('SGP1.')) {
           statusNode.textContent = 'QR detected, but it is not a SealGuard physical-page code.';
           setQrResult(false, statusNode.textContent);
+        } else if (rejectedTokens.has(value)) {
+          statusNode.textContent = rejectedTokens.get(value);
+          setQrResult(false, statusNode.textContent);
         } else {
-          await validateScannedCode(value);
+          await validateScannedCode(value, tokens.includes(value) ? null : await captureScanFrame());
         }
       }
     } finally {

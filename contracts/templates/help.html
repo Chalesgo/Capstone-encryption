@@ -229,7 +229,7 @@
       <div class="editor-grid">
         <div class="editor-field">
           <label for="tutorial-title">Question label</label>
-          <input id="tutorial-title" name="title" maxlength="160" required value="{{ tutorial_form.title.value|default:'' }}" placeholder="How to encrypt a contract">
+          <input id="tutorial-title" name="title" maxlength="160" required value="{{ tutorial_form.title.value|default:'' }}" placeholder="How to encrypt a procurement document">
           {% for error in tutorial_form.title.errors %}<small style="color:#b42318;">{{ error }}</small>{% endfor %}
         </div>
         <div class="editor-field">

@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}Contracts{% endblock %}
+{% block title %}Procurement Documents{% endblock %}
 #THIS IS THE UPLOAD PAGE FOR CONTRACTS. IT SHOWS A LIST OF CONTRACTS AND ALLOWS USERS TO UPLOAD NEW ONES, RENAME, ENCRYPT, OR DELETE THEM.
 #IDK WHY ITS NAMED LIST.HTML BUT IT IS. I GUESS IT LISTS CONTRACTS.
 {% block mobile_topbar_extra %}
@@ -669,6 +669,14 @@
   .enc-badge.unencrypted { background: #fff8e6; color: #d97706; }
   .doc-badges { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
   .enc-badge.version { background: #eef2ff; color: #3b5bdb; cursor: default; }
+  .enc-badge.folder { background: #f4f2ee; color: #6b5d45; max-width: 170px; }
+  .trash-reason-field { display: grid; gap: 6px; margin: 4px 0 14px; }
+  .trash-reason-field label { font-size: 12px; font-weight: 600; color: #445566; }
+  .trash-reason-field select,
+  .trash-reason-field input { width: 100%; padding: 8px 10px; border: 1px solid #e0deda; border-radius: 8px; font: 13px 'Segoe UI', system-ui, sans-serif; }
+  .enc-badge.folder[hidden] { display: none; }
+  .enc-badge.folder svg { width: 11px; height: 11px; flex-shrink: 0; }
+  .folder-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* Uploader filter + mobile sort (styled to match the search pill) */
   .filter-select-wrap {
@@ -1107,9 +1115,13 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M12 11v6M9 14h6"/></svg>
     <span>Add Revision</span>
   </div>
+  <div class="context-menu-item" onclick="contractContextMenuSignedScan()" title="Register a printed copy that was signed by hand and scanned">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2"/><path d="M8 14c1.5-2 2.5-2 3.5 0s2 2 3.5 0"/></svg>
+    <span>Register Signed Scan</span>
+  </div>
   <div class="context-menu-item" onclick="contractContextMenuAddToFolder()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M12 10v6M9 13h6"/></svg>
-    <span>Add to Folder</span>
+    <span id="contract-folder-action-label">Add to Folder</span>
   </div>
   {% if workspace_role == 'Admin' %}
   <div class="context-menu-item" id="contract-publish-toggle" onclick="contractContextMenuTogglePublic()">
@@ -1124,8 +1136,8 @@
 <div class="mobile-contract-action-sheet" id="mobile-contract-action-sheet"
      role="dialog" aria-modal="true" aria-labelledby="mobile-sheet-title">
   <div class="mobile-sheet-header">
-    <span class="mobile-sheet-title" id="mobile-sheet-title">Contract actions</span>
-    <button type="button" class="mobile-sheet-close" aria-label="Close contract actions"
+    <span class="mobile-sheet-title" id="mobile-sheet-title">Document actions</span>
+    <button type="button" class="mobile-sheet-close" aria-label="Close document actions"
             onclick="closeMobileContractSheet()">&times;</button>
   </div>
   <div class="mobile-sheet-actions">
@@ -1173,7 +1185,7 @@
 <div class="mobile-contract-edit-sheet" id="mobile-contract-edit-sheet"
      role="dialog" aria-modal="true" aria-labelledby="mobile-edit-sheet-title" aria-hidden="true">
   <div class="mobile-sheet-header">
-    <span class="mobile-sheet-title" id="mobile-edit-sheet-title">Edit contract</span>
+    <span class="mobile-sheet-title" id="mobile-edit-sheet-title">Edit document</span>
     <button type="button" class="mobile-sheet-close" aria-label="Close edit actions"
             onclick="closeMobileEditSheet()">&times;</button>
   </div>
@@ -1189,9 +1201,13 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M12 11v6M9 14h6"/></svg>
       <span>Add Revision</span>
     </button>
+    <button type="button" class="mobile-sheet-action" onclick="mobileEditSignedScan()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2"/><path d="M8 14c1.5-2 2.5-2 3.5 0s2 2 3.5 0"/></svg>
+      <span>Register Signed Scan</span>
+    </button>
     <button type="button" class="mobile-sheet-action" onclick="mobileEditAddToFolder()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M12 10v6M9 13h6"/></svg>
-      <span>Add to Folder</span>
+      <span id="mobile-folder-action-label">Add to Folder</span>
     </button>
     {% if not read_only_user %}
     {% if workspace_role == 'Admin' %}<button type="button" class="mobile-sheet-action" id="mobile-edit-public" onclick="mobileEditTogglePublic()">
@@ -1216,7 +1232,7 @@
 
 <div class="modal-overlay" id="folder-assign-modal">
   <div class="modal">
-    <h3>Move to Folder</h3>
+    <h3 id="folder-assign-title">Move to Folder</h3>
     <p>Choose a folder for <strong id="folder-assign-contract-name"></strong>.</p>
     <ul class="folder-assign-list" id="folder-assign-list"></ul>
     <div class="modal-actions">
@@ -1241,9 +1257,9 @@
         <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
         <path d="M12 9v4"/><path d="M12 17h.01"/>
       </svg>
-      Document Is Public
+      Final Copy Cannot Be Deleted
     </h3>
-    <p>This document is public. Remove it from Public Verified Contracts before deleting it.</p>
+    <p>This document is an official Final copy and is listed in Public Verified Documents. Trash is only for records uploaded by mistake. If it really must be removed, an Admin returns it to Draft first.</p>
     <div class="modal-actions">
       <button class="btn btn-primary" onclick="closePublicBlockModal()">Got it</button>
     </div>
@@ -1253,7 +1269,7 @@
 <div class="contracts-header">
   <div>
     <div class="folder-page-heading"><svg id="folder-page-icon" hidden width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7V4h6l2 3h10v13H3z"/></svg><h1 id="contracts-title" onclick="editFolderHeading()" onkeydown="folderHeadingKey(event)" onblur="saveFolderHeading()">All Documents</h1></div>
-    <p>{% if workspace_role == 'User' %}View your assigned procurement PDFs{% else %}Manage and view all uploaded procurement contracts{% endif %}</p>
+    <p>{% if workspace_role == 'User' %}View your assigned procurement PDFs{% else %}Manage and view all uploaded procurement documents{% endif %}</p>
   </div>
   <div style="display:flex; align-items:center; gap:12px;">
     <div class="search-wrap">
@@ -1314,7 +1330,7 @@
         <option value="status_final" {% if sort == 'status_final' %}selected{% endif %}>Final copies first</option>
       </select>
     </label>
-    {% if not read_only_user %}<a href="/upload/" class="btn btn-primary">+ Upload Contract</a>{% endif %}
+    {% if not read_only_user %}<a href="/upload/" class="btn btn-primary">+ Upload Document</a>{% endif %}
   </div>
 </div>
 
@@ -1469,6 +1485,10 @@
                   v{{ contract.version_count }}
                 </span>
               {% endif %}
+              <span class="enc-badge folder" id="folder-chip-{{ contract.id }}" title="Folder"{% if not contract.folder_id %} hidden{% endif %}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
+                <span class="folder-chip-name">{{ contract.folder.name }}</span>
+              </span>
             </div>
           </div>
         </div>
@@ -1637,11 +1657,11 @@
 </div>
 
 {% if page_obj.paginator.count %}
-<nav class="list-pagination" aria-label="Contract pages">
-  <span>Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} contracts</span>
+<nav class="list-pagination" aria-label="Document pages">
+  <span>Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} documents</span>
   <span style="display:flex;align-items:center;gap:8px;">
     <label for="contracts-per-page">Rows</label>
-    <select id="contracts-per-page" onchange="changeContractsPerPage(this.value)" aria-label="Contracts per page">
+    <select id="contracts-per-page" onchange="changeContractsPerPage(this.value)" aria-label="Documents per page">
       <option value="10" {% if per_page == 10 %}selected{% endif %}>10</option>
       <option value="25" {% if per_page == 25 %}selected{% endif %}>25</option>
       <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
@@ -1649,9 +1669,9 @@
     {% if page_obj.has_previous %}<a href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page=1" aria-label="First page" title="First page"><svg class="pagination-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 17 6 12l5-5"/><path d="m18 17-5-5 5-5"/></svg></a>{% endif %}
     {% if page_obj.has_previous %}<a href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ page_obj.previous_page_number }}" aria-label="Previous page" title="Previous page"><svg class="pagination-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></a>{% endif %}
     <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
-    <form method="get" aria-label="Go to contract page">
+    <form method="get" aria-label="Go to document page">
       <label for="contracts-page-number">Go to</label>
-      <input id="contracts-page-number" type="number" name="page" min="1" max="{{ page_obj.paginator.num_pages }}" value="{{ page_obj.number }}" inputmode="numeric" aria-label="Contract page number">
+      <input id="contracts-page-number" type="number" name="page" min="1" max="{{ page_obj.paginator.num_pages }}" value="{{ page_obj.number }}" inputmode="numeric" aria-label="Document page number">
       <input type="hidden" name="q" value="{{ search_query }}">
       <input type="hidden" name="status" value="{{ status_filter }}">
       <input type="hidden" name="folder" value="{{ folder_filter }}">
@@ -1678,8 +1698,8 @@
   <p>No documents match these filters.</p>
   <a href="{% url 'contract_list' %}" class="btn btn-outline">Clear filters</a>
   {% else %}
-  <p>No contracts uploaded yet.</p>
-  {% if not read_only_user %}<a href="/upload/" class="btn btn-primary">Upload your first contract</a>{% endif %}
+  <p>No procurement documents uploaded yet.</p>
+  {% if not read_only_user %}<a href="/upload/" class="btn btn-primary">Upload your first document</a>{% endif %}
   {% endif %}
 </div>
 {% endif %}
@@ -1695,10 +1715,21 @@
         <path d="M10 11v6M14 11v6"/>
         <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
       </svg>
-      Delete Contract
+      Move to Trash
     </h3>
-    <p>Are you sure you want to delete <strong id="delete-contract-name"></strong>?
-       It will be moved to Trash and permanently deleted after 15 days.</p>
+    <p>Move <strong id="delete-contract-name"></strong> to Trash? It is permanently deleted after 15 days.
+       Trash is for records uploaded by mistake; a Final copy must be returned to Draft first.</p>
+    <div class="trash-reason-field">
+      <label for="delete-reason">Reason for removing</label>
+      <select id="delete-reason" name="reason" form="delete-form" required>
+          <option value="" selected disabled>Choose a reason</option>
+          <option value="duplicate">Duplicate upload</option>
+          <option value="wrong_file">Wrong file uploaded</option>
+          <option value="test_upload">Test or practice upload</option>
+          <option value="superseded">Draft replaced by a newer document</option>
+      </select>
+      <input id="delete-reason-details" name="reason_details" form="delete-form" maxlength="200" placeholder="Details (optional)">
+    </div>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeDeleteModal()">Cancel</button>
       <form id="delete-form" method="POST" style="margin:0;">
@@ -1734,7 +1765,7 @@
       <iframe class="pdf-frame" id="pdf-frame" src=""></iframe>
     </div>
     <div class="pdf-sidebar">
-      <p class="pdf-sidebar-title" id="pdf-panel-title">Contract</p>
+      <p class="pdf-sidebar-title" id="pdf-panel-title">Document</p>
       <p class="sidebar-section-label">Document Info</p>
       <div class="meta-list">
         <div class="meta-row"><span class="meta-row-label">Created</span><span class="meta-row-value" id="pdf-meta-created">—</span></div>
@@ -1787,6 +1818,17 @@
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="bulk-confirm-title">
     <h3 id="bulk-confirm-title">Confirm bulk action</h3>
     <p id="bulk-confirm-message"></p>
+    <div class="trash-reason-field" id="bulk-delete-reason-field" hidden>
+      <label for="bulk-delete-reason">Reason for removing</label>
+      <select id="bulk-delete-reason">
+          <option value="" selected disabled>Choose a reason</option>
+          <option value="duplicate">Duplicate upload</option>
+          <option value="wrong_file">Wrong file uploaded</option>
+          <option value="test_upload">Test or practice upload</option>
+          <option value="superseded">Draft replaced by a newer document</option>
+      </select>
+      <input id="bulk-delete-reason-details" maxlength="200" placeholder="Details (optional)">
+    </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-outline" id="bulk-confirm-cancel">Cancel</button>
       <button type="button" class="btn btn-primary" id="bulk-confirm-apply">Continue</button>
@@ -2006,10 +2048,14 @@ function applyFilters() {
     const deleting = type === 'delete';
     confirmTitle.textContent = deleting ? 'Move selected documents to Trash?' : 'Encrypt selected documents?';
     confirmMessage.textContent = deleting
-      ? ids.length + ' selected document(s) will be moved to Trash. Public documents will be skipped.'
+      ? ids.length + ' selected document(s) will be moved to Trash. Final copies will be skipped.'
       : 'SealGuard will encrypt ' + ids.length + ' selected document(s). Documents already encrypted will be skipped.';
     confirmApply.textContent = deleting ? 'Move to Trash' : 'Encrypt documents';
     confirmApply.classList.toggle('btn-danger', deleting);
+    const reasonField = document.getElementById('bulk-delete-reason-field');
+    reasonField.hidden = !deleting;
+    document.getElementById('bulk-delete-reason').value = '';
+    document.getElementById('bulk-delete-reason-details').value = '';
     confirmModal.classList.add('active');
   }
 
@@ -2069,6 +2115,7 @@ function applyFilters() {
     if (!ids.length) return;
     openFolderAssignModal(null, function(folderId) {
       return postBulk('{% url "bulk_assign_folder" %}', {folder_id: folderId || ''}).then(function(data) {
+        ids.forEach(id => setRowFolder(id, folderId));
         closeFolderAssignModal();
         showResult(data.updated + ' document(s) updated.', true);
       });
@@ -2110,13 +2157,23 @@ function applyFilters() {
   document.getElementById('bulk-confirm-cancel')?.addEventListener('click', closeConfirmModal);
   confirmApply?.addEventListener('click', function() {
     const type = confirmAction;
+    const reasonSelect = document.getElementById('bulk-delete-reason');
+    if (type === 'delete' && !reasonSelect.value) {
+      reasonSelect.setCustomValidity('Choose a reason for removing these documents.');
+      reasonSelect.reportValidity();
+      reasonSelect.setCustomValidity('');
+      return;
+    }
     confirmApply.disabled = true;
     const url = type === 'delete' ? '{% url "bulk_delete_contracts" %}' : '{% url "bulk_encrypt_contracts" %}';
-    postBulk(url).then(function(data) {
+    const extra = type === 'delete'
+      ? {reason: reasonSelect.value, reason_details: document.getElementById('bulk-delete-reason-details').value.trim()}
+      : {};
+    postBulk(url, extra).then(function(data) {
       closeConfirmModal();
       if (type === 'delete') {
         let message = data.moved + ' document(s) moved to Trash.';
-        if (data.skipped_public) message += ' ' + data.skipped_public + ' public document(s) were skipped.';
+        if (data.skipped_public) message += ' ' + data.skipped_public + ' Final cop' + (data.skipped_public === 1 ? 'y was' : 'ies were') + ' skipped.';
         showResult(message, true);
       } else {
         let message = data.encrypted + ' document(s) encrypted.';
@@ -2350,7 +2407,7 @@ function openMobileContractSheet(contractId) {
   if (!row || !sheet || !overlay) return;
 
   mobileContractActionId = contractId;
-  document.getElementById('mobile-sheet-title').textContent = row.dataset.contractTitle || 'Contract actions';
+  document.getElementById('mobile-sheet-title').textContent = row.dataset.contractTitle || 'Document actions';
   const encrypt = document.getElementById('mobile-sheet-encrypt');
   if (encrypt) encrypt.style.display = row.dataset.encrypted === '1' ? 'none' : 'flex';
   const publicButton = document.getElementById('mobile-sheet-public');
@@ -2404,9 +2461,10 @@ function openMobileEditSheet(contractId) {
   if (!row || !sheet || !overlay) return;
 
   mobileContractEditId = contractId;
+  document.getElementById('mobile-folder-action-label').textContent = folderActionLabel(contractId);
   document.getElementById('mobile-edit-qr').style.display = row.dataset.canShare === '1' ? '' : 'none';
   document.getElementById('mobile-edit-access').style.display = row.dataset.canShare === '1' ? '' : 'none';
-  document.getElementById('mobile-edit-sheet-title').textContent = row.dataset.contractTitle || 'Edit contract';
+  document.getElementById('mobile-edit-sheet-title').textContent = row.dataset.contractTitle || 'Edit document';
   const publicButton = document.getElementById('mobile-edit-public');
   if (publicButton) {
     publicButton.style.display = '{{ workspace_role }}' === 'Admin' ? '' : 'none';
@@ -2436,6 +2494,12 @@ function mobileEditAddRevision() {
   const id = mobileContractEditId;
   closeMobileEditSheet();
   if (id) window.location.href = '/contract/' + id + '/add-revision/';
+}
+
+function mobileEditSignedScan() {
+  const id = mobileContractEditId;
+  closeMobileEditSheet();
+  if (id) window.location.href = '/contract/' + id + '/upload-signed/';
 }
 
 function mobileEditAddToFolder() {
@@ -2532,12 +2596,14 @@ function submitRename(id) {
 // Delete modal
 function openDeleteModal(contractId, contractName) {
   const row = document.getElementById('row-' + contractId);
-  if (row && row.dataset.public === '1') {
+  if (row && (row.dataset.public === '1' || row.dataset.status === 'final')) {
     document.getElementById('public-block-modal').classList.add('active');
     return;
   }
   document.getElementById('delete-contract-name').textContent = contractName;
   document.getElementById('delete-form').action = '/delete/' + contractId + '/';
+  document.getElementById('delete-reason').value = '';
+  document.getElementById('delete-reason-details').value = '';
   document.getElementById('delete-modal').classList.add('active');
 }
 function closeDeleteModal() {
@@ -2672,6 +2738,7 @@ function submitFolderRename(id) {
     if (data.success) {
       nameEl.textContent = data.name;
       input.value = data.name;
+      document.querySelectorAll('tr[data-folder="' + id + '"] .folder-chip-name').forEach(chip => { chip.textContent = data.name; });
       if (String(currentFolderFilter) === String(id)) {
         document.getElementById('contracts-title').textContent = data.name;
       }
@@ -2680,6 +2747,22 @@ function submitFolderRename(id) {
     nameEl.style.display = 'inline';
   })
   .catch(() => cancelFolderRename(id));
+}
+
+// Unsorted documents are added to a folder; filed documents are moved.
+function folderActionLabel(contractId) {
+  const row = document.getElementById('row-' + contractId);
+  return row && row.dataset.folder ? 'Move to Folder' : 'Add to Folder';
+}
+
+function setRowFolder(contractId, folderId) {
+  const row = document.getElementById('row-' + contractId);
+  if (row) row.dataset.folder = folderId || '';
+  const chip = document.getElementById('folder-chip-' + contractId);
+  if (!chip) return;
+  const nameEl = folderId ? document.querySelector('#folder-' + folderId + ' .folder-name-text') : null;
+  chip.querySelector('.folder-chip-name').textContent = nameEl ? nameEl.textContent.trim() : '';
+  chip.hidden = !folderId;
 }
 
 function contractContextMenuAddToFolder() {
@@ -2701,6 +2784,8 @@ function openFolderAssignModal(contractId, onSelect = null, selectionLabel = '')
   const row = document.getElementById('row-' + contractId);
   const titleEl = document.getElementById('title-text-' + contractId);
   const currentFolder = row ? row.dataset.folder : '';
+  document.getElementById('folder-assign-title').textContent =
+    contractId && !currentFolder ? 'Add to Folder' : 'Move to Folder';
 
   document.getElementById('folder-assign-contract-name').textContent =
     selectionLabel || (titleEl ? titleEl.dataset.fullTitle : '');
@@ -2809,8 +2894,7 @@ function assignContractToFolder(contractId, folderId) {
   .then(data => {
     if (!data.success) throw new Error('Folder assignment failed');
     if (data.success) {
-      const row = document.getElementById('row-' + contractId);
-      if (row) row.dataset.folder = folderId || '';
+      setRowFolder(contractId, folderId);
       applyFilters();
     }
     closeFolderAssignModal();
@@ -3060,6 +3144,7 @@ function showContractContextMenu(event, contractId) {
     return;
   }
   contextMenuContractId = contractId;
+  document.getElementById('contract-folder-action-label').textContent = folderActionLabel(contractId);
   document.getElementById('contract-qr-option').style.display = document.getElementById('row-' + contractId).dataset.canShare === '1' ? '' : 'none';
   document.getElementById('contract-access-option').style.display = document.getElementById('row-' + contractId).dataset.canShare === '1' ? '' : 'none';
 
@@ -3097,6 +3182,12 @@ function contractContextMenuAddRevision() {
   if (id) window.location.href = '/contract/' + id + '/add-revision/';
 }
 
+function contractContextMenuSignedScan() {
+  const id = contextMenuContractId;
+  document.getElementById('contract-context-menu').classList.remove('active');
+  if (id) window.location.href = '/contract/' + id + '/upload-signed/';
+}
+
 function contractContextMenuTogglePublic() {
   const id = contextMenuContractId;
   document.getElementById('contract-context-menu').classList.remove('active');
@@ -3110,7 +3201,7 @@ function openFinalCopyModal(id) {
   const msg = document.getElementById('publish-modal-message');
   const confirmBtn = document.getElementById('publish-modal-confirm');
   msg.textContent = isFinal
-    ? 'This will return the PDF to Draft status. Only an Admin can change this status.'
+    ? 'This will return the PDF to Draft status and remove it from Public Verified Documents. Only an Admin can change this status.'
     : 'This will mark the PDF as the official Final copy and publish it in Public Verified Documents, where anyone can view it. Confirm that it is complete, verified, and approved for public access. Only an Admin can change this status.';
   confirmBtn.textContent = isFinal ? 'Yes, Return to Draft' : 'Yes, Mark as Final copy';
   confirmBtn.className = isFinal ? 'btn btn-danger' : 'btn btn-primary';
@@ -3132,11 +3223,11 @@ function openPublishModal(id) {
   const confirmBtn = document.getElementById('publish-modal-confirm');
 
   if (isCurrentlyPublic) {
-    msg.textContent = 'This document is currently visible to the public. Removing it will hide it from the public verified contracts page immediately.';
+    msg.textContent = 'This document is currently visible to the public. Removing it will hide it from Public Verified Documents immediately.';
     confirmBtn.textContent = 'Yes, Remove from Public';
     confirmBtn.className = 'btn btn-danger';
   } else {
-    msg.textContent = 'This will make the document visible to anyone browsing the public verified contracts page, without requiring a login. Make sure it does not contain private or sensitive information before continuing.';
+    msg.textContent = 'This will make the document visible to anyone browsing Public Verified Documents, without requiring a login. Make sure it does not contain private or sensitive information before continuing.';
     confirmBtn.textContent = 'Yes, Make Public';
     confirmBtn.className = 'btn btn-primary';
   }

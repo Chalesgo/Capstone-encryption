@@ -5,6 +5,7 @@ from django.urls import path, include, re_path
 from django.conf import settings
 from django.db import connection
 from django.http import JsonResponse
+from contracts.access import is_admin, is_resident
 from contracts.file_access import protected_media
 from django.shortcuts import redirect
 from django.contrib.auth.views import LoginView
@@ -12,7 +13,11 @@ from django.contrib.staticfiles.views import serve as static_serve
 from contracts.forms import SealGuardAuthenticationForm
 
 def home_redirect(request):
-    if request.user.is_authenticated:
+    # Each role starts where its daily work is: administrators review activity
+    # and pending decisions, staff manage documents, and everyone else verifies.
+    if is_admin(request.user):
+        return redirect('dashboard')
+    if request.user.is_authenticated and not is_resident(request.user):
         return redirect('contract_list')
     return redirect('public_verify')
 

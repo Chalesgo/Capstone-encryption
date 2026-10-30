@@ -31,7 +31,7 @@ N8N_EMAIL_WEBHOOK_SECRET=use-the-value-from-the-n8n-header-credential
 N8N_EMAIL_WEBHOOK_TIMEOUT=10
 ```
 
-The webhook must return `{"ok":true,"channel":"email"}` with a 2xx status after the Gmail node accepts the message. If the URL is blank, SealGuard keeps using Django's configured email backend. If the URL is set but the secret or webhook response is invalid, delivery fails closed and the verification challenge is not left active. Do not commit the secret or paste it into source control. Set the n8n Gmail node's attribution option off if the email should not include the n8n footer.
+The webhook must return `{"ok":true,"channel":"email"}` with a 2xx status after the Gmail node accepts the message. If the URL is blank, SealGuard keeps using Django's configured email backend. If the URL is set but the secret or webhook response is invalid, or n8n rate-limits the request, the message is logged as not delivered but the verification code stays active and no error is shown; administrators can read the code in Admin > Outgoing email inbox. Do not commit the secret or paste it into source control. Set the n8n Gmail node's attribution option off if the email should not include the n8n footer.
 
 Email delivery diagnostics are written by the `contracts.messaging` logger to the Django terminal. They include the local message ID, n8n host, HTTP status or response shape, and the final `EmailMessageLog.delivered` value. They never log the webhook secret or message body/code. A `404` normally means the production workflow is not active or the URL path is wrong; `401`/`403` means the header credential does not match; an accepted webhook followed by no message requires checking the Gmail node execution and credential in n8n.
 

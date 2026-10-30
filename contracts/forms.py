@@ -5,6 +5,7 @@ from django import forms
 from django.conf import settings
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 import fitz
 from .models import Contract, Tutorial
 from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm
@@ -53,6 +54,37 @@ class StaffRegistrationForm(forms.Form):
         if User.objects.filter(username__iexact=value).exists():
             raise ValidationError('That username is already in use.')
         return value
+
+
+class ResidentRegistrationForm(forms.Form):
+    first_name = forms.CharField(max_length=150, label='First name')
+    last_name = forms.CharField(max_length=150, label='Last name')
+    email = forms.EmailField(label='Email address')
+    password1 = forms.CharField(label='Password', strip=False, widget=forms.PasswordInput(attrs={'autocomplete': 'new-password'}))
+    password2 = forms.CharField(label='Confirm password', strip=False, widget=forms.PasswordInput(attrs={'autocomplete': 'new-password'}))
+
+    def clean_email(self):
+        from django.contrib.auth.models import User
+        value = self.cleaned_data['email'].strip().lower()
+        if User.objects.filter(Q(email__iexact=value) | Q(username__iexact=value)).exists():
+            raise ValidationError('An account with this email already exists. Sign in instead.')
+        return value
+
+    def clean(self):
+        from django.contrib.auth.models import User
+        from django.contrib.auth.password_validation import validate_password
+        cleaned = super().clean()
+        password = cleaned.get('password1')
+        if password and password != cleaned.get('password2'):
+            self.add_error('password2', 'The two passwords do not match.')
+        elif password:
+            candidate = User(username=cleaned.get('email', ''), email=cleaned.get('email', ''),
+                             first_name=cleaned.get('first_name', ''), last_name=cleaned.get('last_name', ''))
+            try:
+                validate_password(password, candidate)
+            except ValidationError as error:
+                self.add_error('password1', error)
+        return cleaned
 
 
 class StaffPasswordChangeForm(PasswordChangeForm):
@@ -202,7 +234,13 @@ def sanitize_tutorial_html(value):
 class ContractForm(forms.ModelForm):
     class Meta:
         model = Contract
-        fields = ['title', 'file']
+        fields = ['title', 'folder', 'file']
+        labels = {'folder': 'Folder (optional)'}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['folder'].required = False
+        self.fields['folder'].empty_label = 'No folder (Unsorted)'
 
     def clean_file(self):
         file = self.cleaned_data.get('file')
