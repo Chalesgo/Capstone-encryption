@@ -2600,7 +2600,8 @@ class PhysicalVerificationTests(TestCase):
         self.assertContains(response, 'body.camera-view-active')
         self.assertContains(response, 'id="qr-check-result"')
         self.assertContains(response, reverse('verify_physical_qr'))
-        self.assertContains(response, 'Step 1 of 3')
+        self.assertContains(response, 'id="scan-guide-text"')
+        self.assertNotContains(response, 'Step 1 of 3')
         self.assertContains(response, 'Step 3 of 3')
         self.assertContains(response, 'id="page-capture-guide"')
         self.assertContains(response, 'id="fab-capture"')
@@ -2629,7 +2630,7 @@ class PhysicalVerificationTests(TestCase):
         self.assertEqual(payload['version'], 1)
         self.assertEqual(payload['page'], 1)
         self.assertEqual(payload['total_pages'], 3)
-        self.assertIn('capture the complete page', payload['message'])
+        self.assertEqual(payload['message'], 'Page 1 of 3 found. The QR only identifies the page.')
 
     def test_physical_qr_check_rejects_invalid_code_safely(self):
         response = self.client.post(reverse('verify_physical_qr'), {
@@ -2771,7 +2772,7 @@ class PhysicalVerificationTests(TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertFalse(payload['valid'])
         self.assertTrue(payload['tampered'])
-        self.assertIn('has been drawn on or damaged', payload['message'])
+        self.assertIn('may have been tampered with', payload['message'])
         self.assertNotIn('page_pdf_url', payload)
         self.assertNotIn('thumbnail', payload)
         self.assertTrue(AuditLog.objects.filter(
@@ -2798,6 +2799,22 @@ class PhysicalVerificationTests(TestCase):
             self.assertEqual((payload['valid'], payload.get('retry')), (False, True))
             self.assertNotIn('page_pdf_url', payload)
         self.assertFalse(AuditLog.objects.filter(action='reported_tampering').exists())
+
+    def test_code_the_phone_reads_but_the_server_cannot_is_rejected_after_retries(self):
+        # The phone decoded the code, yet three frames could not be re-read: drawn over.
+        def post(attempt, frame=True):
+            data = {'qr_token': self.tokens[0], 'attempt': str(attempt)}
+            if frame:
+                data['qr_frame'] = SimpleUploadedFile('qr-frame.jpg', b'not an image', content_type='image/jpeg')
+            return self.client.post(reverse('verify_physical_qr'), data)
+        self.assertTrue(post(2).json()['retry'])
+        self.assertTrue(post(3, frame=False).json()['retry'])
+        response = post(3)
+        self.assertEqual(response.status_code, 422)
+        self.assertTrue(response.json()['tampered'])
+        self.assertTrue(AuditLog.objects.filter(
+            action='reported_tampering', note__contains='page 1; condition=unreadable',
+        ).exists())
 
     def test_incorrect_total_page_information_is_invalid(self):
         payload = json.loads(base64.urlsafe_b64decode(

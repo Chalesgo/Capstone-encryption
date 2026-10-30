@@ -7,10 +7,10 @@
       <div><h2 id="registered-page-title">Registered page</h2><p id="registered-page-label"></p></div>
       <button type="button" class="btn btn-primary" id="registered-page-close" autofocus>Continue</button>
     </header>
-    <p class="registered-page-note">Compare this registered page with your printed copy. A matching QR identifies the page; it does not verify the printed contents.</p>
+    <p class="registered-page-note">Compare this page with your printed copy. The QR only identifies the page.</p>
     <div class="registered-page-actions" id="registered-page-actions" hidden>
       <span id="registered-page-progress"></span>
-      <button type="button" class="btn btn-outline" id="check-scanned-pages">Check scanned pages now</button>
+      <button type="button" class="btn btn-outline" id="check-scanned-pages">Check these pages</button>
     </div>
     <iframe id="registered-page-frame" title="Registered page corresponding to the scanned QR code"></iframe>
   </dialog>
@@ -42,7 +42,7 @@
     <section class="scanner-panel">
       <div class="camera-stage">
         <video id="preview" autoplay playsinline></video><canvas id="scan-canvas" hidden></canvas>
-        <div class="scan-guide"><span>Step 1 of 3</span><strong>Point the camera at the page QR code</strong></div>
+        <div class="scan-guide" id="scan-guide" role="status" aria-live="polite"><strong id="scan-guide-text">Point the camera at a page QR code</strong></div>
         <div class="page-capture-guide" id="page-capture-guide" hidden><span>Page ready</span><strong>Move back until the complete page is visible, then tap the camera button</strong></div>
         <div class="camera-overlay"><span class="camera-live">Live scanner</span><p id="status">Starting camera...</p></div>
       </div>
@@ -247,6 +247,7 @@
   backdrop-filter: blur(6px);
 }
 .page-capture-guide[hidden] { display: none; }
+.scan-guide.alert { border-color: rgba(248, 113, 113, .6); background: rgba(153, 27, 27, .9); }
 .scan-guide strong,
 .page-capture-guide strong { font-size: 13px; font-weight: 600; line-height: 1.35; }
 .scan-guide span,
@@ -560,16 +561,8 @@ body.camera-view-active { overflow: hidden; }
     backdrop-filter: blur(8px);
     box-shadow: 0 10px 24px rgba(8, 12, 18, .45);
   }
-  .qr-check-result {
-    position: fixed;
-    left: 16px;
-    right: 16px;
-    bottom: calc(164px + env(safe-area-inset-bottom));
-    z-index: 110;
-    margin: 0;
-    border-radius: 12px;
-    box-shadow: 0 10px 24px rgba(8, 12, 18, .4);
-  }
+  /* On phones the banner at the top of the camera carries QR results. */
+  .qr-check-result { display: none !important; }
   .scanned-sheet {
     position: fixed;
     left: 0;
@@ -867,7 +860,7 @@ let awaitingPageCapture = false;
 let capturedPageFiles = [];
 // Set when the resident stops scanning early to check only the pages scanned so far.
 let readyToCheck = false;
-// Codes the server found drawn on are not sent again, so one scan logs one report.
+// Codes the server rejected are not sent again, so one scan logs one report.
 const rejectedTokens = new Map();
 const retryCounts = new Map();
 
@@ -932,10 +925,17 @@ function renderScannedPages() {
 }
 mobileQuery.addEventListener('change', renderScannedPages);
 
+const scanGuide = document.getElementById('scan-guide');
+const scanGuideText = document.getElementById('scan-guide-text');
+const scanGuideDefault = scanGuideText.textContent;
+
 function setQrResult(valid, message) {
   qrResult.hidden = false;
   qrResult.className = `qr-check-result ${valid ? 'valid' : 'invalid'}`;
   qrResult.textContent = message;
+  // Problems replace the camera instruction instead of adding another box.
+  scanGuide.classList.toggle('alert', !valid);
+  scanGuideText.textContent = valid ? scanGuideDefault : message;
 }
 
 function showQrLoading() {
@@ -962,7 +962,7 @@ function openRegisteredPage(result) {
   const actions = document.getElementById('registered-page-actions');
   actions.hidden = allPagesScanned() || readyToCheck;
   document.getElementById('registered-page-progress').textContent =
-    `${tokens.length} of ${expectedTotal} page(s) scanned. Tap Continue to scan another page, or check these now.`;
+    `${tokens.length} of ${expectedTotal} pages scanned.`;
   document.getElementById('registered-page-dialog').showModal();
 }
 
@@ -991,6 +991,7 @@ async function validateScannedCode(value, frame) {
   body.append('qr_token', value);
   body.append('csrfmiddlewaretoken', csrfToken);
   if (frame) body.append('qr_frame', frame, 'qr-frame.jpg');
+  body.append('attempt', String((retryCounts.get(value) || 0) + 1));
   try {
     const request = fetch(qrCheckUrl, {
       method: 'POST',
@@ -1001,14 +1002,10 @@ async function validateScannedCode(value, frame) {
     const result = await response.json();
     hideQrLoading();
     if (!result.valid) {
-      let message = result.message || 'This QR code could not be verified.';
+      const message = result.message || 'This QR code could not be verified.';
       if (result.tampered) rejectedTokens.set(value, message);
-      if (result.retry) {
-        const attempts = (retryCounts.get(value) || 0) + 1;
-        retryCounts.set(value, attempts);
-        if (attempts >= 3) message += ' If the code is drawn on, damaged or covered, ask the barangay for a clean copy.';
-      }
-      statusNode.textContent = message;
+      if (result.retry) retryCounts.set(value, (retryCounts.get(value) || 0) + 1);
+      statusNode.textContent = result.retry ? 'Checking the QR code...' : 'QR code rejected.';
       setQrResult(false, message);
       return;
     }
@@ -1142,7 +1139,7 @@ navigator.mediaDevices.getUserMedia({
   video: {facingMode: {ideal: 'environment'}, width: {ideal: 1280}, height: {ideal: 720}},
 }).then(stream => {
   video.srcObject = stream;
-  statusNode.textContent = 'Camera ready. Hold a page QR steadily inside the view.';
+  statusNode.textContent = 'Camera ready.';
   requestAnimationFrame(scanFrame);
 }).catch(error => {
   statusNode.textContent = `Camera unavailable: ${error.message}`;
@@ -1219,11 +1216,11 @@ async function scanFrame(now) {
         lastValue = value;
         lastSeenAt = now;
         if (!value.startsWith('SGP1.')) {
-          statusNode.textContent = 'QR detected, but it is not a SealGuard physical-page code.';
-          setQrResult(false, statusNode.textContent);
+          statusNode.textContent = 'QR code rejected.';
+          setQrResult(false, 'This is not a SealGuard page QR code.');
         } else if (rejectedTokens.has(value)) {
-          statusNode.textContent = rejectedTokens.get(value);
-          setQrResult(false, statusNode.textContent);
+          statusNode.textContent = 'QR code rejected.';
+          setQrResult(false, rejectedTokens.get(value));
         } else {
           await validateScannedCode(value, tokens.includes(value) ? null : await captureScanFrame());
         }

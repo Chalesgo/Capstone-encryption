@@ -1201,13 +1201,12 @@ def _registered_page_pdf(manifest_record, page_number, thumbnail_width=None):
 
 QR_FRAME_MAX_BYTES = 8 * 1024 * 1024
 QR_FRAME_MAX_PIXELS = 16_000_000
-QR_SCAN_TAMPERED_MESSAGE = (
-    'This QR code has been drawn on or damaged, so it cannot be trusted and its page will not be shown. '
-    'Ask the barangay for a clean copy.'
-)
-QR_SCAN_RETRY_MESSAGE = (
-    'Hold the phone steady with the whole QR code in view so SealGuard can check that it has not been drawn on.'
-)
+QR_SCAN_TAMPERED_MESSAGE = 'This QR code may have been tampered with. Ask the barangay for a clean copy.'
+QR_SCAN_RETRY_MESSAGE = 'Hold steady so SealGuard can check the QR code.'
+# Phone scanners read codes the server's stricter reader cannot. A code the phone
+# keeps reading but the server cannot re-read after this many frames is treated
+# as drawn over rather than blurred.
+QR_SCAN_UNREADABLE_ATTEMPTS = 3
 
 
 def _scanned_qr_condition(frame, token):
@@ -1243,8 +1242,15 @@ def verify_physical_qr(request):
         return error
     # A phone still decodes a code that has been drawn over, so the page is shown
     # only after the printed code itself has been confirmed clean.
-    qr_condition = _scanned_qr_condition(request.FILES.get('qr_frame'), token)
-    if qr_condition in {'damaged', 'altered'}:
+    frame = request.FILES.get('qr_frame')
+    qr_condition = _scanned_qr_condition(frame, token)
+    try:
+        attempt = int(request.POST.get('attempt', '1'))
+    except ValueError:
+        attempt = 1
+    if qr_condition == 'unknown' and frame and attempt >= QR_SCAN_UNREADABLE_ATTEMPTS:
+        qr_condition = 'unreadable'
+    if qr_condition in {'damaged', 'altered', 'unreadable'}:
         log_activity(
             request, 'reported_tampering', contract=manifest_record.version.contract,
             note=f'Scanned page QR rejected: page {payload["p"]}; condition={qr_condition}',
@@ -1269,10 +1275,7 @@ def verify_physical_qr(request):
         'total_pages': total_pages,
         'thumbnail': 'data:image/png;base64,' + base64.b64encode(thumbnail).decode('ascii'),
         'page_pdf_url': reverse('verify_physical_page') + '?' + urlencode({'qr_token': token}),
-        'message': (
-            f'Registered QR recognized: page {page_number} of {total_pages}. A matching QR identifies the page only; '
-            'compare it with your printed page, then capture the complete page to finish verification.'
-        ),
+        'message': f'Page {page_number} of {total_pages} found. The QR only identifies the page.',
         'qr_condition': qr_condition,
     })
     response['Cache-Control'] = 'private, no-store'
