@@ -1,0 +1,3 @@
+No automated tests exist for Section J. The section is conditional: it depends on whether
+a separate mobile application is in the final scope. Phone verification is browser-based
+and is covered under Sections A (SMS/email verification) and I (mobile PDF viewer).

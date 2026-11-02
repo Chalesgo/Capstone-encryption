@@ -1,0 +1,15 @@
+[
+  {
+    "test": "PERF-05",
+    "repetition": 1,
+    "users": 50,
+    "requests": 15302,
+    "failures": 2,
+    "failure_rate": 0.00013070186903672723,
+    "average_ms": 2550.490555639848,
+    "p95_ms": 10000.0,
+    "p99_ms": 17000.0,
+    "throughput_rps": 17.002455454176882,
+    "completed_at": "2026-09-06T00:10:09.8838812+08:00"
+  }
+]

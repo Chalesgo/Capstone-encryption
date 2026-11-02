@@ -1,0 +1,7 @@
+SECTION H Reliability and Fault - DJANGO TEST RESULTS
+Extracted from django_test_run_2026-11-02.txt (full run of all contracts tests).
+Tests in this section: 2   Passed: 2   Failed/Errored: 0
+
+contracts.deployment_tests.DeploymentHealthTests
+  test_health_check_confirms_database_and_keys ... ok
+  test_health_check_fails_closed_when_keys_are_missing ... ok

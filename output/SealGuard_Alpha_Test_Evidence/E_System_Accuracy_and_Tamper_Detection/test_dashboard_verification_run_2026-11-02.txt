@@ -1,0 +1,6 @@
+$ node scripts/test_dashboard_verification.cjs
+Run: 2026-11-02 13:10:50, Node v24.18.0
+
+PASS: result display, authentic exclusion, lazy traces, safe text, cached expansion, stale-request isolation, and unevaluated activity
+
+exit code: 0

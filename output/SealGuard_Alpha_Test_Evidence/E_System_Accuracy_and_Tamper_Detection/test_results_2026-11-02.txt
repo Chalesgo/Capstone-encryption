@@ -1,0 +1,53 @@
+SECTION E System Accuracy and Tamper Detection - DJANGO TEST RESULTS
+Extracted from django_test_run_2026-11-02.txt (full run of all contracts tests).
+Tests in this section: 44   Passed: 44   Failed/Errored: 0
+
+contracts.tests.PhysicalVerificationTests
+  test_all_pages_from_correct_contract_are_verified_in_order ... ok
+  test_authorized_staff_can_open_difference_comparison ... ok
+  test_captured_pages_must_match_the_scanned_codes ... ok
+  test_clean_scanned_qr_opens_its_page ... ok
+  test_code_the_phone_reads_but_the_server_cannot_is_rejected_after_retries ... ok
+  test_copied_valid_qr_on_altered_page_detects_differences ... ok
+  test_duplicate_page_is_reported ... ok
+  test_image_only_poor_scan_requires_manual_review ... ok
+  test_incorrect_total_page_information_is_invalid ... ok
+  test_initial_enrollment_creates_signed_manifest_and_page_tokens ... ok
+  test_invalid_manifest_signature_is_invalid ... ok
+  test_modified_page_token_is_invalid ... ok
+  test_only_the_scanned_pages_need_to_be_captured ... ok
+  test_page_carrying_another_pages_qr_is_rejected ... ok
+  test_page_from_another_contract_is_invalid ... ok
+  test_page_from_another_version_is_invalid ... ok
+  test_physical_page_pdf_rejects_invalid_token ... ok
+  test_physical_qr_check_confirms_registered_page_before_full_verification ... ok
+  test_physical_qr_check_rejects_invalid_code_safely ... ok
+  test_physical_qr_preview_contains_only_the_scanned_version_page ... ok
+  test_physical_qr_preview_rejects_trashed_document ... ok
+  test_physical_verification_page_has_loading_state_and_scan_submit_flow ... ok
+  test_qr_crossed_through_its_corners_is_reported_unreadable ... ok
+  test_qr_with_cross_drawn_inside_is_rejected_although_it_still_decodes ... ok
+  test_reordered_pages_are_invalid ... ok
+  test_scanned_qr_is_held_until_its_condition_can_be_checked ... ok
+  test_scanned_qr_that_was_drawn_on_is_rejected_without_showing_the_page ... ok
+  test_scanned_qr_with_a_small_mark_is_rejected ... ok
+  test_signed_scan_gets_new_manifest_and_new_encryption ... ok
+  test_slight_visual_degradation_with_same_text_is_accepted ... ok
+  test_small_mark_on_qr_requires_manual_review ... ok
+
+contracts.tests_evidence_compare.ReportedCopyTests
+  test_comparison_is_not_offered_for_an_authentic_check ... ok
+  test_comparison_requires_a_staff_account ... ok
+  test_comparison_shows_both_documents_and_the_changed_text ... ok
+  test_footer_wording_alone_is_recognised ... ok
+  test_reexported_copy_is_linked_through_its_page_qr ... ok
+  test_unsealed_barangay_document_is_still_not_found ... ok
+
+contracts.tests_dashboard_verification.DashboardVerificationTests
+  test_admin_keeps_access_to_authentic_and_warning_traces ... ok
+  test_dashboard_renders_investigation_controls_but_contract_list_does_not ... ok
+  test_history_reports_selected_activity_result_without_inline_traces ... ok
+  test_read_only_and_anonymous_users_cannot_read_traces ... ok
+  test_staff_can_investigate_visible_non_authentic_results ... ok
+  test_staff_cannot_read_authentic_traces ... ok
+  test_staff_cannot_read_unrelated_unlinked_reports ... ok

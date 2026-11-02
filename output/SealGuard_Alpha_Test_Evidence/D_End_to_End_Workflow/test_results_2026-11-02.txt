@@ -1,0 +1,179 @@
+SECTION D End to End Workflow - DJANGO TEST RESULTS
+Extracted from django_test_run_2026-11-02.txt (full run of all contracts tests).
+Tests in this section: 9   Passed: 8   Failed/Errored: 1
+
+contracts.tests.EndToEndWorkflowTests
+  test_e2e01_complete_lifecycle_matrix ... ok
+  test_e2e03_staff_and_public_verification_matrix ... ok
+  test_e2e04_persistence_after_new_client_session ... FAIL
+  test_failed_revision_does_not_leave_contract_without_version_row ... ok
+
+contracts.notification_tests.NotificationTests
+  test_admin_receives_both_requests_and_correct_destinations ... ok
+  test_notification_modal_and_mobile_bell_render ... ok
+  test_regular_user_and_public_cannot_read_requests ... ok
+  test_staff_only_receives_document_and_can_open_exact_request ... ok
+  test_unsubmitted_reviewed_and_trashed_requests_are_excluded ... ok
+
+
+FAILURE DETAILS
+======================================================================
+FAIL: test_e2e04_persistence_after_new_client_session (tests.EndToEndWorkflowTests)
+----------------------------------------------------------------------
+subtest (contract=1)
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1628, in test_e2e04_persistence_after_new_client_session
+    self.assertEqual(response_bytes, read_pdf(contract.file.path))
+AssertionError: b'SEALGUARD-PACKAGE-1\neyJjb250cmFjdCI6MSwi[538168 chars]x06{' != b'%PDF-1.7\n%\xc2\xb5\xc2\xb6\n% Written by[521060 chars]OF\n'
+======================================================================
+FAIL: test_e2e04_persistence_after_new_client_session (tests.EndToEndWorkflowTests)
+----------------------------------------------------------------------
+subtest (contract=2)
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1628, in test_e2e04_persistence_after_new_client_session
+    self.assertEqual(response_bytes, read_pdf(contract.file.path))
+AssertionError: b'SEALGUARD-PACKAGE-1\neyJjb250cmFjdCI6Miwi[763750 chars]\xce' != b'%PDF-1.7\n%\xc2\xb5\xc2\xb6\n% Written by[813814 chars]OF\n'
+======================================================================
+FAIL: test_e2e04_persistence_after_new_client_session (tests.EndToEndWorkflowTests)
+----------------------------------------------------------------------
+subtest (contract=3)
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1628, in test_e2e04_persistence_after_new_client_session
+    self.assertEqual(response_bytes, read_pdf(contract.file.path))
+AssertionError: b'SEALGUARD-PACKAGE-1\neyJjb250cmFjdCI6Mywi[989761 chars]\x0f' != b'%PDF-1.7\n%\xc2\xb5\xc2\xb6\n% Written by[1109964 chars]OF\n'
+======================================================================
+FAIL: test_e2e04_persistence_after_new_client_session (tests.EndToEndWorkflowTests)
+----------------------------------------------------------------------
+subtest (contract=4)
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1628, in test_e2e04_persistence_after_new_client_session
+    self.assertEqual(response_bytes, read_pdf(contract.file.path))
+AssertionError: b'SEALGUARD-PACKAGE-1\neyJjb250cmFjdCI6NCwi[1217430 chars]\xb6' != b'%PDF-1.7\n%\xc2\xb5\xc2\xb6\n% Written by[1403645 chars]OF\n'
+======================================================================
+FAIL: test_e2e04_persistence_after_new_client_session (tests.EndToEndWorkflowTests)
+----------------------------------------------------------------------
+subtest (contract=5)
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1628, in test_e2e04_persistence_after_new_client_session
+    self.assertEqual(response_bytes, read_pdf(contract.file.path))
+AssertionError: b'SEALGUARD-PACKAGE-1\neyJjb250cmFjdCI6NSwi[537998 chars]xfe:' != b'%PDF-1.7\n%\xc2\xb5\xc2\xb6\n% Written by[521289 chars]OF\n'
+======================================================================
+FAIL: test_e2e04_persistence_after_new_client_session (tests.EndToEndWorkflowTests)
+----------------------------------------------------------------------
+subtest (contract=6)
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1628, in test_e2e04_persistence_after_new_client_session
+    self.assertEqual(response_bytes, read_pdf(contract.file.path))
+AssertionError: b'SEALGUARD-PACKAGE-1\neyJjb250cmFjdCI6Niwi[763552 chars]\xd0' != b'%PDF-1.7\n%\xc2\xb5\xc2\xb6\n% Written by[814855 chars]OF\n'
+======================================================================
+FAIL: test_e2e04_persistence_after_new_client_session (tests.EndToEndWorkflowTests)
+----------------------------------------------------------------------
+subtest (contract=7)
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1628, in test_e2e04_persistence_after_new_client_session
+    self.assertEqual(response_bytes, read_pdf(contract.file.path))
+AssertionError: b'SEALGUARD-PACKAGE-1\neyJjb250cmFjdCI6Nywi[989917 chars]15fD' != b'%PDF-1.7\n%\xc2\xb5\xc2\xb6\n% Written by[1108411 chars]OF\n'
+======================================================================
+FAIL: test_e2e04_persistence_after_new_client_session (tests.EndToEndWorkflowTests)
+----------------------------------------------------------------------
+subtest (contract=8)
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1628, in test_e2e04_persistence_after_new_client_session
+    self.assertEqual(response_bytes, read_pdf(contract.file.path))
+AssertionError: b'SEALGUARD-PACKAGE-1\neyJjb250cmFjdCI6OCwi[1216417 chars]UT{+' != b'%PDF-1.7\n%\xc2\xb5\xc2\xb6\n% Written by[1403257 chars]OF\n'
+======================================================================
+FAIL: test_e2e04_persistence_after_new_client_session (tests.EndToEndWorkflowTests)
+----------------------------------------------------------------------
+subtest (contract=9)
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1628, in test_e2e04_persistence_after_new_client_session
+    self.assertEqual(response_bytes, read_pdf(contract.file.path))
+AssertionError: b'SEALGUARD-PACKAGE-1\neyJjb250cmFjdCI6OSwi[537836 chars]9L`o' != b'%PDF-1.7\n%\xc2\xb5\xc2\xb6\n% Written by[520911 chars]OF\n'
+======================================================================
+FAIL: test_e2e04_persistence_after_new_client_session (tests.EndToEndWorkflowTests)
+----------------------------------------------------------------------
+subtest (contract=10)
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1628, in test_e2e04_persistence_after_new_client_session
+    self.assertEqual(response_bytes, read_pdf(contract.file.path))
+AssertionError: b'SEALGUARD-PACKAGE-1\neyJjb250cmFjdCI6MTAs[809644 chars]\xa3' != b'%PDF-1.7\n%\xc2\xb5\xc2\xb6\n% Written by[874476 chars]OF\n'
+======================================================================
+FAIL: test_e2e04_persistence_after_new_client_session (tests.EndToEndWorkflowTests)
+----------------------------------------------------------------------
+subtest (contract=11)
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1628, in test_e2e04_persistence_after_new_client_session
+    self.assertEqual(response_bytes, read_pdf(contract.file.path))
+AssertionError: b'SEALGUARD-PACKAGE-1\neyJjb250cmFjdCI6MTEs[1058954 chars]x94&' != b'%PDF-1.7\n%\xc2\xb5\xc2\xb6\n% Written by[1197495 chars]OF\n'
+======================================================================
+FAIL: test_e2e04_persistence_after_new_client_session (tests.EndToEndWorkflowTests)
+----------------------------------------------------------------------
+subtest (contract=12)
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1628, in test_e2e04_persistence_after_new_client_session
+    self.assertEqual(response_bytes, read_pdf(contract.file.path))
+AssertionError: b'SEALGUARD-PACKAGE-1\neyJjb250cmFjdCI6MTIs[1307940 chars]VF\t' != b'%PDF-1.7\n%\xc2\xb5\xc2\xb6\n% Written by[1521972 chars]OF\n'
+======================================================================
+FAIL: test_e2e04_persistence_after_new_client_session (tests.EndToEndWorkflowTests)
+----------------------------------------------------------------------
+subtest (contract=13)
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1628, in test_e2e04_persistence_after_new_client_session
+    self.assertEqual(response_bytes, read_pdf(contract.file.path))
+AssertionError: b'SEALGUARD-PACKAGE-1\neyJjb250cmFjdCI6MTMs[559952 chars]\xd4' != b'%PDF-1.7\n%\xc2\xb5\xc2\xb6\n% Written by[550452 chars]OF\n'
+======================================================================
+FAIL: test_e2e04_persistence_after_new_client_session (tests.EndToEndWorkflowTests)
+----------------------------------------------------------------------
+subtest (contract=14)
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1628, in test_e2e04_persistence_after_new_client_session
+    self.assertEqual(response_bytes, read_pdf(contract.file.path))
+AssertionError: b'SEALGUARD-PACKAGE-1\neyJjb250cmFjdCI6MTQs[808430 chars]\xf1' != b'%PDF-1.7\n%\xc2\xb5\xc2\xb6\n% Written by[875058 chars]OF\n'
+======================================================================
+FAIL: test_e2e04_persistence_after_new_client_session (tests.EndToEndWorkflowTests)
+----------------------------------------------------------------------
+subtest (contract=15)
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1628, in test_e2e04_persistence_after_new_client_session
+    self.assertEqual(response_bytes, read_pdf(contract.file.path))
+AssertionError: b'SEALGUARD-PACKAGE-1\neyJjb250cmFjdCI6MTUs[1059142 chars]\xcf' != b'%PDF-1.7\n%\xc2\xb5\xc2\xb6\n% Written by[1198113 chars]OF\n'
+======================================================================
+FAIL: test_e2e04_persistence_after_new_client_session (tests.EndToEndWorkflowTests)
+----------------------------------------------------------------------
+subtest (contract=16)
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1628, in test_e2e04_persistence_after_new_client_session
+    self.assertEqual(response_bytes, read_pdf(contract.file.path))
+AssertionError: b'SEALGUARD-PACKAGE-1\neyJjb250cmFjdCI6MTYs[1308738 chars]xf58' != b'%PDF-1.7\n%\xc2\xb5\xc2\xb6\n% Written by[1524711 chars]OF\n'
+======================================================================
+FAIL: test_e2e04_persistence_after_new_client_session (tests.EndToEndWorkflowTests)
+----------------------------------------------------------------------
+subtest (contract=17)
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1628, in test_e2e04_persistence_after_new_client_session
+    self.assertEqual(response_bytes, read_pdf(contract.file.path))
+AssertionError: b'SEALGUARD-PACKAGE-1\neyJjb250cmFjdCI6MTcs[559052 chars]1fU]' != b'%PDF-1.7\n%\xc2\xb5\xc2\xb6\n% Written by[551279 chars]OF\n'
+======================================================================
+FAIL: test_e2e04_persistence_after_new_client_session (tests.EndToEndWorkflowTests)
+----------------------------------------------------------------------
+subtest (contract=18)
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1628, in test_e2e04_persistence_after_new_client_session
+    self.assertEqual(response_bytes, read_pdf(contract.file.path))
+AssertionError: b'SEALGUARD-PACKAGE-1\neyJjb250cmFjdCI6MTgs[808606 chars]\x85' != b'%PDF-1.7\n%\xc2\xb5\xc2\xb6\n% Written by[875195 chars]OF\n'
+======================================================================
+FAIL: test_e2e04_persistence_after_new_client_session (tests.EndToEndWorkflowTests)
+----------------------------------------------------------------------
+subtest (contract=19)
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1628, in test_e2e04_persistence_after_new_client_session
+    self.assertEqual(response_bytes, read_pdf(contract.file.path))
+AssertionError: b'SEALGUARD-PACKAGE-1\neyJjb250cmFjdCI6MTks[1058578 chars]\xb8' != b'%PDF-1.7\n%\xc2\xb5\xc2\xb6\n% Written by[1200451 chars]OF\n'
+======================================================================
+FAIL: test_e2e04_persistence_after_new_client_session (tests.EndToEndWorkflowTests)
+----------------------------------------------------------------------
+subtest (contract=20)
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1628, in test_e2e04_persistence_after_new_client_session
+    self.assertEqual(response_bytes, read_pdf(contract.file.path))
+AssertionError: b'SEALGUARD-PACKAGE-1\neyJjb250cmFjdCI6MjAs[1306792 chars]x95u' != b'%PDF-1.7\n%\xc2\xb5\xc2\xb6\n% Written by[1521009 chars]OF\n'

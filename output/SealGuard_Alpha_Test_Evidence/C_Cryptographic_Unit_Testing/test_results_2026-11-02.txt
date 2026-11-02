@@ -1,0 +1,74 @@
+SECTION C Cryptographic Unit Testing - DJANGO TEST RESULTS
+Extracted from django_test_run_2026-11-02.txt (full run of all contracts tests).
+Tests in this section: 65   Passed: 65   Failed/Errored: 0
+
+contracts.tests.CryptographicUnitTests
+  test_cry01_sha256_consistency_matrix ... ok
+  test_cry02_canonical_fingerprint_consistency_matrix ... ok
+  test_cry03_fingerprint_change_detection_matrix ... ok
+  test_cry04_aes_round_trip_matrix ... ok
+  test_cry05_incorrect_aes_key_or_wrapping_key_fails_matrix ... ok
+  test_cry06_corrupted_ciphertext_is_rejected_matrix ... ok
+  test_cry07_hmac_validation_matrix ... ok
+  test_cry08_rsa_key_wrapping_matrix ... ok
+  test_cry09_lsb_embed_extract_capacity_matrix ... ok
+  test_cry10_invalid_lsb_payloads_are_not_accepted_matrix ... ok
+  test_cry12_sensitive_data_inspection_matrix ... ok
+  test_lsb_survives_transparent_seal_pdf_embedding ... ok
+
+contracts.tests.PublicVerificationCryptoTests
+  test_acc01_to_acc07_three_repetition_accuracy_matrix ... ok
+  test_changed_sealed_pdf_fingerprint_is_rejected ... ok
+  test_copied_authentication_footer_never_grants_authenticity ... ok
+  test_e_accuracy_controlled_100_file_matrix_and_audit_events ... ok
+  test_editor_export_without_markers_retains_warning_evidence_and_trace ... ok
+  test_invalid_hmac_is_rejected ... ok
+  test_invalid_wrapped_aes_key_is_rejected ... ok
+  test_issued_pdf_upload_offers_existing_copy_without_creating_revision ... ok
+  test_legacy_transparent_seal_uses_enrollment_seal_compatibility ... ok
+  test_misleading_filenames_do_not_control_classification ... ok
+  test_missing_or_changed_lsb_marker_is_rejected ... ok
+  test_missing_record_with_authentication_evidence_returns_possible_modification ... ok
+  test_modified_or_replaced_metadata_marker_is_rejected ... ok
+  test_modified_text_is_rejected ... ok
+  test_modified_vector_is_rejected_with_pdf_editor_warning ... ok
+  test_revision_chain_metadata_does_not_override_pdf_authenticity ... ok
+  test_unregistered_pdf_without_authentication_evidence_remains_not_found ... ok
+  test_valid_authentic_sealed_pdf ... ok
+
+contracts.pdf_approval_tests.EncryptedPDFApprovalTests
+  test_admin_sets_any_duration_within_bounds ... ok
+  test_approval_does_not_expose_future_revision ... ok
+  test_approved_request_uses_embedded_panel_and_scoped_view_url ... ok
+  test_approver_is_kept_after_another_staff_member_revokes ... ok
+  test_authorized_preview_decrypts_without_changing_disk ... ok
+  test_browser_navigation_uses_internal_viewer ... ok
+  test_bulk_zip_contains_only_encrypted_packages ... ok
+  test_complete_guest_approval_and_session_binding ... ok
+  test_corrupt_storage_returns_safe_error ... ok
+  test_csrf_is_required_for_email_and_approval_actions ... ok
+  test_decision_requires_a_reason ... ok
+  test_encrypted_downloads_reopen_only_for_authorized_user ... ok
+  test_encrypted_upload_requires_csrf ... ok
+  test_grant_expires_and_can_be_revoked ... ok
+  test_guest_package_reopening_requires_live_approval ... ok
+  test_guest_page_does_not_disclose_private_title ... ok
+  test_migration_is_resumable_and_preserves_plaintext_bytes ... ok
+  test_package_permission_is_checked_before_decryption_and_again_after_revocation ... ok
+  test_public_document_still_decrypts_for_anonymous_view ... ok
+  test_qr_request_form_is_shown_even_with_existing_document_access ... ok
+  test_qr_sheet_contains_no_confidential_pdf_content ... ok
+  test_reader_cannot_approve_or_fetch_queue_or_sheet ... ok
+  test_rejection_does_not_grant_access ... ok
+  test_reviewer_can_approve_submitted_request_and_get_is_read_only ... ok
+  test_sealed_pdf_contains_clickable_verification_link ... ok
+  test_sgpdf_public_request_exact_version_preview_and_audit ... ok
+  test_sgpdf_rejection_and_modified_ciphertext_block_access ... ok
+  test_skip_sealing_still_encrypts_upload_and_preserves_fingerprint ... ok
+  test_staff_can_read_queue_but_only_admin_decides ... ok
+  test_storage_is_encrypted_and_round_trip_is_exact ... ok
+  test_submission_does_not_depend_on_email_delivery ... ok
+  test_submission_lock_is_retryable_and_does_not_approve ... ok
+  test_submission_preserves_single_use_qr ... ok
+  test_tampering_wrong_key_and_plaintext_fail_closed ... ok
+  test_verify_redirects_encrypted_extension_and_magic ... ok

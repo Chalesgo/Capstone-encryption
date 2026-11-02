@@ -1,0 +1,6 @@
+operation,requests,failures,average_ms,p95_ms
+login,104,0,370,400
+contract list,101,0,26,32
+search,101,0,15,17
+public verification page,103,0,13,15
+public verification POST,103,0,103,120

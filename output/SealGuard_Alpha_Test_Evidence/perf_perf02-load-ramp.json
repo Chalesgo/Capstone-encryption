@@ -1,0 +1,46 @@
+﻿[
+    {
+        "users":  10,
+        "requests":  652,
+        "failures":  1,
+        "failure_rate":  0.0015337423312883436,
+        "average_ms":  1072.0021691717627,
+        "p95_ms":  null,
+        "p99_ms":  null,
+        "throughput_rps":  11.62981069905113,
+        "completed_at":  "2026-09-05T23:25:16.4757033+08:00"
+    },
+    {
+        "users":  20,
+        "requests":  705,
+        "failures":  0,
+        "failure_rate":  0.0,
+        "average_ms":  1440.0961856737754,
+        "p95_ms":  null,
+        "p99_ms":  null,
+        "throughput_rps":  12.570970273655405,
+        "completed_at":  "2026-09-05T23:30:16.7553335+08:00"
+    },
+    {
+        "users":  30,
+        "requests":  597,
+        "failures":  0,
+        "failure_rate":  0.0,
+        "average_ms":  2031.5557204352067,
+        "p95_ms":  null,
+        "p99_ms":  null,
+        "throughput_rps":  10.648672561042677,
+        "completed_at":  "2026-09-05T23:35:17.0605193+08:00"
+    },
+    {
+        "users":  50,
+        "requests":  2901,
+        "failures":  0,
+        "failure_rate":  0.0,
+        "average_ms":  3420.15574488108,
+        "p95_ms":  null,
+        "p99_ms":  null,
+        "throughput_rps":  11.91066232029723,
+        "completed_at":  "2026-09-05T23:39:32.2980957+08:00"
+    }
+]

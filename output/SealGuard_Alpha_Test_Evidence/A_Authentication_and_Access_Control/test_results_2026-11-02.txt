@@ -1,0 +1,247 @@
+SECTION A Authentication and Access Control - DJANGO TEST RESULTS
+Extracted from django_test_run_2026-11-02.txt (full run of all contracts tests).
+Tests in this section: 116   Passed: 104   Failed/Errored: 12
+
+contracts.tests.AuthenticationMatrixTests
+  test_auth01_successful_login_matrix ... ok
+  test_auth02_unsuccessful_login_matrix ... ok
+  test_auth03_brute_force_lockout_matrix ... ok
+  test_auth05_logout_invalidates_protected_session_matrix ... ok
+  test_auth06_unauthenticated_protected_actions_matrix ... ok
+  test_auth07_clerk_granted_contract_delete_permission ... FAIL
+  test_auth07_rbac_role_permission_matrix ... FAIL
+  test_auth08_object_level_authorization_matrix ... FAIL
+  test_auth09_authentication_audit_log_matrix ... ok
+  test_auth10_session_reuse_matrix ... ok
+
+contracts.tests.AuditLogTests
+  test_admin_can_create_sanitized_tutorial ... ok
+  test_admin_uses_sealguard_branding ... ok
+  test_authentication_events_are_recorded ... FAIL
+  test_contract_preview_is_non_blocking_when_closed_on_mobile ... ok
+  test_contract_rows_open_pdf_from_non_control_area ... FAIL
+  test_dashboard_filters_activity_and_sorts_oldest_first ... ok
+  test_dashboard_marks_deleted_pdf_as_unavailable_with_reason ... ok
+  test_dashboard_mobile_pdf_action_sheet_preserves_details_access ... ok
+  test_dashboard_paginates_and_preserves_filter_controls ... ok
+  test_dashboard_supports_multiple_persistent_activity_filters ... ok
+  test_document_search_is_debounced_in_the_browser ... FAIL
+  test_document_title_survives_permanent_deletion ... ok
+  test_filename_cannot_authenticate_an_invalid_pdf ... ok
+  test_folder_reorder_is_persisted_for_current_user ... ok
+  test_folder_reorder_rejects_incomplete_order ... ok
+  test_help_page_lists_questions_and_icon_picker ... ok
+  test_mobile_navigation_replaces_sidebar ... ok
+  test_mobile_pdf_static_assets_are_served_when_debug_is_false ... FAIL
+  test_mobile_version_metadata_requires_login_and_omits_scan_results ... FAIL
+  test_non_admin_cannot_create_tutorial ... ok
+  test_non_admin_cannot_see_or_use_tutorial_delete ... ok
+  test_opening_contract_view_records_viewed_event ... ok
+  test_staff_can_delete_empty_shared_folder ... FAIL
+  test_staff_can_see_and_reorder_shared_folders ... ok
+  test_staff_cannot_delete_shared_folder_with_documents ... FAIL
+  test_superuser_can_delete_tutorial ... ok
+  test_tampered_verification_retains_pdf_and_inspection_details ... ok
+  test_tutorial_inline_icons_are_whitelisted_and_sanitized ... ok
+  test_unknown_verification_logs_details_without_retaining_pdf ... ok
+  test_verification_history_keeps_repeated_attempts_collapsed_and_lazy ... ok
+  test_verification_loading_layout_locks_page_scroll ... FAIL
+  test_verification_results_reuse_loading_layout_and_light_log ... FAIL
+  test_version_history_identifies_account_that_added_each_version ... ok
+
+contracts.access_tests.ContractListFilterTests
+  test_deleted_uploader_name_is_preserved ... ok
+  test_deleted_uploaders_are_listed_and_filterable ... ok
+  test_revision_badge_shows_version_count ... ok
+  test_scope_menu_filters_my_uploads_and_shared_with_me ... ok
+  test_sort_by_date_created_both_directions ... ok
+  test_sort_by_name_a_to_z ... ok
+  test_status_and_modified_sorts ... ok
+  test_uploader_filter_and_pagination_keep_filters ... ok
+  test_version_history_reports_document_owner_as_fallback ... ok
+
+contracts.access_tests.DocumentAccessTests
+  test_admin_can_grant_access_to_another_uploaders_document ... ok
+  test_admin_pdf_download_option_for_current_and_historical_versions ... ok
+  test_anonymous_viewer_cannot_read_private_or_trashed_metadata ... ok
+  test_bulk_actions_reject_mixed_unauthorized_selection ... ok
+  test_collaborator_can_edit_but_cannot_delegate_or_publish ... ok
+  test_collaborator_can_trash_and_restore_owned_document ... ok
+  test_evidence_and_seals_obey_document_access ... ok
+  test_file_access_matrix_including_direct_media ... ok
+  test_folder_delete_cannot_bypass_access ... ok
+  test_grant_revoke_and_audit ... ok
+  test_list_dashboard_and_export_hide_unrelated_documents ... ok
+  test_list_uses_shared_viewer_with_admin_download_metadata ... ok
+  test_media_denies_orphans_temporary_files_and_traversal ... ok
+  test_owner_backfill_uses_initial_uploader_then_recipient ... ok
+  test_public_branding_and_private_trash_thumbnail ... ok
+  test_public_read_does_not_grant_edit ... ok
+  test_public_viewer_metadata_is_available_without_login ... ok
+  test_published_download_needs_sign_in_and_is_a_regular_pdf_for_residents ... ok
+  test_sharing_requires_csrf ... ok
+  test_sharing_validates_users_and_keeps_owner ... ok
+  test_trashed_files_are_not_served_even_if_public ... ok
+  test_unrelated_users_cannot_mutate_or_read_history ... ok
+  test_upload_records_uploader_and_ignores_forged_owner ... ok
+  test_verification_temporary_preview_is_session_bound ... ok
+
+contracts.role_tests.SealGuardRoleTests
+  test_bulk_final_copy_publishes_existing_private_final ... ok
+  test_final_copy_publishes_document ... ok
+  test_role_group_follows_staff_flag ... ok
+  test_staff_cannot_publish_by_finalizing ... ok
+  test_staff_has_workspace_but_not_django_admin ... ok
+  test_superuser_has_full_access_and_admin ... ok
+  test_user_can_view_assigned_pdf_but_not_mutate_or_download ... ok
+
+contracts.registration_tests.StaffRegistrationTests
+  test_verified_registration_uses_django_password_and_redirects_to_login ... ok
+
+contracts.tests_residents.ResidentAccountTests
+  test_admin_dashboard_reports_resident_activity ... ok
+  test_anonymous_visitors_sign_in_to_view_published_documents ... ok
+  test_browser_navigation_to_a_pdf_is_logged_once ... ok
+  test_registration_confirms_email_then_creates_resident_account ... ok
+  test_registration_rejects_wrong_code_existing_email_and_weak_password ... ok
+  test_resident_cannot_open_unpublished_documents ... ok
+  test_resident_navigation_hides_the_staff_workspace ... ok
+  test_resident_reaches_only_verification_pages ... ok
+  test_resident_reset_rejects_wrong_code_and_throttles_new_codes ... ok
+  test_resident_resets_password_by_email_without_admin_approval ... ok
+  test_resident_views_and_downloads_published_documents_with_audit_trail ... ok
+  test_staff_and_read_only_workspace_users_are_not_restricted ... ok
+  test_staff_and_unknown_emails_keep_the_admin_approval_flow ... ok
+  test_unconfirmed_email_delivery_keeps_the_code_active_without_an_error ... ok
+
+contracts.sms_tests.SMSVerificationTests
+  test_challenge_expiry_attempt_limit_and_replay ... ok
+  test_changed_phone_invalidates_reset ... ok
+  test_email_delivery_uses_n8n_when_configured ... ok
+  test_email_registration_still_works ... ok
+  test_email_reset_and_attempt_limit ... ok
+  test_existing_user_can_verify_phone_and_choose_sms ... ok
+  test_expired_reset_code_is_rejected ... ok
+  test_incomplete_n8n_email_configuration_fails_closed ... ok
+  test_phone_normalization_and_validation ... ok
+  test_qr_contact_accepts_sms_without_email ... ok
+  test_qr_sms_submission_is_stored_and_visible_to_reviewer ... ok
+  test_send_throttle_cross_session_and_failure_state ... ok
+  test_sms_admin_restricted_to_superusers ... ok
+  test_sms_preference_falls_back_to_email_until_sms_backend_exists ... ok
+  test_sms_registration_verifies_only_selected_contact ... ok
+  test_sms_reset_requires_admin_and_session_then_changes_password ... ok
+  test_successful_email_reset_verification ... ok
+  test_unverified_phone_cannot_request_reset ... ok
+
+
+FAILURE DETAILS
+======================================================================
+FAIL: test_auth07_clerk_granted_contract_delete_permission (tests.AuthenticationMatrixTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 814, in test_auth07_clerk_granted_contract_delete_permission
+    self.assertEqual(denied.status_code, 302)
+AssertionError: 404 != 302
+======================================================================
+FAIL: test_auth07_rbac_role_permission_matrix (tests.AuthenticationMatrixTests)
+----------------------------------------------------------------------
+subtest (role='Clerk', action='delete')
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 858, in test_auth07_rbac_role_permission_matrix
+    self.assertIn(response.status_code, {302, 403})
+AssertionError: 404 not found in {403, 302}
+======================================================================
+FAIL: test_auth07_rbac_role_permission_matrix (tests.AuthenticationMatrixTests)
+----------------------------------------------------------------------
+subtest (role='Public', action='private access')
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 869, in test_auth07_rbac_role_permission_matrix
+    self.assertEqual(response.status_code, 302)
+AssertionError: 404 != 302
+======================================================================
+FAIL: test_auth08_object_level_authorization_matrix (tests.AuthenticationMatrixTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 913, in test_auth08_object_level_authorization_matrix
+    self.assertEqual(unauthorized_failures, [])
+AssertionError: Lists differ: [(1, 'view', 404), (1, 'edit', 404), (1, '[737 chars]302)] != []
+
+First list contains 40 additional elements.
+First extra element 0:
+(1, 'view', 404)
+
+Diff is 909 characters long. Set self.maxDiff to None to see it.
+======================================================================
+FAIL: test_authentication_events_are_recorded (tests.AuditLogTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 107, in test_authentication_events_are_recorded
+    self.assertContains(login_page, '<form method="post" novalidate>', html=False)
+  File "C:\Users\griff\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\django\test\testcases.py", line 660, in assertContains
+    self.assertTrue(
+AssertionError: False is not true : Couldn't find '<form method="post" novalidate>' in response
+======================================================================
+FAIL: test_contract_rows_open_pdf_from_non_control_area (tests.AuditLogTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 291, in test_contract_rows_open_pdf_from_non_control_area
+    self.assertContains(response, 'openPdfPreview(contractId, row.dataset.fileUrl, row.dataset.contractTitle)')
+  File "C:\Users\griff\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\django\test\testcases.py", line 660, in assertContains
+    self.assertTrue(
+AssertionError: False is not true : Couldn't find 'openPdfPreview(contractId, row.dataset.fileUrl, row.dataset.contractTitle)' in response
+======================================================================
+FAIL: test_document_search_is_debounced_in_the_browser (tests.AuditLogTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 278, in test_document_search_is_debounced_in_the_browser
+    self.assertContains(response, 'oninput="scheduleSearchFilter()"')
+  File "C:\Users\griff\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\django\test\testcases.py", line 660, in assertContains
+    self.assertTrue(
+AssertionError: False is not true : Couldn't find 'oninput="scheduleSearchFilter()"' in response
+======================================================================
+FAIL: test_mobile_pdf_static_assets_are_served_when_debug_is_false (tests.AuditLogTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 131, in test_mobile_pdf_static_assets_are_served_when_debug_is_false
+    self.assertEqual(response.status_code, 200)
+AssertionError: 404 != 200
+======================================================================
+FAIL: test_mobile_version_metadata_requires_login_and_omits_scan_results (tests.AuditLogTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 169, in test_mobile_version_metadata_requires_login_and_omits_scan_results
+    self.assertEqual(self.client.get(url, {'metadata_only': '1'}).status_code, 302)
+AssertionError: 404 != 302
+======================================================================
+FAIL: test_staff_can_delete_empty_shared_folder (tests.AuditLogTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 465, in test_staff_can_delete_empty_shared_folder
+    self.assertEqual(response.status_code, 200)
+AssertionError: 404 != 200
+======================================================================
+FAIL: test_staff_cannot_delete_shared_folder_with_documents (tests.AuditLogTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 482, in test_staff_cannot_delete_shared_folder_with_documents
+    self.assertEqual(response.status_code, 403)
+AssertionError: 404 != 403
+======================================================================
+FAIL: test_verification_loading_layout_locks_page_scroll (tests.AuditLogTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 511, in test_verification_loading_layout_locks_page_scroll
+    self.assertContains(response, "grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.75fr)")
+  File "C:\Users\griff\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\django\test\testcases.py", line 660, in assertContains
+    self.assertTrue(
+AssertionError: False is not true : Couldn't find 'grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.75fr)' in response
+======================================================================
+FAIL: test_verification_results_reuse_loading_layout_and_light_log (tests.AuditLogTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 526, in test_verification_results_reuse_loading_layout_and_light_log
+    self.assertContains(response, 'background: #f7f8fa;')
+  File "C:\Users\griff\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\django\test\testcases.py", line 660, in assertContains
+    self.assertTrue(
+AssertionError: False is not true : Couldn't find 'background: #f7f8fa;' in response

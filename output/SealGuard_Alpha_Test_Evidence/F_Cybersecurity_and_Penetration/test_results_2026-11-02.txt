@@ -1,0 +1,92 @@
+SECTION F Cybersecurity and Penetration - DJANGO TEST RESULTS
+Extracted from django_test_run_2026-11-02.txt (full run of all contracts tests).
+Tests in this section: 4   Passed: 3   Failed/Errored: 1
+
+contracts.security_tests.ApplicationSecurityMatrixTests
+  test_sec01_sql_injection_matrix_100_safe_requests ... ok
+  test_sec02_xss_matrix_60_inputs ... ok
+  test_sec05_public_object_access_matrix_40_requests ... FAIL
+  test_sec06_http_upload_abuse_matrix_30_requests ... ok
+
+
+FAILURE DETAILS
+======================================================================
+FAIL: test_sec05_public_object_access_matrix_40_requests (security_tests.ApplicationSecurityMatrixTests)
+----------------------------------------------------------------------
+subtest (contract=1, url='/contract/1/version-history/')
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\security_tests.py", line 142, in test_sec05_public_object_access_matrix_40_requests
+    self.assertIn(response.status_code, {302, 401, 403})
+AssertionError: 404 not found in {401, 403, 302}
+======================================================================
+FAIL: test_sec05_public_object_access_matrix_40_requests (security_tests.ApplicationSecurityMatrixTests)
+----------------------------------------------------------------------
+subtest (contract=2, url='/contract/2/version-history/')
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\security_tests.py", line 142, in test_sec05_public_object_access_matrix_40_requests
+    self.assertIn(response.status_code, {302, 401, 403})
+AssertionError: 404 not found in {401, 403, 302}
+======================================================================
+FAIL: test_sec05_public_object_access_matrix_40_requests (security_tests.ApplicationSecurityMatrixTests)
+----------------------------------------------------------------------
+subtest (contract=3, url='/contract/3/version-history/')
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\security_tests.py", line 142, in test_sec05_public_object_access_matrix_40_requests
+    self.assertIn(response.status_code, {302, 401, 403})
+AssertionError: 404 not found in {401, 403, 302}
+======================================================================
+FAIL: test_sec05_public_object_access_matrix_40_requests (security_tests.ApplicationSecurityMatrixTests)
+----------------------------------------------------------------------
+subtest (contract=4, url='/contract/4/version-history/')
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\security_tests.py", line 142, in test_sec05_public_object_access_matrix_40_requests
+    self.assertIn(response.status_code, {302, 401, 403})
+AssertionError: 404 not found in {401, 403, 302}
+======================================================================
+FAIL: test_sec05_public_object_access_matrix_40_requests (security_tests.ApplicationSecurityMatrixTests)
+----------------------------------------------------------------------
+subtest (contract=5, url='/contract/5/version-history/')
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\security_tests.py", line 142, in test_sec05_public_object_access_matrix_40_requests
+    self.assertIn(response.status_code, {302, 401, 403})
+AssertionError: 404 not found in {401, 403, 302}
+======================================================================
+FAIL: test_sec05_public_object_access_matrix_40_requests (security_tests.ApplicationSecurityMatrixTests)
+----------------------------------------------------------------------
+subtest (contract=6, url='/contract/6/version-history/')
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\security_tests.py", line 142, in test_sec05_public_object_access_matrix_40_requests
+    self.assertIn(response.status_code, {302, 401, 403})
+AssertionError: 404 not found in {401, 403, 302}
+======================================================================
+FAIL: test_sec05_public_object_access_matrix_40_requests (security_tests.ApplicationSecurityMatrixTests)
+----------------------------------------------------------------------
+subtest (contract=7, url='/contract/7/version-history/')
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\security_tests.py", line 142, in test_sec05_public_object_access_matrix_40_requests
+    self.assertIn(response.status_code, {302, 401, 403})
+AssertionError: 404 not found in {401, 403, 302}
+======================================================================
+FAIL: test_sec05_public_object_access_matrix_40_requests (security_tests.ApplicationSecurityMatrixTests)
+----------------------------------------------------------------------
+subtest (contract=8, url='/contract/8/version-history/')
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\security_tests.py", line 142, in test_sec05_public_object_access_matrix_40_requests
+    self.assertIn(response.status_code, {302, 401, 403})
+AssertionError: 404 not found in {401, 403, 302}
+======================================================================
+FAIL: test_sec05_public_object_access_matrix_40_requests (security_tests.ApplicationSecurityMatrixTests)
+----------------------------------------------------------------------
+subtest (contract=9, url='/contract/9/version-history/')
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\security_tests.py", line 142, in test_sec05_public_object_access_matrix_40_requests
+    self.assertIn(response.status_code, {302, 401, 403})
+AssertionError: 404 not found in {401, 403, 302}
+======================================================================
+FAIL: test_sec05_public_object_access_matrix_40_requests (security_tests.ApplicationSecurityMatrixTests)
+----------------------------------------------------------------------
+subtest (contract=10, url='/contract/10/version-history/')
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\security_tests.py", line 142, in test_sec05_public_object_access_matrix_40_requests
+    self.assertIn(response.status_code, {302, 401, 403})
+AssertionError: 404 not found in {401, 403, 302}

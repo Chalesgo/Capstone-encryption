@@ -1,0 +1,4 @@
+SealGuard upload-validation test fixture.
+
+This file intentionally contains plain text instead of a valid PDF structure.
+Upload it through the Upload Contract page to demonstrate invalid-file rejection.

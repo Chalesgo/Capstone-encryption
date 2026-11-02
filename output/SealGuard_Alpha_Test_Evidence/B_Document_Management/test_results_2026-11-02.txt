@@ -1,0 +1,75 @@
+SECTION B Document Management - DJANGO TEST RESULTS
+Extracted from django_test_run_2026-11-02.txt (full run of all contracts tests).
+Tests in this section: 38   Passed: 35   Failed/Errored: 3
+
+contracts.tests.DocumentManagementTests
+  test_bulk_return_to_draft_removes_documents_from_public_view ... ok
+  test_bulk_staff_actions_move_status_download_and_encrypt ... FAIL
+  test_bulk_toolbar_allows_document_administrators ... FAIL
+  test_doc01_valid_pdf_upload_matrix ... ok
+  test_doc02_invalid_upload_rejection_matrix ... ok
+  test_doc03_metadata_storage_matrix ... ok
+  test_doc04_authorized_view_and_download_matrix ... ok
+  test_doc05_unauthorized_view_and_download_matrix ... ok
+  test_doc06_archive_lifecycle_matrix ... ok
+  test_doc07_version_control_matrix ... ok
+  test_doc09_search_matrix ... ok
+  test_doc10_filter_and_pagination_matrix ... ok
+  test_doc11_duplicate_upload_detection_matrix ... ok
+  test_doc12_report_filter_and_export_matrix ... ok
+  test_download_names_use_system_title_and_version_number ... FAIL
+  test_draft_cannot_be_made_public_directly ... ok
+  test_identical_content_is_reported_before_a_shared_name ... ok
+  test_returning_final_copy_to_draft_removes_it_from_public_view ... ok
+  test_revision_page_compares_against_the_current_version ... ok
+  test_same_name_is_only_a_suggestion_and_never_creates_a_revision ... ok
+  test_upload_can_store_a_pdf_without_encryption ... ok
+
+contracts.tests_upload_preflight.UploadPreflightTests
+  test_invalid_pdf_is_rejected_before_duplicate_processing ... ok
+  test_oversized_file_returns_upload_limit_message ... ok
+  test_password_protected_pdf_is_rejected ... ok
+  test_valid_pdf_still_reaches_duplicate_lookup ... ok
+
+contracts.tests_panel_revisions.DocumentHandlingTests
+  test_document_list_shows_folder_and_add_or_move_wording ... ok
+  test_each_role_lands_on_its_own_page ... ok
+  test_final_copies_cannot_be_trashed ... ok
+  test_folder_is_chosen_at_upload ... ok
+  test_trash_requires_a_reason_and_records_it ... ok
+  test_upload_title_is_not_replaced_once_typed ... ok
+
+contracts.comparison_tests.RevisionComparisonTests
+  test_any_saved_pair_can_be_selected_and_same_pair_is_identical ... ok
+  test_cannot_select_a_version_from_another_document ... ok
+  test_default_pair_shows_changes_metadata_and_internal_viewers ... ok
+  test_one_version_explains_next_step ... ok
+  test_permission_and_trashed_document_checks ... ok
+  test_scanned_pages_do_not_claim_visual_equality ... ok
+  test_unreadable_file_has_safe_error ... ok
+
+
+FAILURE DETAILS
+======================================================================
+FAIL: test_bulk_staff_actions_move_status_download_and_encrypt (tests.DocumentManagementTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1427, in test_bulk_staff_actions_move_status_download_and_encrypt
+    self.assertEqual(status.status_code, 200)
+AssertionError: 403 != 200
+======================================================================
+FAIL: test_bulk_toolbar_allows_document_administrators (tests.DocumentManagementTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1499, in test_bulk_toolbar_allows_document_administrators
+    self.assertContains(page, 'id="bulk-change-status"')
+  File "C:\Users\griff\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\django\test\testcases.py", line 660, in assertContains
+    self.assertTrue(
+AssertionError: False is not true : Couldn't find 'id="bulk-change-status"' in response
+======================================================================
+FAIL: test_download_names_use_system_title_and_version_number (tests.DocumentManagementTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\contracts\tests.py", line 1176, in test_download_names_use_system_title_and_version_number
+    self.assertIn('06_blank_page_contract_v2.pdf', current['Content-Disposition'])
+AssertionError: '06_blank_page_contract_v2.pdf' not found in 'attachment; filename="06_blank_page_contract_v2.sgpdf"'

@@ -1,0 +1,16 @@
+$ node scripts/test_mobile_pdf.cjs
+Run: 2026-11-02 13:10:50, Node v24.18.0
+
+TypeError: sidebarViewport.matchMedia is not a function
+    at evalmachine.<anonymous>:192:40
+    at evalmachine.<anonymous>:425:71
+    at Script.runInContext (node:vm:149:12)
+    at Object.runInContext (node:vm:301:6)
+    at run (D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\scripts\test_mobile_pdf.cjs:79:12)
+    at D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\scripts\test_mobile_pdf.cjs:147:9
+    at Object.<anonymous> (D:\JobStuff\OJT REQUIREMENTS FOLDER\Capstone-encryption\scripts\test_mobile_pdf.cjs:196:3)
+    at Module._compile (node:internal/modules/cjs/loader:1871:14)
+    at Object..js (node:internal/modules/cjs/loader:2002:10)
+    at Module.load (node:internal/modules/cjs/loader:1594:32)
+
+exit code: 1

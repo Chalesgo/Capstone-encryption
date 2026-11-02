@@ -1,0 +1,14 @@
+$ node scripts/test_upload_preflight.cjs
+Run: 2026-11-02 13:10:50, Node v24.18.0
+
+PASS: invalid-file message, button recovery, network failure, timeout, processing spinner, and duplicate modal
+evalmachine.<anonymous>:254
+            return response.arrayBuffer();
+                            ^
+
+TypeError: response.arrayBuffer is not a function
+    at evalmachine.<anonymous>:254:29
+
+Node.js v24.18.0
+
+exit code: 1

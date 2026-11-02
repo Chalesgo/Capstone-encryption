@@ -1,0 +1,2 @@
+test,repetition,users,requests,failures,failure_rate,average_ms,p95_ms,p99_ms,throughput_rps,completed_at
+PERF-05,1,50,15302,2,0.00013070186903672723,2550.490555639848,10000.0,17000.0,17.002455454176882,2026-09-06T00:10:09.8838812+08:00
