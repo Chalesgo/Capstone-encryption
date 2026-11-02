@@ -34,7 +34,6 @@ Presentation Needs/
 pdfs/
 output/*
 !output/SealGuard_Alpha_Test_Reports/
-!output/SealGuard_Alpha_Test_Evidence/
 !output/pdf/
 
 # One-off evidence and demo-document generators
